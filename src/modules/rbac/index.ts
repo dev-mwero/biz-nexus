@@ -13,5 +13,15 @@ export {
   RoleProvisioningError,
   SYSTEM_ROLE_DESCRIPTIONS,
   SYSTEM_ROLE_NAMES,
-  SYSTEM_ROLE_PERMISSIONS,
 } from "./role.service";
+export {
+  ACCESS_CONTROL_DOMAINS,
+  allPermissionsIn,
+  OWNER_ONLY_READS,
+  RECORD_DOMAINS,
+  readPermissionsIn,
+  SYSTEM_ROLE_PERMISSIONS,
+  type SystemRolePermissions,
+  systemRoleHas,
+  WRITABLE_RECORD_DOMAINS,
+} from "./system-roles";

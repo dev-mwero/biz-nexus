@@ -5,7 +5,7 @@ import {
   SYSTEM_ROLE_KEYS,
   type SystemRoleKey,
 } from "@/modules/organizations/role.model";
-import type { Permission } from "@/modules/rbac/permissions";
+import { SYSTEM_ROLE_PERMISSIONS } from "@/modules/rbac/system-roles";
 
 /**
  * System role provisioning.
@@ -15,12 +15,12 @@ import type { Permission } from "@/modules/rbac/permissions";
  * tenant buys per-tenant renaming and permission editing, and it makes a
  * cross-tenant role read structurally impossible rather than merely filtered.
  *
- * `SYSTEM_ROLE_PERMISSIONS` is filled in by 1.19. It is declared here, as an
- * empty default, so this task provisions structure and 1.19 decides capability
- * — the two are separable and separable-in-the-right-order. The consequence is
- * that a freshly provisioned OWNER currently holds no permissions, which is
- * unusable on its own and is why 1.19 follows immediately.
+ * The permission each role starts with is the matrix in ./system-roles, not a
+ * list here: 1.19 owns capability, this file owns the mechanics of writing it.
+ * A tenant may then edit any of it.
  */
+
+export { SYSTEM_ROLE_PERMISSIONS } from "@/modules/rbac/system-roles";
 
 export const SYSTEM_ROLE_NAMES: Record<SystemRoleKey, string> = {
   OWNER: "Owner",
@@ -42,17 +42,6 @@ export const SYSTEM_ROLE_DESCRIPTIONS: Record<SystemRoleKey, string> = {
  * unanswerable, and 1.20 needs a single answer to it.
  */
 export const DEFAULT_ROLE_KEY: SystemRoleKey = "MEMBER";
-
-/** Populated by 1.19. Empty until then. */
-export const SYSTEM_ROLE_PERMISSIONS: Record<
-  SystemRoleKey,
-  readonly Permission[]
-> = {
-  OWNER: [],
-  ADMIN: [],
-  MEMBER: [],
-  VIEWER: [],
-};
 
 export class RoleProvisioningError extends Error {
   readonly code = "ROLE_PROVISIONING_FAILED" as const;
