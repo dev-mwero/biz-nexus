@@ -43,6 +43,27 @@ const IGNORED_DIRS = new Set([
   "coverage",
 ]);
 
+/**
+ * `Model.findByIdAndUpdate(id, ...)` is implemented as
+ * `findOneAndUpdate({ _id: id }, ...)` — it *replaces* the filter rather than
+ * merging into it. Handing it `{ _id, organizationId }` reads like a scoped
+ * update, survives review, and updates another tenant's row. This repository
+ * shipped that bug for the length of one test run.
+ *
+ * The same is true of `findByIdAndDelete`. `findById` alone is safe (it is
+ * `findOne({ _id: id })`, so a caller can add conditions) but there is no
+ * reason to use it when the filter is a single id and the repository already
+ * has a scoped equivalent, so all three are listed.
+ */
+// The leading dot matters: it matches a call on a model and not the
+// repository's own method declarations of the same name.
+const UNSAFE_FILTER_METHODS = [
+  /\.\s*findByIdAndUpdate\s*\(/,
+  /\.\s*findByIdAndDelete\s*\(/,
+  /\.\s*findByIdAndReplace\s*\(/,
+  /\.\s*findById\s*\(/,
+];
+
 function* walk(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     if (IGNORED_DIRS.has(entry)) continue;
@@ -67,6 +88,10 @@ function findViolations(root: string): string[] {
         if (EXEMPT.some((pattern) => pattern.test(line))) return;
         if (/\bmongoose\s*\.\s*connect\s*\(/.test(line)) {
           violations.push(`${rel}:${index + 1}`);
+          return;
+        }
+        if (UNSAFE_FILTER_METHODS.some((pattern) => pattern.test(line))) {
+          violations.push(`${rel}:${index + 1} (filter-discarding method)`);
         }
       });
   }
@@ -77,6 +102,15 @@ function findViolations(root: string): string[] {
 describe("database connection is centralised", () => {
   it("no file outside the connection module opens a connection", () => {
     expect(findViolations(PROJECT_ROOT)).toEqual([]);
+  });
+
+  it("nothing uses a Mongoose method that discards the filter", () => {
+    // Asserted separately so the failure names the actual hazard rather than
+    // reading as a second connection violation.
+    const offenders = findViolations(PROJECT_ROOT).filter((v) =>
+      v.includes("filter-discarding"),
+    );
+    expect(offenders).toEqual([]);
   });
 
   describe("self-tests", () => {
@@ -121,6 +155,26 @@ describe("database connection is centralised", () => {
       );
 
       expect(findViolations(SANDBOX)).toEqual([]);
+    });
+
+    it("catches a filter-discarding update", () => {
+      writeFileSync(
+        join(SANDBOX, "src", "deals.ts"),
+        "await Deal.findByIdAndUpdate({ _id, organizationId }, { $set: deal });",
+      );
+
+      const violations = findViolations(SANDBOX);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]).toContain("filter-discarding");
+    });
+
+    it("catches findById, which is only safe by accident", () => {
+      writeFileSync(
+        join(SANDBOX, "src", "tasks.ts"),
+        "await Task.findById(id);",
+      );
+
+      expect(findViolations(SANDBOX)).toHaveLength(1);
     });
 
     it("ignores createConnection, which opens a different thing", () => {
