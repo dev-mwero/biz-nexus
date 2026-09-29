@@ -99,17 +99,6 @@ afterAll(async () => {
   ]);
 });
 
-/** The single word each role's refusals are expected to come back as. */
-async function expectRefusal(actor: Actor, permission: Permission) {
-  await expect(
-    actor.guards.requirePermission(permission),
-  ).rejects.toMatchObject({
-    name: "AuthError",
-    code: "INSUFFICIENT_PERMISSION",
-    status: 403,
-  });
-}
-
 describe.each(ROLE_KEYS)("every permission for %s", (key) => {
   const actor = () => {
     const found = actors.get(key);
