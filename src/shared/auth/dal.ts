@@ -26,28 +26,36 @@ import { isPermission, type Permission } from "@/modules/rbac/permissions";
  */
 
 import { SESSION_COOKIE } from "@/shared/auth/session-cookie";
+import { AppError } from "@/shared/errors/app-error";
 
 export { SESSION_COOKIE };
 
 /** Where a session token comes from. Async, because reading cookies is. */
 export type TokenSource = () => Promise<string | null | undefined>;
 
-export class AuthError extends Error {
+export class AuthError extends AppError {
   constructor(
-    readonly code: AuthErrorCode,
-    readonly status: 401 | 403,
+    code: AuthErrorCode,
     message: string,
     options?: { cause?: unknown },
   ) {
-    super(message, options);
+    // The status is no longer passed in. It comes from the error catalogue, so
+    // a 401/403 decision cannot be made at a call site and then drift.
+    super(code, { message, cause: options?.cause });
     this.name = "AuthError";
   }
 }
 
+/**
+ * No `NOT_A_MEMBER`. Not an oversight: requireOrg deliberately returns one
+ * answer for "session without a usable organisation" and "session that is not a
+ * member of it", because distinguishing them tells an attacker which sessions
+ * belong to real accounts. A code that exists but is never thrown would invite
+ * somebody to start throwing it.
+ */
 export type AuthErrorCode =
   | "UNAUTHENTICATED"
   | "NO_ACTIVE_ORGANIZATION"
-  | "NOT_A_MEMBER"
   | "INSUFFICIENT_PERMISSION";
 
 export interface AuthContext {
@@ -157,7 +165,7 @@ async function buildContext(
 }
 
 function unauthenticated(): AuthError {
-  return new AuthError("UNAUTHENTICATED", 401, "Sign in to continue.");
+  return new AuthError("UNAUTHENTICATED", "Sign in to continue.");
 }
 
 /**
@@ -198,7 +206,6 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
         throw session
           ? new AuthError(
               "NO_ACTIVE_ORGANIZATION",
-              403,
               "No active organization, or you are not an active member of it.",
             )
           : unauthenticated();
@@ -213,7 +220,7 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
       // that reached us from outside TypeScript is denied instead of compared
       // against a list it was never in.
       if (!isPermission(permission)) {
-        throw new AuthError("INSUFFICIENT_PERMISSION", 403, "Not permitted.");
+        throw new AuthError("INSUFFICIENT_PERMISSION", "Not permitted.");
       }
 
       const context = await buildContext(await source());
@@ -222,7 +229,6 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
         throw session
           ? new AuthError(
               "NO_ACTIVE_ORGANIZATION",
-              403,
               "No active organization, or you are not an active member of it.",
             )
           : unauthenticated();
@@ -232,7 +238,7 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
       // in the database simply never matches anything a caller can ask for,
       // which is the correct outcome: it grants nothing and hides nothing.
       if (!context.role.permissions.includes(permission)) {
-        throw new AuthError("INSUFFICIENT_PERMISSION", 403, "Not permitted.");
+        throw new AuthError("INSUFFICIENT_PERMISSION", "Not permitted.");
       }
 
       return context;

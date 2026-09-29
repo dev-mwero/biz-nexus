@@ -1,5 +1,6 @@
 import type { Model, Schema } from "mongoose";
 import { markSchema, readSchemaMark } from "@/db/mixins/mark";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * URL-safe identifiers.
@@ -84,17 +85,18 @@ export function slugField(schema: Schema): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-export class SlugConflictError extends Error {
+export class SlugConflictError extends AppError {
   constructor(
     readonly base: string,
     readonly attempts: number,
     options?: { cause?: unknown },
   ) {
-    super(
-      `Could not find a free slug for "${base}" after ${attempts} attempts. ` +
+    super("SLUG_CONFLICT", {
+      message:
+        `Could not find a free slug for "${base}" after ${attempts} attempts. ` +
         "This normally means a concurrent create took the same name; retry, or set the slug explicitly.",
-      options,
-    );
+      cause: options?.cause,
+    });
     this.name = "SlugConflictError";
   }
 }

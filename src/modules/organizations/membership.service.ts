@@ -5,6 +5,7 @@ import {
   type MembershipStatus,
   RoleModel,
 } from "@/modules/organizations";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * Changing somebody's standing in an organisation.
@@ -16,15 +17,12 @@ import {
  * only way the two are the same is if something checks.
  */
 
-export class MembershipError extends Error {
+export class MembershipError extends AppError {
   constructor(
-    readonly code:
-      | "MEMBERSHIP_NOT_FOUND"
-      | "ROLE_NOT_IN_ORGANIZATION"
-      | "LAST_OWNER",
+    code: "MEMBERSHIP_NOT_FOUND" | "ROLE_NOT_IN_ORGANIZATION" | "LAST_OWNER",
     message: string,
   ) {
-    super(message);
+    super(code, { message });
     this.name = "MembershipError";
   }
 }
@@ -52,7 +50,10 @@ async function assertAssignableRole(
   if (!role) {
     throw new MembershipError(
       "ROLE_NOT_IN_ORGANIZATION",
-      "That role does not belong to this organisation.",
+      // Deliberately not "belongs to another organisation". The caller sent a
+      // role id that is not usable here; confirming where it *is* would answer
+      // the only question somebody holding a foreign id is asking.
+      "That role is not available for this organization.",
     );
   }
 

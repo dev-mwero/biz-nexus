@@ -9,6 +9,7 @@ import {
   OrganizationModel,
 } from "@/modules/organizations";
 import { provisionSystemRoles } from "@/modules/rbac/role.service";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * Creating an organisation.
@@ -25,11 +26,9 @@ import { provisionSystemRoles } from "@/modules/rbac/role.service";
  * validation and the onboarding checklist belong to 1.33.
  */
 
-export class OrganizationCreationError extends Error {
-  readonly code = "ORGANIZATION_CREATION_FAILED" as const;
-
+export class OrganizationCreationError extends AppError {
   constructor(message: string) {
-    super(message);
+    super("ORGANIZATION_CREATION_FAILED", { message });
     this.name = "OrganizationCreationError";
   }
 }

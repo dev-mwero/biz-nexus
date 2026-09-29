@@ -13,6 +13,7 @@ import {
   RoleModel,
 } from "@/modules/organizations";
 import { DEFAULT_ROLE_KEY } from "@/modules/rbac/role.service";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * Inviting somebody, and them accepting.
@@ -28,9 +29,9 @@ import { DEFAULT_ROLE_KEY } from "@/modules/rbac/role.service";
  * this module writes it to a log, a session, or an event payload.
  */
 
-export class InvitationError extends Error {
+export class InvitationError extends AppError {
   constructor(
-    readonly code:
+    code:
       | "INVITATION_INVALID"
       | "INVITATION_EXPIRED"
       | "INVITATION_USED"
@@ -40,7 +41,7 @@ export class InvitationError extends Error {
       | "EMAIL_REQUIRED",
     message: string,
   ) {
-    super(message);
+    super(code, { message });
     this.name = "InvitationError";
   }
 }
@@ -70,7 +71,10 @@ async function assertRoleInOrganization(
   if (!role) {
     throw new InvitationError(
       "ROLE_NOT_IN_ORGANIZATION",
-      "That role does not belong to this organisation.",
+      // Deliberately not "belongs to another organisation". The caller sent a
+      // role id that is not usable here; confirming where it *is* would answer
+      // the only question somebody holding a foreign id is asking.
+      "That role is not available for this organization.",
     );
   }
 }

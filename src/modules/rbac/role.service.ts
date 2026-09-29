@@ -6,6 +6,7 @@ import {
   type SystemRoleKey,
 } from "@/modules/organizations/role.model";
 import { SYSTEM_ROLE_PERMISSIONS } from "@/modules/rbac/system-roles";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * System role provisioning.
@@ -43,11 +44,9 @@ export const SYSTEM_ROLE_DESCRIPTIONS: Record<SystemRoleKey, string> = {
  */
 export const DEFAULT_ROLE_KEY: SystemRoleKey = "MEMBER";
 
-export class RoleProvisioningError extends Error {
-  readonly code = "ROLE_PROVISIONING_FAILED" as const;
-
+export class RoleProvisioningError extends AppError {
   constructor(message: string) {
-    super(message);
+    super("ROLE_PROVISIONING_FAILED", { message });
     this.name = "RoleProvisioningError";
   }
 }

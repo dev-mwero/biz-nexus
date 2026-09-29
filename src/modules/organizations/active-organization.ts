@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { type Session, SessionModel } from "@/modules/identity";
 import { MembershipModel, OrganizationModel } from "@/modules/organizations";
+import { AppError } from "@/shared/errors/app-error";
 
 /**
  * Switching the active organisation.
@@ -27,11 +28,9 @@ import { MembershipModel, OrganizationModel } from "@/modules/organizations";
  *
  * Task 1.22 maps this to 404, so neither answer confirms the organization exists.
  */
-export class ActiveOrganizationError extends Error {
-  readonly code = "ORGANIZATION_UNAVAILABLE" as const;
-
-  constructor(message = "Organization not found.") {
-    super(message);
+export class ActiveOrganizationError extends AppError {
+  constructor(message?: string) {
+    super("ORGANIZATION_UNAVAILABLE", { message });
     this.name = "ActiveOrganizationError";
   }
 }
