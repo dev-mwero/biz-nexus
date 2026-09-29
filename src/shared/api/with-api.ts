@@ -33,55 +33,15 @@ export interface Logger {
   error(entry: Record<string, unknown>): void;
 }
 
-/** Anything the logger is handed that might hold a secret gets scrubbed. */
-const SENSITIVE_KEYS = new Set([
-  "authorization",
-  "cookie",
-  "set-cookie",
-  "password",
-  "newpassword",
-  "currentpassword",
-  "token",
-  "accesstoken",
-  "refreshtoken",
-  "tokenhash",
-  "secret",
-  "apikey",
-  "csrftoken",
-]);
+// Anything the logger is handed that might hold a secret gets scrubbed, by the
+// same code that scrubs audit rows - so what is redacted from logs and what is
+// redacted from permanent records cannot drift apart.
+//
+// Re-exported so the route wrapper keeps one obvious import, and so there is
+// exactly one definition of what counts as a secret.
+import { isSensitiveKey, REDACTED, redact } from "@/shared/lib/redact";
 
-export const REDACTED = "[redacted]";
-
-/**
- * Replace secret-bearing values rather than dropping their keys.
- *
- * Keeping the key matters: a log line that says `password: undefined` reads
- * like "no password was sent", which is a different claim from "a password was
- * sent and is not logged", and only the second is true.
- */
-export function redact(value: unknown, depth = 0): unknown {
-  if (depth > 6) return "[truncated]";
-  if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
-  if (value instanceof Error) {
-    return {
-      name: value.name,
-      message: value.message,
-      ...(typeof (value as AppError).code === "string"
-        ? { code: (value as AppError).code }
-        : {}),
-    };
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, inner] of Object.entries(value)) {
-      out[key] = SENSITIVE_KEYS.has(key.toLowerCase())
-        ? REDACTED
-        : redact(inner, depth + 1);
-    }
-    return out;
-  }
-  return value;
-}
+export { isSensitiveKey, REDACTED, redact };
 
 /**
  * A single-line JSON logger.
