@@ -1,26 +1,373 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   BizNexus design system — "instrument panel"
+
+   This is an operations tool, not a marketing page. People live in it all day,
+   scanning columns of people, money and dates, and the thing they need most is
+   to see state clearly: where a deal sits, what a customer last did, what is
+   overdue.
+
+   Three rules follow, and every token here serves one of them:
+
+   1. Chroma is reserved for data meaning. Status is the only coloured thing on
+      screen. Primary buttons are ink-black, not a brand purple — so that when
+      something IS coloured, it is always telling you something. Colour is a
+      channel, never decoration.
+
+   2. Numbers are instruments. Every metric, currency value, identifier and
+      timestamp renders in the mono face with tabular figures, against a strict
+      ruled grid. That is the whole signature, and it is functional: columns of
+      currency only align with tabular figures.
+
+   3. Density is a feature. The type scale starts at 12px and line heights are
+      tightened, because a screen of CRM rows should show more rows, not more
+      whitespace.
+
+   Token layering: `:root` and `.dark` define raw values prefixed `--bn-`.
+   `@theme inline` maps semantic names onto them, which is what lets dark mode
+   be one class on <html> instead of a parallel set of styles.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ── Neutral ramp ─────────────────────────────────────────────────────────
+     Cool, blue-cast greys. Deliberately not cream or warm: a warm background
+     reads as editorial, and this is a ledger. */
+  --bn-canvas: #f5f6f8;
+  --bn-surface: #ffffff;
+  --bn-surface-raised: #ffffff;
+  --bn-surface-sunken: #eef0f4;
+  --bn-surface-hover: #f2f4f7;
+  --bn-surface-active: #e8ebf0;
+
+  --bn-ink-900: #0b0e14;
+  --bn-ink-800: #161b24;
+  --bn-ink-700: #232a36;
+  --bn-ink-600: #3a4351;
+  --bn-ink-500: #5b6575;
+  --bn-ink-400: #7b8496;
+  --bn-ink-300: #a6adbb;
+  --bn-ink-200: #d8dce3;
+  --bn-ink-100: #e9ecf1;
+  --bn-ink-50: #f4f5f8;
+
+  --bn-line: #dfe3ea;
+  --bn-line-strong: #c9cfd9;
+
+  /* ── Semantic status ──────────────────────────────────────────────────────
+     The only chroma in the interface. Each names a state and is used nowhere
+     else. If a screen is full of colour, the design is wrong. */
+  --bn-positive: #0d7c66;
+  --bn-positive-surface: #e2f4ef;
+  --bn-positive-border: #a8dbcd;
+
+  --bn-attention: #b4690e;
+  --bn-attention-surface: #fdf0dc;
+  --bn-attention-border: #f0cd97;
+
+  --bn-critical: #a01b45;
+  --bn-critical-surface: #fce8ee;
+  --bn-critical-border: #f2b9c8;
+
+  --bn-info: #3a5ba0;
+  --bn-info-surface: #e8edf7;
+  --bn-info-border: #b9c6e4;
+
+  --bn-neutral-surface: #eef0f4;
+  --bn-neutral-border: #d8dce3;
+
+  /* ── Type ──────────────────────────────────────────────────────────────────
+     Instrument Sans carries headings: crisp, slightly condensed, distinctive
+     without being loud. Geist does UI and body work at the small sizes a dense
+     tool needs. IBM Plex Mono is the instrument layer — every figure, id and
+     timestamp. */
+  --bn-font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --bn-font-display:
+    var(--font-instrument-sans), var(--font-geist), ui-sans-serif, system-ui,
+    sans-serif;
+  --bn-font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* ── Radius ───────────────────────────────────────────────────────────────
+     Small and consistent. Zero reads as newspaper; 12px+ reads as friendly
+     consumer software. Neither fits a tool used eight hours a day. */
+  --bn-radius-xs: 3px;
+  --bn-radius-sm: 4px;
+  --bn-radius-md: 6px;
+  --bn-radius-lg: 8px;
+  --bn-radius-xl: 12px;
+
+  /* ── Motion ───────────────────────────────────────────────────────────────
+     Fast enough to feel mechanical, which is the point. Nothing bounces. */
+  --bn-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --bn-duration-fast: 120ms;
+  --bn-duration-base: 180ms;
+
+  /* ── Elevation ───────────────────────────────────────────────────────────
+     Shadows describe layering, not drama. */
+  --bn-shadow-sm: 0 1px 2px 0 rgb(11 14 20 / 0.05);
+  --bn-shadow-md:
+    0 1px 3px 0 rgb(11 14 20 / 0.08), 0 1px 2px -1px rgb(11 14 20 / 0.06);
+  --bn-shadow-lg:
+    0 4px 12px -2px rgb(11 14 20 / 0.1), 0 2px 4px -2px rgb(11 14 20 / 0.06);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bn-canvas: #0a0c11;
+  --bn-surface: #111419;
+  --bn-surface-raised: #161a21;
+  --bn-surface-sunken: #0c0f14;
+  --bn-surface-hover: #1a1f27;
+  --bn-surface-active: #222833;
+
+  --bn-ink-900: #f2f4f7;
+  --bn-ink-800: #e8ebf0;
+  --bn-ink-700: #d8dce3;
+  --bn-ink-600: #b6bdca;
+  --bn-ink-500: #949dae;
+  --bn-ink-400: #7a8496;
+  --bn-ink-300: #5b6575;
+  --bn-ink-200: #2c3441;
+  --bn-ink-100: #222833;
+  --bn-ink-50: #1a1f27;
+
+  --bn-line: #242b36;
+  --bn-line-strong: #333c4a;
+
+  /* The same semantic hues, desaturated and lifted. At light-mode lightness
+     they would vibrate against a near-black canvas. */
+  --bn-positive: #34b89b;
+  --bn-positive-surface: #10241f;
+  --bn-positive-border: #1d4438;
+
+  --bn-attention: #d99441;
+  --bn-attention-surface: #251b0f;
+  --bn-attention-border: #48341a;
+
+  --bn-critical: #e0688c;
+  --bn-critical-surface: #26121a;
+  --bn-critical-border: #4a2431;
+
+  --bn-info: #7d9ad6;
+  --bn-info-surface: #141a28;
+  --bn-info-border: #2a3550;
+
+  --bn-neutral-surface: #1a1f27;
+  --bn-neutral-border: #2c3441;
+
+  --bn-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --bn-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --bn-shadow-lg:
+    0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--bn-canvas);
+  --color-surface: var(--bn-surface);
+  --color-surface-raised: var(--bn-surface-raised);
+  --color-surface-sunken: var(--bn-surface-sunken);
+  --color-surface-hover: var(--bn-surface-hover);
+  --color-surface-active: var(--bn-surface-active);
+
+  --color-ink-900: var(--bn-ink-900);
+  --color-ink-800: var(--bn-ink-800);
+  --color-ink-700: var(--bn-ink-700);
+  --color-ink-600: var(--bn-ink-600);
+  --color-ink-500: var(--bn-ink-500);
+  --color-ink-400: var(--bn-ink-400);
+  --color-ink-300: var(--bn-ink-300);
+  --color-ink-200: var(--bn-ink-200);
+  --color-ink-100: var(--bn-ink-100);
+  --color-ink-50: var(--bn-ink-50);
+
+  --color-line: var(--bn-line);
+  --color-line-strong: var(--bn-line-strong);
+
+  --color-positive: var(--bn-positive);
+  --color-positive-surface: var(--bn-positive-surface);
+  --color-positive-border: var(--bn-positive-border);
+
+  --color-attention: var(--bn-attention);
+  --color-attention-surface: var(--bn-attention-surface);
+  --color-attention-border: var(--bn-attention-border);
+
+  --color-critical: var(--bn-critical);
+  --color-critical-surface: var(--bn-critical-surface);
+  --color-critical-border: var(--bn-critical-border);
+
+  --color-info: var(--bn-info);
+  --color-info-surface: var(--bn-info-surface);
+  --color-info-border: var(--bn-info-border);
+
+  --color-neutral-surface: var(--bn-neutral-surface);
+  --color-neutral-border: var(--bn-neutral-border);
+
+  --font-sans: var(--bn-font-sans);
+  --font-display: var(--bn-font-display);
+  --font-mono: var(--bn-font-mono);
+
+  --radius-xs: var(--bn-radius-xs);
+  --radius-sm: var(--bn-radius-sm);
+  --radius-md: var(--bn-radius-md);
+  --radius-lg: var(--bn-radius-lg);
+  --radius-xl: var(--bn-radius-xl);
+
+  --ease-out: var(--bn-ease-out);
+  --shadow-sm: var(--bn-shadow-sm);
+  --shadow-md: var(--bn-shadow-md);
+  --shadow-lg: var(--bn-shadow-lg);
+
+  /* Type scale, tuned for density. The 12px floor is deliberate. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: 2.5rem;
+  --text-4xl: 3rem;
+  --text-4xl--line-height: 3.25rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--bn-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--bn-canvas);
+    color: var(--bn-ink-700);
+    font-family: var(--bn-font-sans);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--bn-font-display);
+    color: var(--bn-ink-900);
+    letter-spacing: -0.014em;
+    text-wrap: balance;
+  }
+
+  /* The instrument layer. Tabular figures are the entire reason the mono face
+     exists here: without them, columns of currency do not line up. */
+  code,
+  kbd,
+  samp,
+  pre,
+  .tabular {
+    font-family: var(--bn-font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:
+      "tnum" 1,
+      "zero" 1;
+  }
+
+  /* Focus is replaced, never removed. A tool used eight hours a day has to be
+     fully navigable from the keyboard. */
+  :focus-visible {
+    outline: 2px solid var(--bn-info);
+    outline-offset: 2px;
+    border-radius: var(--bn-radius-xs);
+  }
+
+  ::selection {
+    background-color: var(--bn-info-surface);
+    color: var(--bn-info);
+  }
+
+  ::placeholder {
+    color: var(--bn-ink-400);
+    opacity: 1;
+  }
+
+  /* Scrollbars follow the surface, so a dense table does not get a bright
+     native bar cutting through it. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bn-ink-200) transparent;
+  }
+
+  /* Every numeric column routes through this, so figures align down a table
+     without each cell opting in. */
+  th[data-numeric],
+  td[data-numeric] {
+    text-align: right;
+    font-family: var(--bn-font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* A hairline "measure" rule. Used under section headers in dense panels: it
+     encodes that what follows is a labelled group, rather than decorating. */
+  .rule-label {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bn-ink-400);
+  }
+
+  .rule-label::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background-color: var(--bn-line);
+  }
+
+  /* Skeletons. A shimmer misrepresents how long layout takes; a static block
+     with the right shape is honest and less distracting. */
+  .skeleton {
+    background-color: var(--bn-ink-100);
+    border-radius: var(--bn-radius-sm);
+  }
+}
+
+/* !important is required here, not lazy. This block only has effect if it
+   outranks the component styles it is cancelling, and a user who has asked
+   the operating system for reduced motion must never be overridden by a
+   utility class. Hence the suppression rather than the removal. */
+@media (prefers-reduced-motion: reduce) {
+  /* biome-ignore-start lint/complexity/noImportantStyles: must outrank component styles to be honoured */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* biome-ignore-end lint/complexity/noImportantStyles: must outrank component styles to be honoured */
 }
