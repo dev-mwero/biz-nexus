@@ -5,6 +5,8 @@ import {
   type QueryOptions,
   Types,
 } from "mongoose";
+import { hasAuditFields } from "@/db/mixins/audit-fields";
+import { isSoftDeleteSchema } from "@/db/mixins/soft-delete";
 
 /**
  * The tenant scope, and the only place in the application that decides it.
@@ -62,16 +64,35 @@ export type ScopedFilter<T> = Omit<QueryFilter<T>, "organizationId"> & {
 };
 
 /**
- * Write input with the scope removed, so the repository supplies it.
+ * Write input with everything the repository manages removed.
  *
- * A document saved without `organizationId` would be invisible to every scoped
- * query, and therefore invisible to the user who just created it — a support
- * ticket rather than an error.
+ * `deletedAt` is the field that makes this list worth writing down. The first
+ * version omitted only `organizationId`, `_id` and the timestamps, so a model
+ * carrying the audit and soft-delete mixins required the caller to supply
+ * `createdBy`, `updatedBy` and `deletedAt` — the exact fields the repository
+ * stamps. The failure is a compile error rather than a leak, but the fix is to
+ * be asked for something you are given, which trains a caller to satisfy the
+ * signature with a literal that is then overwritten.
+ *
+ * `deletedAt` stays available and optional: an import replaying historical rows
+ * needs to say that some of them were already deleted, and Mongoose's default
+ * covers the common case of a live row.
  */
+const REPOSITORY_MANAGED = [
+  "organizationId",
+  "_id",
+  "createdAt",
+  "updatedAt",
+  "createdBy",
+  "updatedBy",
+  "deletedAt",
+] as const;
+
 export type TenantCreateInput<T extends TenantDocument> = Omit<
   T,
-  "organizationId" | "_id" | "createdAt" | "updatedAt"
->;
+  (typeof REPOSITORY_MANAGED)[number]
+> &
+  (T extends { deletedAt?: infer D } ? { deletedAt?: D } : unknown);
 
 export type OrganizationRef = Types.ObjectId | string;
 
@@ -109,9 +130,19 @@ function toObjectId(
 export abstract class TenantRepository<T extends TenantDocument> {
   readonly organizationId: Types.ObjectId;
 
+  /**
+   * The user making the request, used only to stamp `createdBy`/`updatedBy`.
+   *
+   * Optional because not every operation has a user behind it: a migration, a
+   * scheduled job, a seed script. Those write without an author rather than
+   * writing a misleading one.
+   */
+  readonly actorId: Types.ObjectId | null;
+
   constructor(
     protected readonly model: Model<T>,
     organizationId: OrganizationRef,
+    actorId?: OrganizationRef | null,
   ) {
     // Validated here rather than left to Mongoose. A blank id reaches MongoDB
     // as a cast error at query time, or worse, as a filter that matches
@@ -128,6 +159,8 @@ export abstract class TenantRepository<T extends TenantDocument> {
       );
     }
     this.organizationId = toObjectId(organizationId, this.constructor.name);
+    this.actorId =
+      actorId == null ? null : toObjectId(actorId, this.constructor.name);
   }
 
   /**
@@ -139,11 +172,34 @@ export abstract class TenantRepository<T extends TenantDocument> {
    * already removed the key from the type, a caller can still reach it through
    * `any`, and a spread that lost to its own argument would be the worst
    * possible outcome — silently, and only for the queries that matter most.
+   *
+   * `deletedAt` is added whenever the model opted in to soft delete, so a
+   * deleted row is invisible to reads, writes and deletes alike. Doing it here
+   * rather than in query middleware is the ADR-0003 pattern applied to the
+   * second axis of isolation: one method to audit, and the exceptions below are
+   * named rather than configured.
    */
   protected scope(
     filter: ScopedFilter<T> = {} as ScopedFilter<T>,
   ): QueryFilter<T> {
-    return { ...filter, organizationId: this.organizationId } as QueryFilter<T>;
+    return {
+      ...filter,
+      ...(this.softDeletes ? { deletedAt: null } : {}),
+      organizationId: this.organizationId,
+    } as QueryFilter<T>;
+  }
+
+  private get softDeletes(): boolean {
+    return isSoftDeleteSchema(this.model.schema);
+  }
+
+  private get audits(): boolean {
+    return hasAuditFields(this.model.schema);
+  }
+
+  /** Just `updatedBy`, for the soft-delete writes that manage their own $set. */
+  private actorStamps(): Record<string, unknown> {
+    return this.audits && this.actorId ? { updatedBy: this.actorId } : {};
   }
 
   // -- Reads -------------------------------------------------------------
@@ -197,17 +253,34 @@ export abstract class TenantRepository<T extends TenantDocument> {
   // -- Writes ------------------------------------------------------------
 
   create(input: TenantCreateInput<T>) {
-    return this.model.create({
-      ...input,
-      organizationId: this.organizationId,
-    } as T);
+    return this.model.create({ ...input, ...this.stamps("create") } as T);
   }
 
   async insertMany(inputs: TenantCreateInput<T>[]) {
     const documents = inputs.map(
-      (input) => ({ ...input, organizationId: this.organizationId }) as T,
+      (input) => ({ ...input, ...this.stamps("create") }) as T,
     );
     return this.model.insertMany(documents);
+  }
+
+  /**
+   * The scope and the author, applied together on write.
+   *
+   * Spread last so neither can be reached through the caller's input — a
+   * client that can name its own author is an audit log that records what the
+   * client wanted. When the model has no audit fields, or no acting user is
+   * known (a migration, a scheduled job, a seed), the stamp is absent rather
+   * than null: a null in that column reads as "deleted by nobody", which is a
+   * different claim from "this collection is not tracked".
+   */
+  private stamps(operation: "create" | "update"): Record<string, unknown> {
+    const base: Record<string, unknown> = {
+      organizationId: this.organizationId,
+    };
+    if (!this.audits || !this.actorId) return base;
+    return operation === "create"
+      ? { ...base, createdBy: this.actorId, updatedBy: this.actorId }
+      : { ...base, updatedBy: this.actorId };
   }
 
   updateOne(
@@ -215,7 +288,11 @@ export abstract class TenantRepository<T extends TenantDocument> {
     update: UpdateOf<T>,
     options?: UpdateOptionsOf<T>,
   ) {
-    return this.model.updateOne(this.scope(filter), update, options);
+    return this.model.updateOne(
+      this.scope(filter),
+      { ...update, ...this.stamps("update") },
+      options,
+    );
   }
 
   updateMany(
@@ -223,7 +300,11 @@ export abstract class TenantRepository<T extends TenantDocument> {
     update: UpdateOf<T>,
     options?: ManyUpdateOptionsOf<T>,
   ) {
-    return this.model.updateMany(this.scope(filter), update, options);
+    return this.model.updateMany(
+      this.scope(filter),
+      { ...update, ...this.stamps("update") },
+      options,
+    );
   }
 
   /**
@@ -251,7 +332,7 @@ export abstract class TenantRepository<T extends TenantDocument> {
   ) {
     return this.model.findOneAndUpdate(
       this.scope({ _id: id } as ScopedFilter<T>),
-      update,
+      { ...update, ...this.actorStamps() },
       { returnDocument: "after", ...options },
     );
   }
@@ -272,12 +353,150 @@ export abstract class TenantRepository<T extends TenantDocument> {
     );
   }
 
+  /**
+   * Hard delete, refused outright on a soft-delete collection.
+   *
+   * The collection-level convention is that deletion means setting
+   * `deletedAt`. Leaving a `deleteOne` that quietly does the opposite means
+   * the wrong call is a one-word slip with no error and no recovery, and it
+   * reads identically to the correct call at the call site. So the method
+   * throws instead, and names the two operations that are actually allowed:
+   * `softDeleteOne` for the normal path, `hardDeleteOne` for erasure.
+   */
   deleteOne(filter: ScopedFilter<T>, options?: DeleteOptionsOf<T>) {
+    if (this.softDeletes) {
+      throw new Error(
+        `${this.constructor.name} is a soft-delete collection. Use softDeleteOne() to hide a record, or hardDeleteById() if the data must genuinely be erased.`,
+      );
+    }
     return this.model.deleteOne(this.scope(filter), options);
   }
 
   deleteMany(filter: ScopedFilter<T>, options?: DeleteOptionsOf<T>) {
+    if (this.softDeletes) {
+      throw new Error(
+        `${this.constructor.name} is a soft-delete collection. Use softDeleteMany() to hide records, or hardDeleteMany() if the data must genuinely be erased.`,
+      );
+    }
     return this.model.deleteMany(this.scope(filter), options);
+  }
+
+  // -- Soft delete --------------------------------------------------------
+  //
+  // `scope()` hides deleted rows from every method above, which is the
+  // default DATABASE.md requires. These are the deliberate exceptions, named
+  // so a grep for "with deleted" or "restore" finds every one.
+
+  async softDeleteOne(filter: ScopedFilter<T>, options?: UpdateOptionsOf<T>) {
+    return this.model.updateOne(
+      this.scope(filter),
+      { $set: { deletedAt: new Date(), ...this.actorStamps() } },
+      options,
+    );
+  }
+
+  /** Soft-delete every match, returning the count for an honest UI. */
+  async softDeleteMany(filter: ScopedFilter<T>, options?: UpdateOptionsOf<T>) {
+    return this.model.updateMany(
+      this.scope(filter),
+      { $set: { deletedAt: new Date(), ...this.actorStamps() } },
+      options,
+    );
+  }
+
+  /**
+   * Irreversible. Reserved for a genuine erasure request, where the obligation
+   * to remove the data outweighs the ability to restore it.
+   *
+   * Named `hardDelete*` rather than permitted through `delete*` so that
+   * `grep -r "hardDelete"` returns every place in the codebase that can
+   * destroy a record irreversibly. That list should be short enough to read
+   * during an audit.
+   *
+   * A soft delete takes a filter rather than an id because the screens that use
+   * it are bulk actions — "archive these twelve selected rows" — and a
+   * `softDeleteByIds` would invite passing a list that quietly drops duplicates.
+   */
+  async hardDeleteById(
+    id: Types.ObjectId | string,
+    options?: DeleteOptionsOf<T>,
+  ) {
+    return this.model.deleteOne(
+      { _id: id, organizationId: this.organizationId } as QueryFilter<T>,
+      options as never,
+    );
+  }
+
+  async hardDeleteMany(filter: ScopedFilter<T>, options?: DeleteOptionsOf<T>) {
+    return this.model.deleteMany(
+      { ...filter, organizationId: this.organizationId } as QueryFilter<T>,
+      options as never,
+    );
+  }
+
+  /** Delete by setting `deletedAt`. A hard delete is a separate, named choice. */
+  async softDeleteById(
+    id: Types.ObjectId | string,
+    options?: UpdateOptionsOf<T>,
+  ) {
+    const result = await this.model.updateOne(
+      this.scope({ _id: id } as ScopedFilter<T>),
+      { $set: { deletedAt: new Date(), ...this.actorStamps() } },
+      options,
+    );
+    return result;
+  }
+
+  /**
+   * Bring a soft-deleted row back.
+   *
+   * Written as a direct model call rather than through `scope()`, because the
+   * point is precisely to reach a row that `scope()` hides. It is the only way
+   * out of the deleted state, and it is a named method rather than a filter
+   * flag so that "who undeleted this" is answerable.
+   */
+  async restoreById(id: Types.ObjectId | string, options?: UpdateOptionsOf<T>) {
+    return this.model.updateOne(
+      { _id: id, organizationId: this.organizationId },
+      { $set: { deletedAt: null, ...this.actorStamps() } },
+      options,
+    );
+  }
+
+  /** Reads that include deleted rows. An audit or trash view only. */
+  findWithDeleted(
+    filter?: ScopedFilter<T>,
+    projection?: Record<string, unknown>,
+    options?: QueryOptions<T>,
+  ) {
+    return this.model.find(
+      { ...filter, organizationId: this.organizationId } as QueryFilter<T>,
+      projection,
+      options,
+    );
+  }
+
+  findOnlyDeleted(
+    filter?: ScopedFilter<T>,
+    projection?: Record<string, unknown>,
+    options?: QueryOptions<T>,
+  ) {
+    return this.model.find(
+      {
+        ...filter,
+        organizationId: this.organizationId,
+        deletedAt: { $ne: null },
+      } as QueryFilter<T>,
+      projection,
+      options,
+    );
+  }
+
+  countWithDeleted(filter?: ScopedFilter<T>): Promise<number> {
+    return this.model.countDocuments({
+      ...filter,
+      organizationId: this.organizationId,
+    } as QueryFilter<T>);
   }
 
   // -- The escape hatch --------------------------------------------------
