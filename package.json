@@ -31,12 +31,20 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.2",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^5.0.2",
     "babel-plugin-react-compiler": "1.0.0",
+    "dotenv-cli": "^11.0.0",
+    "mongodb-memory-server": "^11.3.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "mongodb-memory-server@11.3.0": true
   }
 }
