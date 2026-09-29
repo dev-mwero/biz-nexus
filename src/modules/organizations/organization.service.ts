@@ -78,6 +78,7 @@ export async function createOrganization(
   }
 
   const slug = await reserveSlug(name);
+  const now = new Date();
 
   return withTransaction(async (session) => {
     const [organization] = await OrganizationModel.create(
@@ -144,8 +145,20 @@ export async function createOrganization(
     // request lands somewhere. Same rule as everywhere else: the server
     // decides, never a value from the request.
     if (input.sessionId) {
+      // Revoked, expired, and the owning user are all in the filter, not a
+      // precondition. A session id arrives in a request body, so it is a bearer
+      // value rather than a reference: pointing somebody else's live session at
+      // a new organisation would pull that account into the tenant, and pointing
+      // a dead one at it would hand a signed-out caller an organisation they
+      // never finished creating. Filtering in the update also means none of it
+      // can drift away from the write.
       const updated = await SessionModel.updateOne(
-        { _id: input.sessionId },
+        {
+          _id: input.sessionId,
+          userId: input.ownerId,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        },
         { $set: { activeOrganizationId: organization._id } },
         { session },
       );

@@ -180,6 +180,72 @@ describe("system role provisioning", () => {
     await setActiveOrganization(session._id, result.organization._id);
   });
 
+  describe("pointing a session at a new organisation", () => {
+    it("refuses a revoked session, and creates nothing", async () => {
+      // A session id arrives in a request body, so it is a bearer value, not a
+      // reference. Pointing a dead session at a live organisation would hand
+      // somebody who has already been signed out an organisation.
+      const owner = await seedUser();
+      const { session } = await issueSession({ userId: owner._id });
+      await SessionModel.updateOne(
+        { _id: session._id },
+        { $set: { revokedAt: new Date() } },
+      );
+
+      await expect(
+        createOrganization({
+          name: "Acme",
+          ownerId: owner._id,
+          sessionId: session._id,
+        }),
+      ).rejects.toThrow(/session/i);
+
+      // The whole transaction rolled back: no orphan organisation either.
+      expect(await OrganizationModel.countDocuments({})).toBe(0);
+    });
+
+    it("refuses an expired session, and creates nothing", async () => {
+      const owner = await seedUser();
+      const { session } = await issueSession({ userId: owner._id });
+      await SessionModel.updateOne(
+        { _id: session._id },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
+
+      await expect(
+        createOrganization({
+          name: "Acme",
+          ownerId: owner._id,
+          sessionId: session._id,
+        }),
+      ).rejects.toThrow(/session/i);
+
+      expect(await OrganizationModel.countDocuments({})).toBe(0);
+    });
+
+    it("refuses a session belonging to somebody else", async () => {
+      // Owning the session is not the same as being its user. Without the
+      // userId in the filter, an owner could point somebody else's session at
+      // their new organisation and pull that account into the tenant.
+      const owner = await seedUser();
+      const other = await seedUser();
+      const { session } = await issueSession({ userId: other._id });
+
+      await expect(
+        createOrganization({
+          name: "Acme",
+          ownerId: owner._id,
+          sessionId: session._id,
+        }),
+      ).rejects.toThrow(/session/i);
+
+      // And the other user's session was left exactly as it was.
+      const reloaded = await SessionModel.findById(session._id);
+      expect(reloaded?.activeOrganizationId ?? null).toBeNull();
+      expect(await OrganizationModel.countDocuments({})).toBe(0);
+    });
+  });
+
   describe("refusing to run twice", () => {
     it("throws rather than silently succeeding", async () => {
       const owner = await seedUser();

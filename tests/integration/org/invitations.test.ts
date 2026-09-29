@@ -238,6 +238,32 @@ describe("resending", () => {
     ).resolves.toBeDefined();
   });
 
+  it("can invite the same address again after the invitation was revoked", async () => {
+    // A revoked invitation still has acceptedAt: null, so it still occupies the
+    // {organizationId, email} partial-unique slot until the TTL sweeps it seven
+    // days later. The service has to reclaim the slot explicitly or every
+    // revoke is a seven-day ban on re-inviting that person.
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser("new@example.com");
+
+    const first = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.MEMBER,
+      invitedBy: owner._id,
+    });
+    await revokeInvitation(organization._id, first.invitation._id, owner._id);
+
+    await expect(
+      inviteMember({
+        organizationId: organization._id,
+        email: invitee.email,
+        roleId: roleIds.VIEWER,
+        invitedBy: owner._id,
+      }),
+    ).resolves.toBeDefined();
+  });
+
   it("keeps at most one open invitation per address", async () => {
     const { owner, organization, roleIds } = await withOrg();
 
