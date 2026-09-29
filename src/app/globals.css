@@ -29,7 +29,12 @@
    be one class on <html> instead of a parallel set of styles.
    ──────────────────────────────────────────────────────────────────────────── */
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* `:is(.dark *)`, not `:where(.dark, .dark *)`. `:where()` contributes zero
+   specificity, so a dark override ties with the base utility it is meant to
+   replace and loses on source order — the override silently never applies,
+   with no error anywhere. `:is()` carries the specificity of its argument, so
+   the dark rule outweighs the base rule by design. */
+@custom-variant dark (&:is(.dark *));
 
 :root {
   /* ── Neutral ramp ─────────────────────────────────────────────────────────

@@ -36,9 +36,36 @@ mongosh --eval "rs.initiate()"
 | `npm run lint:fix` | Biome — apply fixes |
 | `npm run format` | Biome — format only |
 | `npm run typecheck` | `next typegen` then `tsc --noEmit` |
-| `npm run validate` | Lint and typecheck. **Run before every commit.** |
+| `npm run validate` | Lint, typecheck, and tests. **Run before every commit.** |
 | `npm test` | Unit and integration tests |
 | `npm run test:e2e` | Playwright end-to-end tests |
+| `npm run verify:ui` | Computed-style and contrast checks against a running server |
+
+### `npm run verify:ui`
+
+Type checking, linting, and unit tests all passed while three separate visual
+bugs were live: unstyled form controls, a dark mode that inverted into
+near-white surfaces, and a `dark:` variant that had never once applied because
+`:where()` gave it zero specificity. None of them can be reached by any tool
+that only reads source.
+
+So the design system gets a check that reads the browser's computed styles. It
+asserts the things that are invisible in a diff — that a control is not
+transparent, that its height matches the button beside it, that the ink ramp
+inverts rather than turning a dark card white, and that text meets WCAG AA in
+both themes.
+
+It needs a built app and a browser, so it sits outside `validate`:
+
+```bash
+npm run build
+npm run start &
+google-chrome --headless --remote-debugging-port=9222 about:blank &
+npm run verify:ui
+```
+
+Run it after touching anything under `src/components/ui` or the tokens in
+`globals.css`.
 
 `npm run validate` is the gate. Nothing is committed while it is red.
 
