@@ -23,3 +23,38 @@ process.env.RATELIMIT_DRIVER = "memory";
 // MONGODB_URI is set by tests/global-setup.ts and deliberately not defaulted
 // here. A missing value should fail loudly rather than silently connect to a
 // developer's real database.
+
+/**
+ * Give this test file its own database on the shared in-memory replica set.
+ *
+ * Vitest runs test files in parallel workers against one server, and every
+ * integration file ends with `deleteMany({})`. Sharing a database therefore
+ * means one file's cleanup can wipe another's rows mid-test: failures that pass
+ * in isolation and appear only in the full run, which is a false signal in both
+ * directions and expensive to chase.
+ *
+ * Separate collections would work too, but a per-file database is what
+ * docs/ARCHITECTURE.md specifies for integration suites, and it needs no
+ * changes to the models.
+ *
+ * Named from the pid plus random bytes, so it is unique however the pool is
+ * configured: with one worker per file the pid alone would do, but a shared
+ * worker across files would collide.
+ */
+function withDatabase(uri: string, name: string): string {
+  const [base, query] = uri.split("?");
+  const withoutDatabase = base.replace(/\/[^/]*$/, "");
+  return `${withoutDatabase}/${name}${query ? `?${query}` : ""}`;
+}
+
+const baseUri = process.env.MONGODB_URI;
+if (!baseUri) {
+  throw new Error(
+    "MONGODB_URI was not set. tests/global-setup.ts must run before this file.",
+  );
+}
+
+process.env.MONGODB_URI = withDatabase(
+  baseUri,
+  `test_${process.pid}_${Math.random().toString(36).slice(2, 8)}`,
+);

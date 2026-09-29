@@ -1,4 +1,4 @@
-import { Schema } from "mongoose";
+import { Schema, type Types } from "mongoose";
 import { markSchema, readSchemaMark } from "@/db/mixins/mark";
 
 /**
@@ -18,8 +18,17 @@ import { markSchema, readSchemaMark } from "@/db/mixins/mark";
 export const AUDIT_FIELDS_OPTION = "bizNexusAuditFields" as const;
 
 export type AuditFields = {
-  createdBy: Schema.Types.ObjectId | null;
-  updatedBy: Schema.Types.ObjectId | null;
+  /**
+   * `Types.ObjectId`, not `Schema.Types.ObjectId`.
+   *
+   * The latter is the SchemaType *class* when used as a TypeScript type, so an
+   * interface declaring it is describing a schema definition rather than a
+   * document. Any schema extending this then infers a `create()` input that
+   * expects a SchemaType for these fields, and every caller passing a real
+   * ObjectId fails to typecheck.
+   */
+  createdBy: Types.ObjectId | null;
+  updatedBy: Types.ObjectId | null;
 };
 
 /**

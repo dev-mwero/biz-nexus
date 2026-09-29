@@ -1,4 +1,8 @@
 export {
+  ActiveOrganizationError,
+  setActiveOrganization,
+} from "./active-organization";
+export {
   INVITATION_TTL_DAYS,
   type Invitation,
   InvitationModel,
