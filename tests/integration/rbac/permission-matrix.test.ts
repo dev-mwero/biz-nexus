@@ -12,7 +12,7 @@ import {
   type SystemRoleKey,
 } from "@/modules/organizations";
 import { SYSTEM_ROLE_PERMISSIONS } from "@/modules/rbac";
-import { ALL_PERMISSIONS, type Permission } from "@/modules/rbac/permissions";
+import { ALL_PERMISSIONS } from "@/modules/rbac/permissions";
 import { type AuthError, createAuthGuards } from "@/shared/auth/dal";
 
 /**
