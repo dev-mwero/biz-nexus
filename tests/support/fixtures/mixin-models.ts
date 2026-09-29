@@ -22,34 +22,58 @@ export interface MixinCompany
   updatedAt: Date;
 }
 
-const companySchema = new Schema<MixinCompany>(
-  {
-    organizationId: {
-      type: Schema.Types.ObjectId,
-      required: true,
-      index: true,
+/**
+ * Built per test file, on purpose.
+ *
+ * An earlier version exported one shared `test_mixin_companies` model that
+ * both the mixin suite and the slug suite imported. Vitest runs files in
+ * parallel workers against one in-memory replica set, so each file's
+ * `deleteMany` in `beforeEach` wiped the other's rows mid-test — eight
+ * failures that passed in isolation and only appeared in the full run. A
+ * failure that depends on what else is running is a false signal in both
+ * directions, and it costs more to diagnose than a shared model saves.
+ *
+ * The collection name is part of the model name, so two suites cannot collide
+ * even if they are added to the same worker.
+ */
+export function makeCompanyFixtures(suffix: string) {
+  const modelName = `mixin_company_${suffix}`;
+  const collection = `test_mixin_companies_${suffix}`;
+
+  const schema = new Schema<MixinCompany>(
+    {
+      organizationId: {
+        type: Schema.Types.ObjectId,
+        required: true,
+        index: true,
+      },
+      name: { type: String, required: true },
     },
-    name: { type: String, required: true },
-  },
-  { timestamps: true, collection: "test_mixin_companies" },
-);
+    { timestamps: true, collection },
+  );
 
-companySchema.plugin(softDelete());
-companySchema.plugin(auditFields());
-companySchema.plugin(slug());
+  schema.plugin(softDelete());
+  schema.plugin(auditFields());
+  schema.plugin(slug());
 
-export const MixinCompanyModel: Model<MixinCompany> =
-  (mongoose.models.test_mixin_companies as Model<MixinCompany>) ??
-  mongoose.model<MixinCompany>("test_mixin_companies", companySchema);
+  const model: Model<MixinCompany> =
+    (mongoose.models[modelName] as Model<MixinCompany>) ??
+    mongoose.model<MixinCompany>(modelName, schema);
 
-export class MixinCompanyRepository extends TenantRepository<MixinCompany> {
-  constructor(
-    organizationId: mongoose.Types.ObjectId | string,
-    actorId?: mongoose.Types.ObjectId | string,
-  ) {
-    super(MixinCompanyModel, organizationId, actorId);
+  class Repository extends TenantRepository<MixinCompany> {
+    constructor(
+      organizationId: mongoose.Types.ObjectId | string,
+      actorId?: mongoose.Types.ObjectId | string,
+    ) {
+      super(model, organizationId, actorId);
+    }
   }
+
+  return { model, Repository, collection };
 }
+
+export const { model: MixinCompanyModel, Repository: MixinCompanyRepository } =
+  makeCompanyFixtures("default");
 
 /** A schema with none of the mixins, to prove the repository adapts. */
 export interface PlainRecord extends TenantDocument {

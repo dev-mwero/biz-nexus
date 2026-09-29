@@ -88,13 +88,40 @@ export class SlugConflictError extends Error {
   constructor(
     readonly base: string,
     readonly attempts: number,
+    options?: { cause?: unknown },
   ) {
     super(
       `Could not find a free slug for "${base}" after ${attempts} attempts. ` +
         "This normally means a concurrent create took the same name; retry, or set the slug explicitly.",
+      options,
     );
     this.name = "SlugConflictError";
   }
+}
+
+/**
+ * Whether a duplicate-key error was raised by the slug index specifically.
+ *
+ * `code === 11000` covers every unique index in the database. Keying on the
+ * field is what stops a duplicate email from being retried into `user-2@x.com`.
+ */
+export function isDuplicateKeyOn(error: unknown, field: string): boolean {
+  if (typeof error !== "object" || error === null) return false;
+
+  const candidate = error as {
+    code?: unknown;
+    keyPattern?: Record<string, unknown>;
+  };
+
+  // Mongoose wraps the driver error and preserves both fields.
+  if (candidate.code === 11000) {
+    const pattern = candidate.keyPattern;
+    // A driver-level duplicate with no keyPattern still needs handling; a
+    // wrapped one always has it, and that is where the field can be read.
+    return pattern ? Object.hasOwn(pattern, field) : true;
+  }
+
+  return false;
 }
 
 /**
@@ -114,6 +141,7 @@ export async function ensureUniqueSlug<T extends { _id?: unknown }>(
     field?: string;
     maxAttempts?: number;
     excludeId?: unknown;
+    probeFrom?: number;
   } = {},
 ): Promise<string> {
   const field = options.field ?? "slug";
@@ -139,7 +167,8 @@ export async function ensureUniqueSlug<T extends { _id?: unknown }>(
 
   if (taken.length === 0) return seed;
 
-  for (let suffix = 2; suffix <= maxAttempts; suffix += 1) {
+  const offset = options.probeFrom ?? 0;
+  for (let suffix = 2 + offset; suffix <= maxAttempts + offset; suffix += 1) {
     const candidate = `${seed}-${suffix}`;
     const collision = await model
       .find({
@@ -153,4 +182,62 @@ export async function ensureUniqueSlug<T extends { _id?: unknown }>(
   }
 
   throw new SlugConflictError(seed, maxAttempts);
+}
+
+/**
+ * Create a document, resolving slug collisions by retrying.
+ *
+ * `ensureUniqueSlug` alone is not enough. Two requests creating "Acme" at the
+ * same moment both check, both see `acme` free, and both insert; the unique
+ * index then rejects one with E11000. Without this the loser gets a 500 for a
+ * name that was free a moment ago and is now taken by its own twin.
+ *
+ * The retry is narrow on purpose. A duplicate-key error is retried only when it
+ * is on the *slug* field, because the same error on `email` means a genuinely
+ * duplicate account, and retrying that would loop while appending `-2` to a
+ * person's email address. The distinction is read from `keyPattern`, which
+ * MongoDB populates with the index that actually fired.
+ */
+export async function createWithUniqueSlug<T>(
+  model: Model<T>,
+  base: string,
+  build: (slug: string) => Omit<T, "_id">,
+  options: {
+    maxLength?: number;
+    field?: string;
+    maxAttempts?: number;
+  } = {},
+): Promise<T> {
+  const field = options.field ?? "slug";
+  const maxAttempts = options.maxAttempts ?? 8;
+  let candidate = slugify(base, { maxLength: options.maxLength ?? 80 });
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await model.create({
+        ...build(candidate),
+        [field]: candidate,
+      } as T);
+    } catch (error) {
+      if (!isDuplicateKeyOn(error, field)) throw error;
+      lastError = error;
+      // Re-read rather than guess the next suffix: another writer may have
+      // taken several while this request was in flight, and a guessed "-2"
+      // would collide with the same index that just rejected us.
+      //
+      // The offset is zero for the first retry and random afterwards. One
+      // collision is the ordinary case — somebody else created "Acme" a moment
+      // ago — and it should land on "-2" every time, not on whichever of
+      // "-2" to "-5" a coin flip chose, which would leave gaps in the sequence
+      // and make the outcome untestable. Sustained contention is what needs
+      // the spread, and it only shows up as repeated collisions.
+      candidate = await ensureUniqueSlug(model, candidate, {
+        ...options,
+        probeFrom: attempt === 0 ? 0 : Math.floor(Math.random() * 4),
+      });
+    }
+  }
+
+  throw new SlugConflictError(base, maxAttempts, { cause: lastError });
 }
