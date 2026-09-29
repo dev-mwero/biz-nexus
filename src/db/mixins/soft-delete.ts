@@ -29,13 +29,15 @@ export type SoftDeleteFields = {
  * never deleted must be insertable without the field, and `null` is the single
  * value that means "present".
  */
-export function softDelete(options: { index?: boolean } = {}) {
+export function softDelete(
+  options: { index?: boolean; scopeField?: string } = {},
+) {
   const definition: SchemaDefinitionProperty = {
     type: Date,
     default: null,
   };
 
-  if (options.index !== false) {
+  if (options.index !== false && !options.scopeField) {
     // Sparse, because most rows in a soft-delete collection are never deleted
     // and an index entry for each of them is write cost for no read benefit.
     definition.index = { sparse: true };
@@ -43,6 +45,18 @@ export function softDelete(options: { index?: boolean } = {}) {
 
   return (schema: Schema) => {
     schema.add({ deletedAt: definition });
+
+    if (options.scopeField) {
+      // On a tenant-owned collection the soft-delete filter is never the only
+      // one: TenantRepository.scope() adds `deletedAt: null` alongside the
+      // organisation, so every read is `organizationId` + `deletedAt` + fields.
+      // A standalone deletedAt index would serve an unscoped query, which is
+      // precisely the shape docs/DATABASE.md section 1 wants to be slow enough
+      // to catch in development. Leading with the scope field keeps the trash
+      // view indexed without opening that door.
+      schema.index({ [options.scopeField]: 1, deletedAt: 1 });
+    }
+
     markSchema(schema, SOFT_DELETE_OPTION, true);
   };
 }
