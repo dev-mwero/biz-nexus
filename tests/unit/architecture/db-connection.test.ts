@@ -199,3 +199,57 @@ describe("database connection is centralised", () => {
     });
   });
 });
+
+/**
+ * Irreversible deletes are the one thing in the repository that cannot be
+ * undone, so they are named to be greppable. This asserts the set of
+ * destructive method declarations rather than the set of calls: it is a
+ * structural check on the base class, so it holds for every collection that
+ * extends it, including ones that do not exist yet.
+ */
+const DESTRUCTIVE_DECLARATION =
+  /^\s*(?:async\s+)?(softDelete\w*|hardDelete\w*|delete\w*|deleteBy\w*)\s*\(/;
+
+const ALLOWED_DESTRUCTIVE_METHODS = new Set([
+  "softDeleteById",
+  "softDeleteByIds",
+  "softDeleteOne",
+  "softDeleteMany",
+  "hardDeleteById",
+  "hardDeleteMany",
+  "deleteOne",
+  "deleteMany",
+]);
+
+describe("irreversible deletes are named", () => {
+  const source = readFileSync(
+    join(PROJECT_ROOT, "src", "db", "tenant-repository.ts"),
+    "utf8",
+  );
+
+  const declared = [
+    ...source.matchAll(new RegExp(DESTRUCTIVE_DECLARATION, "gm")),
+  ]
+    .map((match) => match[1])
+    .filter((name) => name !== undefined);
+
+  it("the base class declares no ambiguous delete method", () => {
+    // A plain `deleteById` or `deleteOne` that is not the guarded `deleteOne`
+    // below is the regression this exists to catch. It previously called
+    // findOneAndDelete with no soft-delete check, so a soft-delete collection
+    // lost rows that deleteOne and deleteMany both refuse to remove.
+    expect(
+      declared.filter((name) => !ALLOWED_DESTRUCTIVE_METHODS.has(name)),
+    ).toEqual([]);
+  });
+
+  it("declares no `deleteById` at all", () => {
+    expect(declared).not.toContain("deleteById");
+  });
+
+  it("still finds what it is looking for, so the guard is not vacuous", () => {
+    // A regex that silently matches nothing would pass every assertion above.
+    expect(declared).toContain("hardDeleteById");
+    expect(declared).toContain("deleteOne");
+  });
+});

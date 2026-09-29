@@ -337,22 +337,6 @@ export abstract class TenantRepository<T extends TenantDocument> {
     );
   }
 
-  deleteById(id: Types.ObjectId | string, options?: DeleteOptionsOf<T>) {
-    // Same trap as findByIdAndUpdate: Model.findByIdAndDelete is
-    // findOneAndDelete({ _id: id }). Exposed here so no call site reaches for
-    // the unsafe one by name.
-    //
-    // The cast is for an upstream typing gap, not for the scope: every
-    // findOneAndDelete overload in Mongoose 9's .d.ts types the filter as
-    // `Query<any, any>`, while the runtime accepts the plain filter object
-    // findOneAndUpdate does. The scope below is still applied and still
-    // tested.
-    return this.model.findOneAndDelete(
-      this.scope({ _id: id } as ScopedFilter<T>) as never,
-      options as never,
-    );
-  }
-
   /**
    * Hard delete, refused outright on a soft-delete collection.
    *
@@ -412,6 +396,14 @@ export abstract class TenantRepository<T extends TenantDocument> {
    * `grep -r "hardDelete"` returns every place in the codebase that can
    * destroy a record irreversibly. That list should be short enough to read
    * during an audit.
+   *
+   * There is deliberately no `deleteById`. An earlier version had one, added so
+   * that no call site would reach for the unsafe `findByIdAndDelete` by name —
+   * but it went straight to `findOneAndDelete` with no soft-delete guard, so on
+   * a soft-delete collection it destroyed rows that `deleteOne` and `deleteMany`
+   * both refuse to touch. The same name meaning "erase" on one schema and
+   * "refuse" on another is the hazard itself, so the method is gone rather than
+   * reworded. `softDeleteById` and `hardDeleteById` say which one they mean.
    *
    * A soft delete takes a filter rather than an id because the screens that use
    * it are bulk actions — "archive these twelve selected rows" — and a
