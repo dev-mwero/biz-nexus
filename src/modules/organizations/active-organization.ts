@@ -36,11 +36,27 @@ export class ActiveOrganizationError extends Error {
   }
 }
 
+/**
+ * Coerce an untrusted id, or null.
+ *
+ * `new Types.ObjectId(...)` throws a `BSONError` on a malformed value, and that
+ * would escape before any of the uniform refusals below — so a caller could tell
+ * "that is not a valid id" apart from "that is not yours", which is precisely
+ * the oracle the identical-message rule exists to prevent. It would also reach
+ * the client as an unexpected internal error.
+ */
+function toObjectId(value: Types.ObjectId | string): Types.ObjectId | null {
+  if (value instanceof Types.ObjectId) return value;
+  return Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : null;
+}
+
 export async function setActiveOrganization(
   sessionId: Types.ObjectId | string,
   organizationId: Types.ObjectId | string,
 ): Promise<Session> {
-  const target = new Types.ObjectId(String(organizationId));
+  const target = toObjectId(organizationId);
+  const targetSessionId = toObjectId(sessionId);
+  if (!target || !targetSessionId) throw new ActiveOrganizationError();
 
   const organization = await OrganizationModel.findOne({
     _id: target,
@@ -49,16 +65,27 @@ export async function setActiveOrganization(
   });
   if (!organization) throw new ActiveOrganizationError();
 
+  const userId = await currentUserId(targetSessionId);
+  if (!userId) throw new ActiveOrganizationError();
+
   const membership = await MembershipModel.findOne({
     organizationId: target,
-    userId: (await currentUserId(sessionId)) ?? undefined,
+    userId,
     status: "ACTIVE",
     deletedAt: null,
   });
   if (!membership) throw new ActiveOrganizationError();
 
+  // ExpiresAt is checked here as well as revokedAt. Without it this returns a
+  // dead session as a success, and reports to the caller that an organisation
+  // was activated for a session that can no longer be used — a lie the DAL
+  // would have to contradict on the very next request.
   const session = await SessionModel.findOneAndUpdate(
-    { _id: new Types.ObjectId(String(sessionId)), revokedAt: null },
+    {
+      _id: targetSessionId,
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    },
     { $set: { activeOrganizationId: target } },
     { returnDocument: "after" },
   );
@@ -68,9 +95,11 @@ export async function setActiveOrganization(
   return session;
 }
 
-async function currentUserId(sessionId: Types.ObjectId | string) {
+async function currentUserId(sessionId: Types.ObjectId) {
   const session = await SessionModel.findOne({
-    _id: new Types.ObjectId(String(sessionId)),
+    _id: sessionId,
+    revokedAt: null,
+    expiresAt: { $gt: new Date() },
   });
   return session?.userId ?? null;
 }

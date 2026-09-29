@@ -6,6 +6,9 @@ import {
   ContactModel,
   ContactRepository,
   type FixtureContact,
+  SoftDeleteContactModel,
+  SoftDeleteContactRepository,
+  type SoftDeleteFixture,
 } from "../../support/fixtures/contact-repository";
 
 /**
@@ -28,10 +31,12 @@ const USER = new Types.ObjectId("64b0000000000000000000c3");
 
 let contactA: FixtureContact;
 let contactB: FixtureContact;
+let softB: SoftDeleteFixture;
 
 beforeEach(async () => {
   await connectToDatabase();
   await ContactModel.deleteMany({});
+  await SoftDeleteContactModel.deleteMany({});
 
   const repoA = new ContactRepository(ORG_A);
   const repoB = new ContactRepository(ORG_B);
@@ -46,10 +51,17 @@ beforeEach(async () => {
     email: "bob@beta.test",
     ownerId: USER,
   });
+
+  // The same pair again, on a soft-delete collection, because the soft-delete
+  // methods do nothing observable on a schema without the field.
+  softB = await new SoftDeleteContactRepository(ORG_B).create({
+    name: "Bob Beta",
+  });
 });
 
 afterEach(async () => {
   await ContactModel.deleteMany({});
+  await SoftDeleteContactModel.deleteMany({});
 });
 
 describe("tenant isolation", () => {
@@ -131,6 +143,83 @@ describe("tenant isolation", () => {
     expect((await ContactModel.findById(contactB._id))?.name).toBe("Bob Beta");
   });
 
+  /**
+   * The remaining destructive paths, as a matrix.
+   *
+   * Each row names the document it touches as well as the call it makes, and
+   * asserts on that document. Asserting on a fixed fixture while a row operates
+   * on a different collection is a test that cannot fail: an earlier version of
+   * this matrix deleted from ContactModel and then checked the soft-delete
+   * fixture, and passed with the tenant scope removed entirely.
+   *
+   * The assertion re-reads the document rather than trusting the return value,
+   * because a method that returns a null or a 0 and still wrote is the failure
+   * that matters.
+   */
+  const destructive: Array<
+    [
+      string,
+      () => Promise<unknown>,
+      () => Promise<{ name: string; deletedAt: Date | null } | null>,
+    ]
+  > = [
+    [
+      "deleteMany by email",
+      () =>
+        new ContactRepository(ORG_A).deleteMany({
+          email: "bob@beta.test",
+        } as never),
+      () => ContactModel.findById(contactB._id),
+    ],
+    [
+      "softDeleteOne by _id",
+      () =>
+        new SoftDeleteContactRepository(ORG_A).softDeleteOne({
+          _id: softB._id,
+        } as never),
+      () => SoftDeleteContactModel.findById(softB._id),
+    ],
+    [
+      "softDeleteById",
+      () => new SoftDeleteContactRepository(ORG_A).softDeleteById(softB._id),
+      () => SoftDeleteContactModel.findById(softB._id),
+    ],
+    [
+      // hardDeleteById writes its own literal organizationId rather than going
+      // through scope(), so it is listed separately on purpose.
+      "hardDeleteById",
+      () => new SoftDeleteContactRepository(ORG_A).hardDeleteById(softB._id),
+      () => SoftDeleteContactModel.findById(softB._id),
+    ],
+  ];
+
+  for (const [name, run, inspect] of destructive) {
+    it(`${name} leaves the foreign record untouched`, async () => {
+      await run();
+
+      const survivor = await inspect();
+      expect(survivor).not.toBeNull();
+      expect(survivor?.name).toBe("Bob Beta");
+      // Not merely present: not soft-deleted either, which is a different
+      // failure that a `not.toBeNull()` check would miss.
+      expect(survivor?.deletedAt ?? null).toBeNull();
+    });
+  }
+
+  it("a foreign id is refused by restoreById as well", async () => {
+    // Deleted out of band, so there is a row to put back and the refusal can
+    // be observed rather than inferred from a no-op.
+    await SoftDeleteContactModel.updateOne(
+      { _id: softB._id },
+      { $set: { deletedAt: new Date() } },
+    );
+
+    await new SoftDeleteContactRepository(ORG_A).restoreById(softB._id);
+
+    const after = await SoftDeleteContactModel.findById(softB._id);
+    expect(after?.deletedAt ?? null).not.toBeNull();
+  });
+
   it("writes the scope on create", async () => {
     // A document saved without the scope would be invisible to every scoped
     // read, and therefore invisible to the user who just created it.
@@ -184,6 +273,16 @@ describe("tenant isolation with a caller who belongs to both organisations", () 
     );
 
     expect((await ContactModel.findById(contactB._id))?.name).toBe("Bob Beta");
+  });
+
+  it("cannot delete it either", async () => {
+    // On the soft-delete collection, so the assertion is about the tenant scope
+    // rather than about Mongoose stripping an undeclared field.
+    await new SoftDeleteContactRepository(ORG_A).softDeleteById(softB._id);
+
+    const survivor = await SoftDeleteContactModel.findById(softB._id);
+    expect(survivor).not.toBeNull();
+    expect(survivor?.deletedAt ?? null).toBeNull();
   });
 
   it("reverses cleanly: B is equally unable to reach A", async () => {

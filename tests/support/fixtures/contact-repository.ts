@@ -1,4 +1,5 @@
 import mongoose, { type Model, Schema } from "mongoose";
+import { type SoftDeleteFields, softDelete } from "@/db/mixins/soft-delete";
 import {
   type ScopedFilter,
   type TenantCreateInput,
@@ -46,6 +47,49 @@ export const ContactModel: Model<FixtureContact> =
 export class ContactRepository extends TenantRepository<FixtureContact> {
   constructor(organizationId: mongoose.Types.ObjectId | string) {
     super(ContactModel, organizationId);
+  }
+}
+
+/**
+ * A soft-delete tenant collection, for the soft-delete cross-tenant cases.
+ *
+ * Separate from the fixture above on purpose. `softDeleteById` issues
+ * `$set: { deletedAt }`, and on a schema without that field Mongoose strips it
+ * — so testing soft-delete isolation against the plain fixture would pass even
+ * with the tenant scope removed. Soft delete is the default deletion path for
+ * every tenant collection, so it has to be tested on a collection that actually
+ * has the field.
+ */
+export interface SoftDeleteFixture extends TenantDocument, SoftDeleteFields {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const softDeleteSchema = new Schema<SoftDeleteFixture>(
+  {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
+    name: { type: String, required: true },
+  },
+  { timestamps: true, collection: "test_soft_delete_contacts" },
+);
+softDeleteSchema.plugin(softDelete());
+
+export const SoftDeleteContactModel: Model<SoftDeleteFixture> =
+  (mongoose.models.test_soft_delete_contacts as Model<SoftDeleteFixture>) ??
+  mongoose.model<SoftDeleteFixture>(
+    "test_soft_delete_contacts",
+    softDeleteSchema,
+  );
+
+export class SoftDeleteContactRepository extends TenantRepository<SoftDeleteFixture> {
+  constructor(organizationId: mongoose.Types.ObjectId | string) {
+    super(SoftDeleteContactModel, organizationId);
   }
 }
 
