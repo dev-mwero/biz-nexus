@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SlugConflictError } from "@/db/mixins/slug";
 import { ActiveOrganizationError } from "@/modules/organizations/active-organization";
@@ -84,7 +85,7 @@ describe("the catalogue", () => {
   it("uses 403 only for permissions and membership state", () => {
     const forbidden: ErrorCode[] = [
       "INSUFFICIENT_PERMISSION",
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       "MEMBERSHIP_INACTIVE",
     ];
     for (const code of forbidden) {
@@ -491,8 +492,8 @@ describe("the errors the application already throws", () => {
     ],
     [
       "MembershipError (last owner)",
-      new MembershipError("LAST_OWNER", "This is the only active owner."),
-      "LAST_OWNER",
+      new MembershipError("OWNER_REQUIRED", "This is the only active owner."),
+      "OWNER_REQUIRED",
       409,
     ],
     [
@@ -583,5 +584,83 @@ describe("the errors the application already throws", () => {
       toErrorPayload(new ActiveOrganizationError("Organization not found."))
         .message,
     ).toBe("Organization not found.");
+  });
+});
+
+describe("documentation", () => {
+  it("docs/API.md lists exactly the catalogue's codes and statuses", () => {
+    // The two disagreed once already, and in the more expensive direction:
+    // API.md prescribed a generic vocabulary (NOT_FOUND, FORBIDDEN, CONFLICT)
+    // that the implementation did not use, so the published contract was a
+    // description of an API that did not exist. A test is cheaper than
+    // discovering that from a client's error handling.
+    const doc = readFileSync("docs/API.md", "utf8");
+    const block =
+      doc
+        .split("The single source of truth is `ERROR_CATALOGUE`")[1]
+        ?.split("```")[0] ?? "";
+
+    const listed = [...block.matchAll(/^\| (\d{3}) \| `([A-Z_]+)` \|/gm)].map(
+      ([, status, code]) => `${status} ${code}`,
+    );
+    const actual = Object.entries(ERROR_CATALOGUE).map(
+      ([code, definition]) => `${definition.status} ${code}`,
+    );
+
+    expect(listed.sort()).toEqual(actual.sort());
+  });
+
+  it("docs/API.md's example envelope uses a real code and message", () => {
+    // The worked example is what a client copies. If it names a code that is
+    // not in the table, the table is not what anybody is actually using.
+    const doc = readFileSync("docs/API.md", "utf8");
+    const block = doc.split("**Failure**")[1]?.split("```")[1] ?? "";
+    const code = block.match(/"code": "([A-Z_]+)"/)?.[1];
+    const message = block.match(/"message": "([^"]+)"/)?.[1];
+
+    expect(isErrorCode(code)).toBe(true);
+    expect(ERROR_CATALOGUE[code as ErrorCode].status).toBe(422);
+    expect(message).toBe(ERROR_CATALOGUE.VALIDATION_FAILED.message);
+  });
+
+  it("keeps the example's requestId the same shape the wrapper generates", () => {
+    // Guarded loosely on purpose: the id is a correlation handle, not a
+    // contract, so this checks the shape rather than pinning the value.
+    const doc = readFileSync("docs/API.md", "utf8");
+    const example = doc.match(/"requestId": "([^"]+)"/)?.[1] ?? "";
+
+    expect(example).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it("keeps every code in the ENTITY_THEN_CONDITION style", () => {
+    // No verbs, and an entity before the condition. A code that reads as an
+    // instruction stops making sense the moment it is quoted in a bug report,
+    // which is exactly what `requestId` invites people to do.
+    //
+    // Two codes are exempt, and deliberately: `UNAUTHENTICATED` and `INTERNAL`
+    // are the HTTP semantic every framework, proxy, and client already
+    // recognises. Renaming them to `SESSION_MISSING` and `SERVER_FAULT` for the
+    // sake of a pattern would make the API less legible, not more consistent.
+    const ENTITY_LESS = new Set(["UNAUTHENTICATED", "INTERNAL"]);
+    const verbs = /\b(GET|SET|DO|TRY|USE|MAKE|SEND|CHECK|VERIFY|THROW|RAISE)\b/;
+
+    for (const code of Object.keys(ERROR_CATALOGUE)) {
+      expect(code, `${code} reads as an instruction`).not.toMatch(verbs);
+      expect(code, `${code} is not upper snake case`).toMatch(/^[A-Z][A-Z_]*$/);
+      if (ENTITY_LESS.has(code)) continue;
+      expect(code, `${code} needs an entity before the condition`).toMatch(
+        /^[A-Z]+(_[A-Z]+)+$/,
+      );
+    }
+  });
+
+  it("exempts only the two codes the style check names", () => {
+    // Otherwise the exception above could quietly grow.
+    const singleWord = Object.keys(ERROR_CATALOGUE).filter(
+      (code) => !code.includes("_"),
+    );
+    expect(singleWord.sort()).toEqual(["INTERNAL", "UNAUTHENTICATED"]);
   });
 });

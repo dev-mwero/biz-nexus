@@ -55,7 +55,7 @@ export class AuthError extends AppError {
  */
 export type AuthErrorCode =
   | "UNAUTHENTICATED"
-  | "NO_ACTIVE_ORGANIZATION"
+  | "ACTIVE_ORGANIZATION_REQUIRED"
   | "INSUFFICIENT_PERMISSION";
 
 export interface AuthContext {
@@ -205,7 +205,7 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
         const session = await resolveSession(await source());
         throw session
           ? new AuthError(
-              "NO_ACTIVE_ORGANIZATION",
+              "ACTIVE_ORGANIZATION_REQUIRED",
               "No active organization, or you are not an active member of it.",
             )
           : unauthenticated();
@@ -228,7 +228,7 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
         const session = await resolveSession(await source());
         throw session
           ? new AuthError(
-              "NO_ACTIVE_ORGANIZATION",
+              "ACTIVE_ORGANIZATION_REQUIRED",
               "No active organization, or you are not an active member of it.",
             )
           : unauthenticated();

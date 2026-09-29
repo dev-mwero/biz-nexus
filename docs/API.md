@@ -21,7 +21,7 @@ Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`SECURITY.md`](./SECURITY.md
 ```json
 {
   "data": [ { "id": "65f..." }, { "id": "65g..." } ],
-  "meta": { "page": 1, "pageSize": 20, "total": 137, "totalPages": 7, "hasNext": true }
+  "meta": { "page": 1, "pageSize": 20, "total": 137, "totalPages": 7 }
 }
 ```
 
@@ -30,10 +30,10 @@ Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`SECURITY.md`](./SECURITY.md
 ```json
 {
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "The request body is invalid.",
+    "code": "VALIDATION_FAILED",
+    "message": "The request is not valid.",
     "details": [ { "path": "email", "message": "Enter a valid email address." } ],
-    "requestId": "01JBX7QK2M9F4N6P8R0S2T4V6X"
+    "requestId": "9f2c1a54-0b3e-4d7a-8c21-6e5f0a7b4d19"
   }
 }
 ```
@@ -45,21 +45,54 @@ correlates with the server log and is the only thing to quote in a bug report.
 
 ## 2. Error codes
 
+Codes are specific rather than generic. `NOT_FOUND` and `CONFLICT` would force a
+client to parse the human-readable `message` to work out which field to
+highlight, which breaks translation and is the reason the code exists at all.
+The single source of truth is `ERROR_CATALOGUE` in
+`src/shared/errors/app-error.ts`; a contract test fails if this table and that
+object disagree.
+
 | HTTP | `code` | Meaning |
 |---|---|---|
-| 400 | `BAD_REQUEST` | Malformed request |
-| 401 | `UNAUTHENTICATED` | No session, expired, or revoked |
-| 403 | `FORBIDDEN` | Authenticated, but the role lacks the permission |
+| 400 | `BAD_REQUEST` | Body could not be read as JSON |
+| 400 | `INVALID_CURSOR` | Paging cursor unparseable |
+| 401 | `UNAUTHENTICATED` | No session |
+| 401 | `SESSION_EXPIRED` | Session expired or revoked |
+| 403 | `INSUFFICIENT_PERMISSION` | Role lacks the permission |
+| 403 | `ACTIVE_ORGANIZATION_REQUIRED` | No active organisation, or not an active member of it |
+| 403 | `MEMBERSHIP_INACTIVE` | Membership suspended |
 | 403 | `EMAIL_NOT_VERIFIED` | Verification required before this action |
-| 404 | `NOT_FOUND` | Does not exist, **or** belongs to another organisation |
-| 409 | `CONFLICT` | Duplicate — email already registered, tag exists |
-| 409 | `INVALID_STATE` | Invalid transition, e.g. converting an already-converted lead |
-| 422 | `VALIDATION_ERROR` | Schema validation failed; `details` lists the fields |
+| 404 | `RECORD_NOT_FOUND` | Does not exist, **or** belongs to another organisation |
+| 404 | `ORGANIZATION_UNAVAILABLE` | Organisation missing, inactive, or in another tenant |
+| 404 | `MEMBERSHIP_NOT_FOUND` | Not a member of this organisation |
+| 404 | `INVITATION_INVALID` | Unknown, or already replaced by a resend |
+| 409 | `EMAIL_ALREADY_REGISTERED` | Duplicate email |
+| 409 | `MEMBERSHIP_EXISTS` | Already a member of this organisation |
+| 409 | `SLUG_CONFLICT` | Name taken and no free variant found |
+| 409 | `ORGANIZATION_CREATION_FAILED` | Could not create the organisation |
+| 409 | `ROLE_PROVISIONING_FAILED` | System roles already provisioned |
+| 409 | `OWNER_REQUIRED` | Would leave the organisation with no active owner |
+| 410 | `INVITATION_EXPIRED` | Past its seven-day window |
+| 410 | `INVITATION_USED` | Already accepted |
+| 410 | `INVITATION_REVOKED` | Revoked by an administrator |
+| 422 | `VALIDATION_FAILED` | Schema validation failed; `details` lists the fields |
+| 422 | `EMAIL_REQUIRED` | Address missing or blank |
+| 422 | `ROLE_NOT_IN_ORGANIZATION` | Role id not usable in this organisation |
 | 429 | `RATE_LIMITED` | Too many attempts; `Retry-After` header set |
-| 500 | `INTERNAL_ERROR` | Unexpected. Quote the `requestId`. |
+| 500 | `INTERNAL` | Unexpected. Quote the `requestId`. |
+| 500 | `TRANSACTION_ABORTED` | Transaction rolled back; retryable |
+| 500 | `DATABASE_ERROR` | Database failure |
+| 500 | `CONFIGURATION_INVALID` | Server misconfigured |
+
+All `500` codes share one client message — `Something went wrong.` — and differ
+only in the server log, keyed by `requestId`. A `500` that says which kind of
+failure it was is a `500` that tells an attacker about the deployment.
 
 A record in another organisation returns `404`, never `403`. See
-[`SECURITY.md` §6](./SECURITY.md).
+[`SECURITY.md` §6](./SECURITY.md). `ROLE_NOT_IN_ORGANIZATION` is the one place
+this is done with wording rather than status: the caller sent a role id that is
+not usable here, and the message says "not available for this organization"
+rather than confirming the role exists in a tenant they cannot see.
 
 ---
 

@@ -205,7 +205,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -219,7 +219,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -234,7 +234,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -248,7 +248,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -262,7 +262,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -276,7 +276,7 @@ describe("requireOrg", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requireOrg(),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -369,7 +369,7 @@ describe("requirePermission", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requirePermission("deals.read"),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -383,7 +383,7 @@ describe("requirePermission", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requirePermission("deals.read"),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });
@@ -394,7 +394,7 @@ describe("requirePermission", () => {
 
     await expectAuthError(
       guardsFor(f.sessionToken).requirePermission("deals.read"),
-      "NO_ACTIVE_ORGANIZATION",
+      "ACTIVE_ORGANIZATION_REQUIRED",
       403,
     );
   });

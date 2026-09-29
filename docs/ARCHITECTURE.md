@@ -207,8 +207,8 @@ Server components read through the same services as the API. There is no
 { "data": <payload>, "meta": { "page": 1, "pageSize": 20, "total": 137, "totalPages": 7 } }
 
 // Failure
-{ "error": { "code": "DEAL_NOT_FOUND", "message": "Deal not found.",
-             "details": [...], "requestId": "01JB..." } }
+{ "error": { "code": "RECORD_NOT_FOUND", "message": "Deal not found.",
+             "details": [...], "requestId": "9f2c1a54-…" } }
 ```
 
 `AppError` carries a stable machine code, a safe human message, an optional

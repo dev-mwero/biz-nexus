@@ -37,7 +37,7 @@ export class InvitationError extends AppError {
       | "INVITATION_USED"
       | "INVITATION_REVOKED"
       | "ROLE_NOT_IN_ORGANIZATION"
-      | "ALREADY_A_MEMBER"
+      | "MEMBERSHIP_EXISTS"
       | "EMAIL_REQUIRED",
     message: string,
   ) {
@@ -147,7 +147,7 @@ export async function inviteMember(
     });
     if (existingMembership) {
       throw new InvitationError(
-        "ALREADY_A_MEMBER",
+        "MEMBERSHIP_EXISTS",
         "That person is already a member of this organisation.",
       );
     }

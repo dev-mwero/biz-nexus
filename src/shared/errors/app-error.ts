@@ -53,7 +53,7 @@ export const ERROR_CATALOGUE = {
     message: "Your session has expired.",
     expose: true,
   },
-  NO_ACTIVE_ORGANIZATION: {
+  ACTIVE_ORGANIZATION_REQUIRED: {
     status: 403,
     message: "No active organization, or you are not an active member of it.",
     expose: true,
@@ -104,7 +104,7 @@ export const ERROR_CATALOGUE = {
     message: "That email address is already registered.",
     expose: true,
   },
-  ALREADY_A_MEMBER: {
+  MEMBERSHIP_EXISTS: {
     status: 409,
     message: "That person is already a member of this organization.",
     expose: true,
@@ -129,7 +129,7 @@ export const ERROR_CATALOGUE = {
     message: "That member is not in this organization.",
     expose: true,
   },
-  LAST_OWNER: {
+  OWNER_REQUIRED: {
     status: 409,
     message: "This is the only active owner. Transfer ownership first.",
     expose: true,
@@ -152,14 +152,31 @@ export const ERROR_CATALOGUE = {
   },
 
   // --- Requests -------------------------------------------------------------
-  VALIDATION_FAILED: {
-    status: 422,
-    message: "The request is not valid.",
+  BAD_REQUEST: {
+    status: 400,
+    message: "The request could not be read.",
     expose: true,
   },
   INVALID_CURSOR: {
     status: 400,
     message: "The paging cursor is not valid.",
+    expose: true,
+  },
+  VALIDATION_FAILED: {
+    status: 422,
+    message: "The request is not valid.",
+    expose: true,
+  },
+
+  // --- Throttling and verification ------------------------------------------
+  RATE_LIMITED: {
+    status: 429,
+    message: "Too many attempts. Try again shortly.",
+    expose: true,
+  },
+  EMAIL_NOT_VERIFIED: {
+    status: 403,
+    message: "Verify your email address before continuing.",
     expose: true,
   },
 

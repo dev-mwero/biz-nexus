@@ -19,7 +19,10 @@ import { AppError } from "@/shared/errors/app-error";
 
 export class MembershipError extends AppError {
   constructor(
-    code: "MEMBERSHIP_NOT_FOUND" | "ROLE_NOT_IN_ORGANIZATION" | "LAST_OWNER",
+    code:
+      | "MEMBERSHIP_NOT_FOUND"
+      | "ROLE_NOT_IN_ORGANIZATION"
+      | "OWNER_REQUIRED",
     message: string,
   ) {
     super(code, { message });
@@ -144,7 +147,7 @@ export async function setMembershipStatus(
     (await ownersRemaining(org, membership)) === 0
   ) {
     throw new MembershipError(
-      "LAST_OWNER",
+      "OWNER_REQUIRED",
       "This is the only active owner. Transfer ownership before suspending them.",
     );
   }
@@ -188,7 +191,7 @@ export async function removeMember(
 
   if ((await ownersRemaining(org, membership)) === 0) {
     throw new MembershipError(
-      "LAST_OWNER",
+      "OWNER_REQUIRED",
       "This is the only active owner. Transfer ownership before removing them.",
     );
   }
