@@ -25,7 +25,9 @@ import { isPermission, type Permission } from "@/modules/rbac/permissions";
  * context, and these are the tests that matter most.
  */
 
-export const SESSION_COOKIE = "biz_session";
+import { SESSION_COOKIE } from "@/shared/auth/session-cookie";
+
+export { SESSION_COOKIE };
 
 /** Where a session token comes from. Async, because reading cookies is. */
 export type TokenSource = () => Promise<string | null | undefined>;
