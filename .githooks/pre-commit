@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Refuse to commit a red tree.
+#
+# The project's rule is that nothing is committed while validation fails. This
+# makes that rule mechanical instead of a thing to remember, which is the only
+# way a rule survives contact with a deadline.
+
+set -euo pipefail
+
+if [ -z "$(git diff --cached --name-only --diff-filter=ACM | grep -vE '^\.(md|json|jsonc)$' || true)" ]; then
+  # Documentation-only change: lint and typecheck have nothing to say.
+  exit 0
+fi
+
+echo "pre-commit: running npm run validate"
+if ! npm run validate; then
+  echo
+  echo "pre-commit: validation failed. Nothing was committed." >&2
+  echo "            Run 'npm run validate' to see the failure." >&2
+  exit 1
+fi

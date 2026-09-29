@@ -42,6 +42,16 @@ mongosh --eval "rs.initiate()"
 
 `npm run validate` is the gate. Nothing is committed while it is red.
 
+A `pre-commit` hook enforces it. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `npm run validate` and refuses the commit on failure, so the rule
+holds even under deadline. Documentation-only changes skip it, because lint and
+typecheck have nothing to say about prose.
+
 ## Code conventions
 
 **Formatting and linting** are owned entirely by Biome. There is no ESLint
