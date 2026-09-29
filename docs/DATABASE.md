@@ -454,6 +454,14 @@ unused. Adding a channel later is a provider adapter, not a migration.
 company and a deal at once. Only one array field appears in any compound index,
 which is the MongoDB requirement for a valid multikey compound index.
 
+**Known gap.** There is no dedupe key, unlike `notifications`. The in-process bus
+delivers an event exactly once to an exactly-once emitter, so nothing is
+duplicated today, and adding an undeclared field to the schema on a guess would
+be worse than recording the gap. Moving the bus to a real broker (Stage 7) makes
+delivery at-least-once and this schema needs an idempotency key at that point,
+before the first broker is connected rather than after the first duplicate row
+appears in someone's timeline.
+
 > The multikey index on `subjects.entityId` is scoped by the leading
 > `organizationId`, so a timeline query can never cross the tenant boundary even
 > if the repository guard were removed. The index is the second line of defence
@@ -512,10 +520,23 @@ which is the MongoDB requirement for a valid multikey compound index.
 | Index | Serves |
 |---|---|
 | `{ organizationId: 1, userId: 1, readAt: 1, createdAt: -1 }` | Bell, unread count |
-| `{ organizationId: 1, userId: 1, dedupeKey: 1 }` | Sparse unique — idempotency |
+| `{ organizationId: 1, userId: 1, dedupeKey: 1 }` | Partial unique — idempotency |
 
 `channel` exists from the start so Stage 5 adds provider delivery without
 touching the read path. The MVP writes `IN_APP` only.
+
+The idempotency index is **partial**, not sparse. A sparse index skips documents
+that are missing the field, and a `dedupeKey` of `null` is present rather than
+missing, so with a null default every undeduped notification for a user would
+collide with every other one and the second send would be silently swallowed.
+`dedupeKey` therefore has no default, and the index carries
+`partialFilterExpression: { dedupeKey: { $type: "string" } }`.
+
+Asking for a channel with no implementation **throws** rather than storing the
+row and skipping delivery. The caller would otherwise believe an email reached
+a customer while it sat unread in a bell nobody was watching, and the failure
+would surface days later as a support ticket instead of at the call site. The
+error is `CONFIGURATION_INVALID`, unexposed.
 
 ### `audit_logs`
 
@@ -543,9 +564,27 @@ Append-only. There is no update or delete path in any service.
 | `{ organizationId: 1, entityType: 1, entityId: 1, createdAt: -1 }` | "History of this record" |
 | `{ organizationId: 1, actorId: 1, createdAt: -1 }` | "What did this user do" |
 
-`changes.before` never contains `passwordHash`, `tokenHash`, or any value from a
-`select: false` field. The diff is computed from explicitly allow-listed fields
-before the write, not by diffing whole documents.
+Two independent things keep secrets out of `changes`, and neither is sufficient
+alone:
+
+- **The caller passes a projection that excludes `select: false` fields.** Only
+  the caller can know which fields those are; the service cannot infer it from
+  the schema, and a `select: false` field is usually exactly the sensitive one.
+- **`recordAction` redacts by key name before the write** — `password`,
+  `passwordHash`, `token`, `authorization`, and the rest, shared with the
+  request logger so the two cannot drift.
+
+The diff is *not* computed from an allow-list of fields. An allow-list has to be
+maintained alongside every call site, and a field changed but not listed is a
+change the audit log does not know about — the failure mode this collection
+exists to prevent. Redaction removes known secrets without also deciding which
+changes were worth recording. The cost is the mirror image: a secret under a
+name the redactor does not recognise would be written, which is why the
+projection above is a requirement on callers rather than a suggestion.
+
+`changes` is stored as one `Mixed` value rather than a nested subdocument,
+because mongoose gives a subdocument its own `_id` and a meaningless id inside
+every diff is weight every consumer would have to learn to ignore.
 
 ---
 
