@@ -63,6 +63,10 @@ export const PERMISSIONS = {
   "deals.create": {},
   "deals.update": {},
   "deals.delete": {},
+  // Distinct from `update`. A stage move is what changes the forecast, and an
+  // organisation that lets people edit deal details but not push them through
+  // the pipeline is a real and common arrangement.
+  "deals.move": {},
 
   "tags.read": {},
   "tags.create": {},

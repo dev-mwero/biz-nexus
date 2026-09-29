@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Permission } from "@/modules/rbac/permissions";
 import {
@@ -127,5 +128,35 @@ describe("permission catalogue", () => {
     expect(PERMISSIONS).toHaveProperty("organization.update");
     expect(PERMISSIONS).toHaveProperty("organization.delete");
     expect(PERMISSIONS).toHaveProperty("organization.transferOwnership");
+  });
+});
+
+describe("documentation", () => {
+  it("docs/SECURITY.md lists exactly the catalogue's permissions", () => {
+    // The security document and the catalogue disagreed once already: the doc
+    // carried `deals.move`, `settings.manage` and `audit.read`, none of which
+    // were in the code, while the code carried roles, invitations, tags and
+    // savedViews, none of which were in the doc. Task 1.19 builds a permission
+    // matrix from this catalogue, so a two-source-of-truth here becomes a
+    // matrix granting the wrong thing.
+    const doc = readFileSync("docs/SECURITY.md", "utf8");
+    const block =
+      doc.split("Every code is `<domain>.<action>`.")[1]?.split("```")[1] ?? "";
+
+    const listed = [...block.matchAll(/^(\w+)[ \t]+([\w \t]+)$/gm)].flatMap(
+      ([, domain, actions]) =>
+        actions
+          .trim()
+          .split(/\s+/)
+          .map((action) => `${domain}.${action}`),
+    );
+
+    expect(listed.sort()).toEqual([...ALL_PERMISSIONS].sort());
+  });
+
+  it("names the catalogue as the source of the listing", () => {
+    expect(readFileSync("docs/SECURITY.md", "utf8")).toContain(
+      "src/modules/rbac/permissions.ts",
+    );
   });
 });

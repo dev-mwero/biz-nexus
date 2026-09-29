@@ -102,20 +102,27 @@ is a user-experience redirect; the DAL is the security control.
 `src/modules/rbac/permissions.ts` as a frozen object. There is no permissions
 collection, so there is no way to widen a permission by inserting a row.
 
-Every code is `<domain>.<action>`:
+Every code is `<domain>.<action>`. The list below is generated from
+`src/modules/rbac/permissions.ts`, and a test fails if the two disagree, so
+this section cannot drift from the code it documents:
 
 ```
-organization.read   organization.update
-users.read          users.invite      users.update   users.remove
-contacts.read       contacts.create   contacts.update  contacts.delete
-companies.read      companies.create  companies.update companies.delete
-leads.read          leads.create      leads.update     leads.delete  leads.convert
-deals.read          deals.create      deals.update     deals.delete  deals.move
-pipelines.read      pipelines.create  pipelines.update pipelines.delete
-tasks.read          tasks.create      tasks.update     tasks.delete
-activities.read     activities.create
-notifications.read  notifications.update
-reports.view        settings.manage   audit.read
+organization      read  update  delete  transferOwnership  settings
+users             read  invite  update  remove
+roles             read  create  update  delete
+invitations       read  create  revoke
+companies         read  create  update  delete
+contacts          read  create  update  delete
+leads             read  create  update  delete  convert
+deals             read  create  update  delete  move
+tags              read  create  update  delete
+fieldDefinitions  read  create  update  delete
+pipelines         read  create  update  delete
+activities        read  create  update  delete
+tasks             read  create  update  delete
+notifications     read  update
+auditLogs         read
+savedViews        read  create  update  delete
 ```
 
 **Roles are per-organisation documents.** Four are provisioned on creation:
