@@ -21,6 +21,12 @@ export {
   organizationSchemaDefinition,
 } from "./organization.model";
 export {
+  type CreateOrganizationInput,
+  type CreateOrganizationResult,
+  createOrganization,
+  OrganizationCreationError,
+} from "./organization.service";
+export {
   type Role,
   RoleModel,
   roleSchemaDefinition,
