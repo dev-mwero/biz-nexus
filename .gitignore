@@ -12,6 +12,13 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# mongo local replica-set data (see .env.example, DATABASE.md §10)
+.mongo-data
 
 # next.js
 /.next/
@@ -31,7 +38,10 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
+# .env.example IS committed on purpose: it is the documented contract of
+# required and optional environment variables and contains no secrets.
 .env*
+!.env.example
 
 # vercel
 .vercel

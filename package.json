@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "biome check",
-    "format": "biome format --write"
+    "lint:fix": "biome check --write",
+    "format": "biome format --write",
+    "typecheck": "next typegen && tsc --noEmit",
+    "validate": "npm run lint && npm run typecheck"
   },
   "dependencies": {
     "next": "16.3.7",
