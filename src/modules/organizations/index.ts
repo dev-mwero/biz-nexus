@@ -9,12 +9,29 @@ export {
   invitationSchemaDefinition,
 } from "./invitation.model";
 export {
+  type AcceptInvitationResult,
+  acceptInvitation,
+  InvitationError,
+  type InviteMemberInput,
+  type InviteMemberResult,
+  inviteMember,
+  listInvitations,
+  revokeInvitation,
+} from "./invitation.service";
+export {
   MEMBERSHIP_STATUS,
   type Membership,
   MembershipModel,
   type MembershipStatus,
   membershipSchemaDefinition,
 } from "./membership.model";
+export {
+  changeMemberRole,
+  listMembers,
+  MembershipError,
+  removeMember,
+  setMembershipStatus,
+} from "./membership.service";
 export {
   type Organization,
   OrganizationModel,

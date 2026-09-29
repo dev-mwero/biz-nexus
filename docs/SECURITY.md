@@ -130,7 +130,7 @@ savedViews        read  create  update  delete
 | Role | Intent | Summary |
 |---|---|---|
 | `OWNER` | Accountable party | Everything, including deleting the organisation and transferring ownership |
-| `ADMIN` | Operational control | Everything except ownership transfer and organisation deletion |
+| `ADMIN` | Operational control | Everything except ownership transfer, organisation deletion, and organisation settings |
 | `MEMBER` | Day-to-day work | Full CRM, task and activity access; cannot manage members or settings |
 | `VIEWER` | Read-only | Read everything permitted, write nothing |
 

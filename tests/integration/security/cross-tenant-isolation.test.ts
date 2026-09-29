@@ -198,7 +198,12 @@ describe("cross-tenant isolation at the service layer", () => {
       // expire. The user is still Owner of Globex; that is not enough.
       await MembershipModel.updateMany(
         { organizationId: world.acme },
-        { $set: { status: "REVOKED" } },
+        // SUSPENDED, which is a real MEMBERSHIP_STATUS value. "REVOKED" also
+        // reads as though it removes access, and it does not: Mongoose does not
+        // run validators on updateOne by default, so the write would have
+        // succeeded and the test would have been asserting on a status the
+        // application can never produce.
+        { $set: { status: "SUSPENDED" } },
       );
 
       const guards = createAuthGuards(async () => world.sessionToken);
