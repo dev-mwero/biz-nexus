@@ -487,15 +487,29 @@ describe("setActiveOrganization", () => {
     // Otherwise the endpoint is an oracle for which organization ids exist.
     const f = await seed(["deals.read"]);
 
-    const unknown = setActiveOrganization(f.sessionId, new Types.ObjectId());
-    const forbidden = setActiveOrganization(f.sessionId, f.otherOrg._id);
+    // `allSettled` rather than two `await expect(p).rejects` calls. Written the
+    // other way, both promises start before either has a handler attached, and a
+    // rejection during the database round-trip escapes as an unhandled rejection
+    // before `expect` gets to observe it. Node reports it as a false failure
+    // attributed to whichever test was running, which is why this looked
+    // intermittent and appeared to come from unrelated files.
+    const [unknown, forbidden] = await Promise.allSettled([
+      setActiveOrganization(f.sessionId, new Types.ObjectId()),
+      setActiveOrganization(f.sessionId, f.otherOrg._id),
+    ]);
 
-    await expect(unknown).rejects.toMatchObject({
-      code: "ORGANIZATION_UNAVAILABLE",
-    });
-    await expect(forbidden).rejects.toMatchObject({
-      code: "ORGANIZATION_UNAVAILABLE",
-    });
+    // Both must fail, and fail the same way, or one of them is distinguishable.
+    expect(unknown.status).toBe("rejected");
+    expect(forbidden.status).toBe("rejected");
+
+    const unknownError = (unknown as PromiseRejectedResult).reason;
+    const forbiddenError = (forbidden as PromiseRejectedResult).reason;
+
+    expect(unknownError).toMatchObject({ code: "ORGANIZATION_UNAVAILABLE" });
+    expect(forbiddenError).toMatchObject({ code: "ORGANIZATION_UNAVAILABLE" });
+    // Identical, not merely similar: a differing message or status is exactly
+    // the oracle this test exists to forbid.
+    expect(unknownError).toEqual(forbiddenError);
   });
 
   it("refuses a deactivated organization", async () => {
