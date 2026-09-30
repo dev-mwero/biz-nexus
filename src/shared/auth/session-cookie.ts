@@ -14,7 +14,27 @@
  * truth, and the proxy's dependency graph stays empty.
  */
 
-export const SESSION_COOKIE = "biz_session";
+/**
+ * The session cookie's name.
+ *
+ * `bn_` rather than `__Host-`, and the reason is worth writing down because
+ * `__Host-` looks strictly better. The `__Host-` prefix obliges the cookie to be
+ * `Secure`, `Path=/` and free of `Domain` — which means the browser will not store
+ * it at all over plain HTTP. That is correct for production and fatal for
+ * `next dev` on `http://localhost`, where the developer is signing in on every
+ * change and a cookie that silently vanishes looks like broken auth. A `__Host-`
+ * prefix would have to be made conditional on the environment, and an
+ * environment-dependent cookie name is a cookie name that differs between the
+ * place you test and the place you deploy.
+ *
+ * So the prefix here is a namespace, and the isolation that `__Host-` would have
+ * given up is bought explicitly instead: `Path=/` and no `Domain` in
+ * `src/shared/http/cookie.ts`, which is the part of `__Host-` that protects
+ * against a sibling subdomain overwriting the cookie. `Secure` comes from the
+ * environment, so the remaining gap is host-only fixation by a parent domain,
+ * which is a deployment decision and is listed in docs/SECURITY.md §7.
+ */
+export const SESSION_COOKIE = "bn_session";
 
 /**
  * Where an unauthenticated visitor is sent.

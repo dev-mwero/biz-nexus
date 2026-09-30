@@ -57,6 +57,56 @@ export async function verifyPassword(
   }
 }
 
+/**
+ * A real cost-12 hash of a value nobody knows, used to spend the same time
+ * verifying a password for an address that is not registered as for one that is.
+ *
+ * It has to be a genuine cost-12 hash of the *current* cost factor, not a cheap
+ * stand-in: the whole point is to be indistinguishable from a real verification,
+ * and a faster dummy reinstates the timing difference it exists to hide. It is
+ * generated, never hand-written, so the cost in the string cannot drift out of
+ * step with `BCRYPT_COST`.
+ *
+ * Computed on first use and then kept. `bcrypt.hashSync` at module scope was the
+ * obvious version and it cost a full cost-12 hash on *import* — about 250ms of
+ * blocked CPU before anything could run, in the test runner, in `next build`, and
+ * in every serverless cold start, paid on every process whether or not anyone
+ * ever tried to sign in. The cost is a per-process constant, so there is nothing
+ * to synchronise, and a module-level promise is enough to make the second caller
+ * wait rather than start a second hash.
+ */
+let dummyHash: Promise<string> | undefined;
+
+export function getDummyPasswordHash(): Promise<string> {
+  dummyHash ??= bcrypt.hash(
+    "not-a-real-password-used-only-for-timing",
+    BCRYPT_COST,
+  );
+  return dummyHash;
+}
+
+/**
+ * The resolved dummy hash, for the rare caller that needs the value itself.
+ *
+ * Exports a promise rather than a string because the alternative is a top-level
+ * `await`, which this module cannot do: `password.service` imports this one, and
+ * a top-level await here would make the pair mutually dependent in a way that
+ * fails at import time rather than at call time.
+ */
+export const DUMMY_PASSWORD_HASH: Promise<string> = getDummyPasswordHash();
+
+/**
+ * Spend a verification's worth of time and discard the result.
+ *
+ * Called on the sign-in path when the address is unknown, when the account is
+ * suspended, and when the account is locked out, so that every refused sign-in
+ * takes the same time and the response time stops answering "is this address
+ * registered?" or "is this account locked?".
+ */
+export async function burnPasswordTiming(plain: string): Promise<void> {
+  await verifyPassword(plain, await getDummyPasswordHash());
+}
+
 /** Whether a stored hash was made at a lower cost than we use now. */
 export function needsRehash(hash: string): boolean {
   const match = BCRYPT_HASH.exec(hash);

@@ -65,6 +65,21 @@ export async function startTestDatabase(): Promise<string> {
       ? { systemBinary, ...(systemVersion ? { version: systemVersion } : {}) }
       : {},
     replSet: { count: 1, storageEngine: "wiredTiger" },
+    // Vitest starts one worker per test file, so with the auth contract suites
+    // added this is several replica sets booting at once on the same machine.
+    // mongodb-memory-server's default is 10s, which a cold download or a busy
+    // disk overruns, and the failure it produces is a bare timeout with no
+    // mention of which of the parallel boots ran out of time. 60s is generous
+    // for a binary that is already cached and still short enough that a genuine
+    // hang fails the run instead of stalling it.
+    //
+    // On `instanceOpts`, not at the top level. `MongoMemoryReplSetOpts` in
+    // mongodb-memory-server 11.3.0 has only `instanceOpts`, `binary` and
+    // `replSet`; `launchTimeout` hangs off `MongoMemoryInstanceOptsBase` and is
+    // copied to each instance. A top-level `launchTimeout` is not rejected at
+    // runtime — excess properties are simply ignored — so it would look like it
+    // worked and change nothing.
+    instanceOpts: [{ launchTimeout: 60_000 }],
   });
 
   return replicaSet.getUri();

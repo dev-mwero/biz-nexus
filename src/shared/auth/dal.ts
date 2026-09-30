@@ -126,10 +126,13 @@ async function buildContext(
   const session = await resolveSession(token);
   if (!session) return null;
 
+  // No `deletedAt` here. `users` is not a soft-delete collection - the tenant
+  // repository's soft-delete list does not include it, so the field is never
+  // written and the filter would only ever be a condition the schema knows
+  // nothing about. Erasure of a user is a hard delete.
   const user = await UserModel.findOne({
     _id: session.userId,
     status: "ACTIVE",
-    deletedAt: null,
   });
   if (!user) return null;
 
@@ -189,7 +192,6 @@ export function createAuthGuards(source: TokenSource): AuthGuards {
       const user = await UserModel.findOne({
         _id: session.userId,
         status: "ACTIVE",
-        deletedAt: null,
       });
       if (!user) throw unauthenticated();
 

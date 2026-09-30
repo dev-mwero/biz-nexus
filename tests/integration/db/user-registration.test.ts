@@ -7,8 +7,8 @@ import {
   issueEmailVerificationToken,
   PASSWORD_RESET_TTL_MINUTES,
   registerUser,
-  EmailVerificationTokenModel as Tokens,
   toPublicUser,
+  type User,
   UserModel,
   verifyEmailToken,
 } from "@/modules/identity";
@@ -53,7 +53,9 @@ describe("registerUser", () => {
     expect(user.email).toBe("ada@example.com");
     expect(user.emailVerified).toBe(false);
     expect(await UserModel.countDocuments({})).toBe(1);
-    expect(await Tokens.countDocuments({ userId })).toBe(1);
+    expect(await EmailVerificationTokenModel.countDocuments({ userId })).toBe(
+      1,
+    );
     expect(verificationToken).toBeTypeOf("string");
   });
 
@@ -65,7 +67,7 @@ describe("registerUser", () => {
       email: "ada@example.com",
     });
 
-    const stored = await Tokens.findOne({ userId }).lean();
+    const stored = await EmailVerificationTokenModel.findOne({ userId }).lean();
     expect(stored?.tokenHash).toBe(hashToken(verificationToken));
     expect(stored?.tokenHash).not.toBe(verificationToken);
   });
@@ -159,7 +161,12 @@ describe("registerUser", () => {
     await verifyEmailToken(verificationToken);
     const stored = await UserModel.findById(userId);
 
-    expect(toPublicUser(stored!).emailVerified).toBe(true);
+    // Asserted on presence first rather than asserted through `stored!`. The
+    // non-null assertion would make this pass on `undefined` if the row were
+    // gone, by throwing inside `toPublicUser` — a failure that reads as a
+    // projection bug rather than as the missing document it is.
+    expect(stored).not.toBeNull();
+    expect(toPublicUser(stored as User).emailVerified).toBe(true);
   });
 });
 
@@ -197,7 +204,12 @@ describe("issueEmailVerificationToken", () => {
     await issueEmailVerificationToken(userId);
     await issueEmailVerificationToken(userId);
 
-    expect(await Tokens.countDocuments({ userId, usedAt: null })).toBe(1);
+    expect(
+      await EmailVerificationTokenModel.countDocuments({
+        userId,
+        usedAt: null,
+      }),
+    ).toBe(1);
   });
 });
 
@@ -217,14 +229,26 @@ describe("verifyEmailToken", () => {
   });
 
   it("refuses a second redemption of the same link", async () => {
-    const { verificationToken } = await registerUser({
+    const { userId, verificationToken } = await registerUser({
       ...DETAILS,
       email: "ada@example.com",
     });
     await verifyEmailToken(verificationToken);
+    const verifiedAt = (await UserModel.findById(userId).lean())
+      ?.emailVerifiedAt;
 
-    // A forwarded link must not work twice.
-    expect((await verifyEmailToken(verificationToken)).ok).toBe(false);
+    // A forwarded link must not work twice. The second redemption reports
+    // `alreadyVerified` rather than `ok: false` — the address is verified, so
+    // telling a user who clicked twice that their account is broken is its own
+    // defect, and docs/SECURITY.md §9 states the non-uniformity that buys. What
+    // must still hold is that the second redemption performs no write: a
+    // timestamp that moved would mean the token verified twice.
+    const second = await verifyEmailToken(verificationToken);
+
+    expect(second).toEqual({ ok: true, alreadyVerified: true });
+    expect(
+      (await UserModel.findById(userId).lean())?.emailVerifiedAt,
+    ).toStrictEqual(verifiedAt);
   });
 
   it("lets only one of two simultaneous redemptions succeed", async () => {
@@ -233,13 +257,19 @@ describe("verifyEmailToken", () => {
       email: "ada@example.com",
     });
 
-    // A read-then-write check would leave a window in which both succeed.
+    // A read-then-write check would leave a window in which both succeed. Only
+    // one of the two may claim the write; the other sees the token already spent
+    // and reports `alreadyVerified`, so the count is on `alreadyVerified: false`
+    // rather than on `ok`, which is true for both.
     const results = await Promise.all([
       verifyEmailToken(verificationToken),
       verifyEmailToken(verificationToken),
     ]);
 
-    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.alreadyVerified)).toHaveLength(1);
+    expect(
+      await EmailVerificationTokenModel.countDocuments({ usedAt: null }),
+    ).toBe(0);
   });
 
   it("refuses an expired token", async () => {
@@ -261,8 +291,24 @@ describe("verifyEmailToken", () => {
   it("answers identically for expired, used and invented tokens", async () => {
     // Three different answers to the same question from outside the system would
     // turn a verification link into a way to test whether a token was real.
-    const used = await registerUser({ ...DETAILS, email: "used@example.com" });
-    await verifyEmailToken(used.verificationToken);
+    //
+    // The used token is on an address that is still unverified, which is the case
+    // the uniformity claim covers. A spent token on a *verified* address answers
+    // `alreadyVerified: true` by design — see the non-uniformity in
+    // docs/SECURITY.md §9 and the test above — so the two branches are held
+    // apart deliberately rather than collapsed into one.
+    // Spent, then the address un-verified. The token row still carries
+    // `usedAt`, so this is a spent token and not a missing one — which is the
+    // distinction an attacker holding a real link is probing for.
+    const spent = await registerUser({
+      ...DETAILS,
+      email: "spent@example.com",
+    });
+    await verifyEmailToken(spent.verificationToken);
+    await UserModel.updateOne(
+      { _id: spent.userId },
+      { $set: { emailVerifiedAt: null } },
+    );
 
     const expired = await registerUser({
       ...DETAILS,
@@ -273,7 +319,7 @@ describe("verifyEmailToken", () => {
     );
 
     const results = await Promise.all([
-      verifyEmailToken(used.verificationToken),
+      verifyEmailToken(spent.verificationToken),
       verifyEmailToken(expired.verificationToken, afterExpiry),
       verifyEmailToken("never-existed"),
     ]);
@@ -329,7 +375,9 @@ describe("the two token collections", () => {
 
     // A shared digest would mean one link verifies the other's account.
     expect(hashToken(token)).not.toBe(hashToken(verificationToken));
-    expect(await Tokens.countDocuments({ userId })).toBe(2);
+    expect(await EmailVerificationTokenModel.countDocuments({ userId })).toBe(
+      2,
+    );
   });
 
   it("keys tokens by user so a throttle can read the newest first", () => {

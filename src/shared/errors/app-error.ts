@@ -43,6 +43,11 @@ interface ErrorDefinition {
  */
 export const ERROR_CATALOGUE = {
   // --- Authentication and authorization -------------------------------------
+  TOKEN_NOT_REDEEMABLE: {
+    status: 400,
+    message: "This link is no longer valid. Request a new one.",
+    expose: true,
+  },
   UNAUTHENTICATED: {
     status: 401,
     message: "Sign in to continue.",

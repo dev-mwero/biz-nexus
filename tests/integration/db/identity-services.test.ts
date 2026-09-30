@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Types } from "mongoose";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { type User, UserModel } from "@/modules/identity";
 import {
   BCRYPT_COST,
+  DUMMY_PASSWORD_HASH,
   generateToken,
   hashPassword,
   hashToken,
@@ -135,6 +138,54 @@ describe("password hashing", () => {
     for (const bad of ["", "not-a-hash", "$2b$", "$2b$12$truncated"]) {
       expect(await verifyPassword(PASSWORD, bad)).toBe(false);
     }
+  });
+
+  it("resolves the dummy hash to a genuine cost-12 hash", async () => {
+    // The dummy exists to spend the same time verifying a password for an
+    // address that is not registered as for one that is, so a cheap stand-in
+    // reinstates exactly the timing difference it is there to hide. Asserted on
+    // the cost *in the hash*, not on elapsed time: a wall-clock assertion is a
+    // flake on a loaded machine, and a slower dummy is harmless while a faster
+    // one is the defect.
+    //
+    // `DUMMY_PASSWORD_HASH` is a promise rather than a string because computing
+    // it at module scope cost a full cost-12 hash on import, and this await is
+    // also the assertion that it resolves at all.
+    const dummy = await DUMMY_PASSWORD_HASH;
+
+    expect(dummy).toMatch(/^\$2[aby]\$12\$/);
+    // A real bcrypt hash, not a lookalike: 31 salt-and-hash characters after the
+    // prefix, base64 from bcrypt's own alphabet.
+    expect(dummy).toMatch(/^\$2[aby]\$12\$[./A-Za-z0-9]{53}$/);
+    expect(needsRehash(dummy)).toBe(false);
+    // It verifies against nothing, and against everything. What matters is that
+    // `bcrypt.compare` takes the same path on it as on a real hash rather than
+    // short-circuiting on a malformed value.
+    expect(await verifyPassword(PASSWORD, dummy)).toBe(false);
+    expect(await verifyPassword("anything at all", dummy)).toBe(false);
+  });
+
+  it("derives the dummy from BCRYPT_COST rather than a hand-written constant", async () => {
+    // The failure this guards is a literal hash pasted into the module. It
+    // verifies at whatever cost it was generated at, and nothing fails when
+    // BCRYPT_COST is raised — the sign-in path quietly becomes measurably
+    // faster than the real one, which is the whole property the dummy buys.
+    const source = readFileSync(
+      join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "..",
+        "src",
+        "modules",
+        "identity",
+        "password.ts",
+      ),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/["'`]?\$2[aby]?\$\d{2}\$/);
+    expect(await DUMMY_PASSWORD_HASH).toContain(`$${BCRYPT_COST}$`);
   });
 
   it("flags a hash made at a lower cost for rehashing", async () => {

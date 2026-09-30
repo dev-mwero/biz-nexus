@@ -192,9 +192,9 @@ describe("readCookie", () => {
   });
 
   it("does not match a cookie whose name merely ends with this one", () => {
-    // Otherwise `evil_biz_session` would authenticate.
+    // Otherwise `evil_bn_session` would authenticate.
     expect(
-      readCookie(requestWith("evil_biz_session=abc"), SESSION_COOKIE),
+      readCookie(requestWith("evil_bn_session=abc"), SESSION_COOKIE),
     ).toBeNull();
   });
 

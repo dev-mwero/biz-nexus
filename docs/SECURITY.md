@@ -298,9 +298,60 @@ Account lockout is separate and enforced in the database, so it is consistent
 across instances: after five consecutive failures, `lockedUntil` is set fifteen
 minutes into the future.
 
-**Enumeration resistance.** Login and password reset return identical responses
-whether or not the account exists. `POST /forgot-password` always returns
-`200 { "message": "If that address exists, we have sent a link." }`.
+### Enumeration resistance
+
+Three separate mechanisms, because each defeats a different probe.
+
+**Identical bodies.** Login returns one 401 `UNAUTHENTICATED` for an unknown
+address, a wrong password, a locked-out account and a suspended account — same
+code, same message, same field order, only the per-request id differing.
+`POST /forgot-password` returns `200 { "sent": true, "message": "If that address
+has an account, we have sent a link." }` whether or not the account exists, and
+`POST /resend-verification` says the same thing whether or not the address is
+already verified.
+
+Registration is the deliberate exception: it answers 409
+`EMAIL_ALREADY_REGISTERED`, because a sign-up form has to be able to say "this
+address is taken". That trade buys a usable form at the cost of making
+registration an enumeration oracle, and it is the reason every other endpoint in
+the directory is uniform.
+
+**Equalised work.** An unknown address used to return in the time it takes to
+miss an index, where a registered one took a cost-12 bcrypt — an order of
+magnitude, measurable over a network from outside. Every refused sign-in now
+spends one real bcrypt verification first: the missing-account path in
+`loginWithPassword`, and the locked-out and suspended paths in
+`authenticateWithPassword`. The dummy hash is a genuine cost-12 hash rather than
+a cheap stand-in.
+
+What this does **not** claim, because nobody has measured it and the code should
+not pretend otherwise: the residual difference. This is `bcryptjs`, a JavaScript
+implementation, so a single hash is not a fixed quantum of time — it depends on
+the machine and shares an event loop with the request doing the timing. What the
+burn equalises is the one large term. A small constant difference remains, from
+the index lookup, the document fetch and the failure-counter write. Stating it
+as "identical timing" would be a claim nothing enforces.
+
+**Log-only detail.** `AppError.internal` is the answer to "which of the four was
+it", and it is never serialised into the response. `withApi` forwards it to
+warn-level logs, so `login failed: locked-out` is answerable by an operator
+deciding whether an account is under attack — which is impossible from the body,
+by design.
+
+**Supersession.** Issuing a reset or verification link retires the outstanding
+one in the same transaction that creates the replacement. A link mailed to an
+address an attacker controls is therefore dead as soon as the owner asks for a
+new one, rather than redeemable for the rest of its hour or day. Retired rows
+are marked with `usedAt`, never deleted, so "this link was spent" stays
+distinguishable from "this link never existed".
+
+**One narrow non-uniformity, stated because it is one.** A spent verification
+token is answered `200 { "alreadyVerified": true }` when the address it verified
+is already verified, and 400 when it is not. Somebody holding a spent token
+learns the verification state of the address that token belongs to. That is a
+narrow answer about an address they have already proved they can read, and it
+buys not telling a legitimate user — who clicked twice, or whose mail client
+prefetched the link — that their account is broken.
 
 ---
 
@@ -339,15 +390,52 @@ against a seeded second organisation.
 
 ---
 
-## 12. Known accepted risks
+## 12. The auth endpoints as built
+
+What the nine `/api/v1/auth` endpoints actually do, checked against
+docs/API.md §3. Anything not implemented is named here rather than left to be
+discovered.
+
+**Implemented and tested.** Origin enforcement on every mutating route (§7) ·
+per-request database connection · request id on every response and every log
+line · errors mapped from a catalogue so a route cannot invent a status · `POST`
+bodies read through one `readJson` that checks the content type and the size
+limit · five request schemas as Zod `strictObject` · single-use verification and
+reset tokens enforced by a conditional update, so concurrent redemption has one
+winner · issuing supersedes, in the same transaction as the insert · password
+reset revokes every session for the account and clears the failure counter and
+lockout · a lost password is not a locked account · account lockout in the
+database, so it is consistent across instances · identical login and
+forgot-password responses for known and unknown addresses (§9) · bcrypt work
+spent on every refused sign-in (§9) · `internal` reasons in the log and never in
+the body.
+
+**Not implemented. Named, not implied.**
+
+| Gap | What is true today | What closes it |
+|---|---|---|
+| Rate limiting | No limit is enforced on login, registration, forgot-password or resend-verification. `RATELIMIT_DRIVER` is configured and the in-memory driver exists, but no auth route calls it. Lockout is the only brake, and it is per-account — so it does nothing against credential stuffing across accounts, and it is the wrong tool for `forgot-password` and `resend-verification`, which are aimed at one victim. | Task 1.30 |
+| Audit events | No sign-in, sign-out, failed sign-in, password change or token redemption is recorded. `src/modules/audit` is tenant-scoped and none of these events has a tenant — a sign-in happens before any organisation exists. | Auth event log, before the first audit consumer |
+| Email verification not enforced | Verification issues a token and `GET /auth/me` reports `emailVerified`, but nothing refuses an unverified account. The mailer in 1.32 is not built, so no token reaches anybody. The account is usable the moment it is created. | 1.32 for delivery; a policy decision for enforcement |
+| Delivery of tokens | Registration and forgot-password issue a token, discard it, and mail nothing. `MAIL_DRIVER=console` is a placeholder. A token exists in the database and in no inbox. | 1.32 |
+| No email change, no MFA, no recovery codes | — | Post-MVP, by product decision |
+
+The first three are the ones that matter. A sign-in endpoint with no rate limit
+and no audit trail is the realistic attack surface in this codebase, and both are
+known and scheduled rather than overlooked.
+
+---
+
+## 13. Known accepted risks
 
 Recorded rather than hidden.
 
 | Risk | Severity | Status |
 |---|---|---|
 | In-memory rate limiting is per-instance on Vercel | Low (abuse), **high if relied upon as a boundary** | Accepted for MVP. Redis driver before handling payments. |
+| No rate limit, no audit trail and no email delivery on the auth endpoints | Medium | Accepted for the MVP, **scheduled and named** — see §12. The lockout is a per-account brake only, so credential stuffing across accounts is currently unthrottled. |
 | `ObjectId` is enumerable, so guessing is trivial | — | Not a vulnerability, because every guess is rejected by the tenant guard. This is precisely why the isolation tests exist. |
-| Email enumeration via timing on login | Low | Mitigated by a constant-time-ish response path and identical messages. |
+| Email enumeration via timing on login | Low | Mitigated: identical bodies on every refusal, and one real bcrypt spent on every refused path including locked and suspended. `bcryptjs` timing is machine-dependent, so this equalises the dominant term, not the whole request — see §9. |
 | No MFA | Medium for privileged roles | Accepted. Post-Gate 1. |
 | Single-region database, single point of failure | Availability | Accepted. Atlas backups and PITR. |
 | Audit logs have no tamper-evidence | Low | Accepted; logs are append-only by application design, not by cryptographic proof. Revisit if compliance demands it. |

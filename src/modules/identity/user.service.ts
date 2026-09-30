@@ -185,6 +185,22 @@ export interface VerifyEmailResult {
  * "never existed" are three different answers to the same question from outside
  * the system, and returning which one happened turns a verification link into a
  * way to test whether a token was ever real.
+ *
+ * The one exception is a spent token on an address that is *already* verified,
+ * which is a success with `alreadyVerified: true`. That branch was the reason
+ * the field existed, and it was unreachable: the claim filter requires
+ * `usedAt: null`, so the second click on a link the user had already followed
+ * was refused with `TOKEN_NOT_REDEEMABLE` — the exact outcome the endpoint's
+ * docstring says it exists to prevent. A user who clicks twice, or whose mail
+ * client prefetches the link, gets told their account is broken when it is
+ * fine. The spent token is still refused for the write: only `verifiedAt` is
+ * left to decide, and an address that is already verified is a no-op.
+ *
+ * The cost is that this is not a perfectly uniform oracle. A spent token
+ * answers 200 when the address is verified and 400 when it is not, so somebody
+ * holding a spent token learns the verification state of the address it belongs
+ * to. That is a narrow answer about an address they already proved they can
+ * read, and it buys not telling a legitimate user that their account is broken.
  */
 export async function verifyEmailToken(
   token: string,
@@ -196,7 +212,9 @@ export async function verifyEmailToken(
     { returnDocument: "after" },
   );
 
-  if (!claimed) return { ok: false };
+  if (!claimed) {
+    return spentButVerified(token);
+  }
 
   const result = await UserModel.updateOne(
     { _id: claimed.userId, emailVerifiedAt: null },
@@ -204,6 +222,31 @@ export async function verifyEmailToken(
   );
 
   return { ok: true, alreadyVerified: result.modifiedCount === 0 };
+}
+
+/**
+ * Was this a token we once issued, spent, for an address already verified?
+ *
+ * Reads the row rather than trusting the caller's claim, and answers false for
+ * anything it is unsure about — a token that never existed must stay
+ * indistinguishable from one that expired.
+ */
+async function spentButVerified(token: string): Promise<VerifyEmailResult> {
+  const spent = await EmailVerificationTokenModel.findOne({
+    tokenHash: hashToken(token),
+    usedAt: { $ne: null },
+  });
+  if (!spent) return { ok: false };
+
+  const user = await UserModel.findOne({
+    _id: spent.userId,
+    emailVerifiedAt: { $ne: null },
+  });
+  // `expiresAt` is deliberately not re-checked. A link that was valid and was
+  // used stays used; the question here is only whether the address it verified
+  // is now verified, and the click that asks does not redeem it a second time
+  // either way.
+  return user ? { ok: true, alreadyVerified: true } : { ok: false };
 }
 
 /** The public shape of a user. Never includes `passwordHash`. */

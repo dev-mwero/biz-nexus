@@ -1,4 +1,5 @@
 import mongoose, { type Model, Schema, type Types } from "mongoose";
+import { SESSION_MAX_IP } from "./session.model";
 
 /**
  * A single-use password-reset claim.
@@ -13,6 +14,10 @@ import mongoose, { type Model, Schema, type Types } from "mongoose";
  */
 
 export const PASSWORD_RESET_TTL_MINUTES = 60;
+
+/** See `truncate` in session.model. Exported so the setter is not re-invented. */
+const truncateIp = (value: string | null | undefined) =>
+  typeof value === "string" ? value.slice(0, SESSION_MAX_IP) : (value ?? null);
 
 export interface PasswordResetToken {
   _id: Types.ObjectId;
@@ -37,7 +42,11 @@ const passwordResetTokenSchema = new Schema<PasswordResetToken>(
     tokenHash: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true },
     usedAt: { type: Date, default: null },
-    requestIp: { type: String, default: null, maxlength: 45 },
+    // Truncating, for the same reason `sessions.ip` truncates rather than
+    // validates: the value is an untrusted header from a client we do not
+    // control, and refusing to record it would turn a cosmetic overflow into a
+    // failed sign-in. See `SESSION_MAX_IP`.
+    requestIp: { type: String, default: null, set: truncateIp },
   },
   { timestamps: true, collection: "password_reset_tokens" },
 );
