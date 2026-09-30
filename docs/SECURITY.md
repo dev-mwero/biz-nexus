@@ -42,7 +42,7 @@ test suite exists to continuously disprove.
 | Output | React escaping by default. No `dangerouslySetInnerHTML` on user content. Activity bodies are stored and rendered as plain text. |
 | Errors | Typed `AppError` with a safe message. Unexpected errors return a request id, never internals. |
 | Audit | Append-only log of consequential actions, with actor, target, diff, and origin. |
-| Rate limit | Auth endpoints and password reset, behind a driver interface. |
+| Rate limit | Per-account lockout only: five consecutive failures, fifteen minutes. No per-IP or per-account request limit is enforced — see §9 and §12. |
 
 ---
 
@@ -289,15 +289,25 @@ Targets: login, registration, password reset, invitation acceptance, and
 public search. Without limits, these are credential-stuffing and enumeration
 vectors.
 
-Driver interface, with an in-memory implementation now. **This is honest about
-its limits:** on Vercel, each warm instance keeps its own counter, so the
-effective limit is multiplied by the number of instances. That is acceptable for
-MVP abuse resistance and is **not** acceptable as a security boundary. An
-Upstash Redis driver replaces it before the product takes real money.
+**No rate limit is enforced.** `RATELIMIT_DRIVER` and the
+`UPSTASH_REDIS_REST_*` variables exist (`src/env.ts:134-139`), but no rate-limit
+module exists and no auth route calls one, so every target above is unenforced.
+docs/API.md §10 marks each limit as not yet enforced, and §12 records this as a
+named gap closing in task 1.31. The driver interface and its in-memory
+implementation are what that task builds; this section says so rather than
+describing a control that does not exist, because a section that describes a
+working limit is read as a claim that the limit works.
 
-Account lockout is separate and enforced in the database, so it is consistent
-across instances: after five consecutive failures, `lockedUntil` is set fifteen
-minutes into the future.
+The in-memory implementation 1.31 builds will be **per-instance** on Vercel:
+each warm instance keeps its own counter, so the effective limit is multiplied by
+the number of instances. That is acceptable for MVP abuse resistance and is
+**not** acceptable as a security boundary. An Upstash Redis driver replaces it
+before the product takes real money.
+
+Account lockout is the only brake in place today. It is enforced in the
+database, so it is consistent across instances: after five consecutive failures,
+`lockedUntil` is set fifteen minutes into the future. It is a per-account brake,
+so it does nothing against credential stuffing spread across accounts.
 
 ### Enumeration resistance
 
@@ -485,8 +495,8 @@ Recorded rather than hidden.
 
 | Risk | Severity | Status |
 |---|---|---|
-| In-memory rate limiting is per-instance on Vercel | Low (abuse), **high if relied upon as a boundary** | Accepted for MVP. Redis driver before handling payments. |
-| No rate limit, no audit trail and no email delivery on the auth endpoints | Medium | Accepted for the MVP, **scheduled and named** — see §12. The lockout is a per-account brake only, so credential stuffing across accounts is currently unthrottled. |
+| No rate limit on the auth endpoints | Medium (abuse) | Accepted for the MVP, **scheduled and named** — see §9 and §12. Lockout is a per-account brake only, so credential stuffing across accounts is unthrottled. The per-IP driver planned for 1.31 will be per-instance on Vercel and is **not** a security boundary; a shared driver is required before the product handles real money. |
+| No audit trail on the auth endpoints, and no email delivery | Medium | Accepted for the MVP, **scheduled and named** — see §12. |
 | `ObjectId` is enumerable, so guessing is trivial | — | Not a vulnerability, because every guess is rejected by the tenant guard. This is precisely why the isolation tests exist. |
 | Email enumeration via timing on login | Low | Mitigated: identical bodies on every refusal, and one real bcrypt spent on every refused path including locked and suspended. `bcryptjs` timing is machine-dependent, so this equalises the dominant term, not the whole request — see §9. |
 | No MFA | Medium for privileged roles | Accepted. Post-Gate 1. |
