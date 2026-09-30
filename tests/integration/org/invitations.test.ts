@@ -21,6 +21,7 @@ import {
   revokeInvitation,
   setMembershipStatus,
 } from "@/modules/organizations";
+import { type AppError, toErrorPayload } from "@/shared/errors/app-error";
 
 /**
  * Invitations and membership changes.
@@ -488,6 +489,158 @@ describe("acceptInvitation", () => {
         userId: invitee._id,
       }),
     ).toBe(1);
+  });
+
+  it("refuses an account that does not exist", async () => {
+    // Nothing checked this, so any id produced a membership pointing at an
+    // account that was never created - and every later read of that membership
+    // had to cope with a user that was not there.
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser();
+    const { token } = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.VIEWER,
+      invitedBy: owner._id,
+    });
+
+    const ghost = new Types.ObjectId();
+
+    await expect(acceptInvitation(token, ghost)).rejects.toMatchObject({
+      code: "RECORD_NOT_FOUND",
+    });
+  });
+
+  it("writes no membership for an account that does not exist", async () => {
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser();
+    const { token } = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.VIEWER,
+      invitedBy: owner._id,
+    });
+    const ghost = new Types.ObjectId();
+
+    await acceptInvitation(token, ghost).catch(() => {});
+
+    expect(await MembershipModel.countDocuments({ userId: ghost })).toBe(0);
+  });
+
+  it("refuses a suspended account", async () => {
+    // A suspended user cannot sign in, so accepting an invitation would hand
+    // them an ACTIVE membership and route around the suspension.
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser();
+    const { token } = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.VIEWER,
+      invitedBy: owner._id,
+    });
+    await UserModel.updateOne(
+      { _id: invitee._id },
+      { $set: { status: "SUSPENDED" } },
+    );
+
+    await expect(acceptInvitation(token, invitee._id)).rejects.toMatchObject({
+      code: "RECORD_NOT_FOUND",
+    });
+  });
+
+  it("does not answer differently for suspended than for missing", async () => {
+    // The difference between "no such user" and "that user is suspended" is an
+    // oracle over user ids, and this function's contract is that it never
+    // becomes one.
+    const { owner, organization, roleIds } = await withOrg();
+
+    const tokenFor = async (email: string) => {
+      const { token } = await inviteMember({
+        organizationId: organization._id,
+        email,
+        roleId: roleIds.VIEWER,
+        invitedBy: owner._id,
+      });
+      return token;
+    };
+
+    const ghostToken = await tokenFor("ghost-target@example.com");
+    const suspended = await makeUser("suspended-target@example.com");
+    const suspendedToken = await tokenFor("suspended-target@example.com");
+    await UserModel.updateOne(
+      { _id: suspended._id },
+      { $set: { status: "SUSPENDED" } },
+    );
+
+    const missing = await acceptInvitation(
+      ghostToken,
+      new Types.ObjectId(),
+    ).catch((error: unknown) => error);
+    const suspendedError = await acceptInvitation(
+      suspendedToken,
+      suspended._id,
+    ).catch((error: unknown) => error);
+
+    expect((missing as AppError).code).toBe((suspendedError as AppError).code);
+    expect((missing as AppError).message).toBe(
+      (suspendedError as AppError).message,
+    );
+    expect((missing as AppError).status).toBe(
+      (suspendedError as AppError).status,
+    );
+  });
+
+  it("keeps the reason out of the response", async () => {
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser("suspended-leak@example.com");
+    const { token } = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.VIEWER,
+      invitedBy: owner._id,
+    });
+    await UserModel.updateOne(
+      { _id: invitee._id },
+      { $set: { status: "SUSPENDED" } },
+    );
+
+    const error = (await acceptInvitation(token, invitee._id).catch(
+      (caught: unknown) => caught,
+    )) as AppError;
+
+    // A log needs the reason. A response must not: "suspended" tells a caller
+    // holding an invite token something about the account behind it.
+    expect(error.internal).toMatch(/suspended/);
+    expect(JSON.stringify(toErrorPayload(error))).not.toMatch(/suspended/i);
+    expect(JSON.stringify(toErrorPayload(error))).not.toContain(
+      invitee._id.toString(),
+    );
+  });
+
+  it("leaves the invitation usable after a refused account", async () => {
+    // The account check is not part of consuming the token, so a suspended user
+    // who is reinstated can still use the link they were sent.
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser();
+    const { token } = await inviteMember({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.VIEWER,
+      invitedBy: owner._id,
+    });
+    await UserModel.updateOne(
+      { _id: invitee._id },
+      { $set: { status: "SUSPENDED" } },
+    );
+    await acceptInvitation(token, invitee._id).catch(() => {});
+
+    await UserModel.updateOne(
+      { _id: invitee._id },
+      { $set: { status: "ACTIVE" } },
+    );
+
+    const { membership } = await acceptInvitation(token, invitee._id);
+    expect(membership.status).toBe("ACTIVE");
   });
 });
 

@@ -305,6 +305,48 @@ export async function acceptInvitation(
       );
     }
 
+    // The accepting account has to be one that can hold a membership. Two ways
+    // it might not be: it does not exist, or it is suspended.
+    //
+    // The missing-user case was a real hole - nothing checked, so any id
+    // produced a membership pointing at an account that was never created, and
+    // every later read of that membership had to cope with a user that was not
+    // there. The suspended case is the same check for a different reason: a
+    // suspended account cannot sign in (see `authenticateWithPassword`), so
+    // letting it accept an invitation would hand it an ACTIVE membership and
+    // route around the suspension it was suspended for.
+    //
+    // One check and one answer for both, because the difference between "no
+    // such user" and "that user is suspended" is an oracle over user ids, and
+    // this function's contract is that it never becomes one. The reason is kept
+    // in `internal`, which is never serialised, so a log can still tell the two
+    // apart.
+    //
+    // Inside the transaction, and after the invitation checks above, so a caller
+    // holding a bad token learns only that it is bad - never whether the account
+    // behind it is in a usable state.
+    const acceptingUser = await UserModel.findOne({ _id: user }, undefined, {
+      session,
+    });
+
+    if (!acceptingUser) {
+      // Constructed rather than `AppError.notFound(reason)`: the second
+      // argument there is a *message*, and RECORD_NOT_FOUND is exposed, so that
+      // would put "no user 65f0…" in the response. `internal` is never
+      // serialised, which is where the reason belongs.
+      throw new AppError("RECORD_NOT_FOUND", {
+        internal: `acceptInvitation: no user ${user.toString()}`,
+      });
+    }
+
+    if (acceptingUser.status === "SUSPENDED") {
+      // Same answer as above, deliberately. Distinguishing the two would be an
+      // oracle over user ids.
+      throw new AppError("RECORD_NOT_FOUND", {
+        internal: `acceptInvitation: user ${user.toString()} is suspended`,
+      });
+    }
+
     // A previous membership may exist as a soft-deleted row, because the
     // `{organizationId, userId}` unique index is not partial and never forgets.
     // Restoring it is the only way somebody removed and re-invited can return.
