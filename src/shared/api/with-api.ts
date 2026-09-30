@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { unstable_rethrow } from "next/navigation";
+import { connectToDatabase } from "@/db/connection";
+import { env } from "@/env";
 import {
   AppError,
   type FieldDetail,
@@ -12,12 +14,13 @@ import { fail, ok, type ResponseMeta } from "@/shared/responses/envelope";
 /**
  * The route handler wrapper.
  *
- * Every route gets the same four things it would otherwise reimplement badly:
- * a request id to quote in a bug report, errors mapped from codes to statuses,
- * a log line per request, and a guarantee that nothing unexpected reaches the
- * client. The last one is the point of the module. A route that forgets its
- * error handling should degrade to a generic 500, not to a leaked stack trace,
- * and forgetting has to be the *default* for that to hold.
+ * Every route gets the same things it would otherwise reimplement badly: a
+ * request id to quote in a bug report, an origin check on mutating requests, a
+ * connected database, errors mapped from codes to statuses, a log line per
+ * request, and a guarantee that nothing unexpected reaches the client. The last
+ * one is the point of the module. A route that forgets its error handling should
+ * degrade to a generic 500, not to a leaked stack trace, and forgetting has to
+ * be the *default* for that to hold.
  */
 
 export interface ApiContext {
@@ -149,6 +152,65 @@ export interface WithApiOptions {
 }
 
 /**
+ * Methods that skip the Origin check.
+ *
+ * An allow-list, not a denylist of mutating methods. `{GET, HEAD, OPTIONS}` in
+ * one place means a method added later — and every framework adds methods
+ * eventually — is checked until somebody deliberately decides otherwise. The
+ * denylist form is the one that fails open the day it is extended.
+ *
+ * `OPTIONS` is exempt because a preflight carries no cookie and must still be
+ * answerable; if it were checked, every cross-origin read would fail at
+ * preflight instead of at the request.
+ */
+const ORIGIN_EXEMPT_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The one origin this API answers to.
+ *
+ * `env.APP_URL`, and never `Host`, `X-Forwarded-Host` or `Referer`. All three of
+ * those are request headers, and a header is a value the caller chooses: in any
+ * deployment not sitting behind a trusted proxy that overwrites them, the
+ * "expected" origin would be supplied by the party being checked, which is not a
+ * check. `APP_URL` is already validated, already forced to https in production,
+ * and settable per environment, so a preview deployment checks itself.
+ *
+ * Compared whole rather than by host or by suffix, so `https://app.example.com`
+ * does not accept `https://app.example.com.evil.test`.
+ */
+const TRUSTED_ORIGIN = new URL(env.APP_URL).origin;
+
+/**
+ * Refuse a mutating request that did not come from this site.
+ *
+ * `SameSite=Lax` is not enough, and the reasons are worth writing down because
+ * each one is a way this check is skipped:
+ *
+ *   - SameSite is a browser policy with no server-side enforcement. Nothing
+ *     stops a non-browser client from sending the request.
+ *   - Same-site is not same-origin. A POST from `evil.vercel.app` to
+ *     `yourapp.vercel.app` is same-site, so the cookie rides along.
+ *   - An open redirect on this origin converts a cross-site request into a
+ *     same-site one before it reaches here.
+ *   - Lax is blind to state-changing GETs.
+ *
+ * Fails closed on a missing `Origin` and on the literal `"null"` a sandboxed
+ * iframe sends. Next.js's own Server Actions check is more lenient — it allows a
+ * missing Origin through with a warning — and that leniency is not copied here,
+ * because "no Origin" is precisely the shape of the probe that found this gap.
+ * Real cost: browsers send `Origin` on every non-GET/HEAD request, same-origin
+ * included, so every honest client already sends it.
+ */
+function assertSameOrigin(request: Request): void {
+  if (ORIGIN_EXEMPT_METHODS.has(request.method)) return;
+
+  const origin = request.headers.get("origin");
+  if (origin !== TRUSTED_ORIGIN) {
+    throw new AppError("ORIGIN_NOT_ALLOWED");
+  }
+}
+
+/**
  * Wrap a route handler.
  *
  * `unstable_rethrow` runs first in the catch, before anything else. Next.js
@@ -158,6 +220,18 @@ export interface WithApiOptions {
  * explicit that it belongs at the top of the block, before cleanup, and that
  * ordering is load-bearing: cleanup after it would run against a request Next.js
  * is still using.
+ *
+ * The body order is load-bearing in the same way. The origin check runs before
+ * the connection is opened, and the connection is resolved before the handler
+ * runs, so a handler can never observe a request from the wrong origin and never
+ * has to remember to wait for the database. `connectToDatabase` returns the
+ * instance's cached promise, so after the first request this is an await on an
+ * already-resolved promise.
+ *
+ * There is deliberately no branch for "the database is not available". A
+ * database outage has to arrive as an enveloped 500 through the normal path —
+ * a different answer here would be a second error contract, and the route would
+ * have to know which one it got.
  */
 export function withApi(
   handler: ApiHandler,
@@ -175,6 +249,13 @@ export function withApi(
     const startedAt = performance.now();
 
     try {
+      // Both of these are per-request, and both are here so that forgetting is
+      // the default rather than the exception. The origin check is first because
+      // refusing a request that should never have arrived is cheaper than
+      // opening a socket for it.
+      assertSameOrigin(request);
+      await connectToDatabase();
+
       const result = await handler(request, context);
 
       // A handler that built its own Response keeps it: 204s, redirects, and
@@ -217,11 +298,24 @@ export function withApi(
         // A deliberate, client-facing refusal. Logged as a warning because it
         // is the application working, not the application failing — but worth
         // seeing, since a burst of 403s is somebody enumerating ids.
+        //
+        // `internal` is included because a refusal with a log-only reason is
+        // only half a record. `loginWithPassword` puts "locked out" versus
+        // "wrong password" there precisely so the client cannot tell them apart,
+        // which leaves the log as the only place that question is answerable —
+        // and an operator asking "is this account being credential-stuffed, and
+        // is it now locked?" has nothing to read.
+        //
+        // No stack and no `cause` here, unlike the branch below. A stack per 401
+        // turns a real signal into noise, and a refusal is not a failure.
         logger.warn({
           ...context,
           status,
           code: error.code,
           message: error.message,
+          ...(isAppError(error) && error.internal
+            ? { internal: error.internal }
+            : {}),
           durationMs: Math.round(performance.now() - startedAt),
         });
       } else {

@@ -59,6 +59,7 @@ object disagree.
 | 401 | `UNAUTHENTICATED` | No session |
 | 401 | `SESSION_EXPIRED` | Session expired or revoked |
 | 403 | `INSUFFICIENT_PERMISSION` | Role lacks the permission |
+| 403 | `ORIGIN_NOT_ALLOWED` | Mutating request did not come from `APP_URL` |
 | 403 | `ACTIVE_ORGANIZATION_REQUIRED` | No active organisation, or not an active member of it |
 | 403 | `MEMBERSHIP_INACTIVE` | Membership suspended |
 | 403 | `EMAIL_NOT_VERIFIED` | Verification required before this action |
@@ -99,6 +100,23 @@ rather than confirming the role exists in a tenant they cannot see.
 ## 3. Authentication
 
 Session cookie `bn_session`, `HttpOnly`, `SameSite=Lax`, `Secure` in production.
+
+**Every mutating request must carry an `Origin` header**, and it must equal
+`APP_URL`. `withApi` refuses anything else with `403 ORIGIN_NOT_ALLOWED`, and it
+refuses a *missing* `Origin` too — fail closed, because a request with no origin
+is indistinguishable from a request that deliberately omitted one. Browsers send
+`Origin` on every non-`GET`/`HEAD` request, same-origin included, so a browser
+client never has to think about this.
+
+**Non-browser clients must send it explicitly.** `curl`, server-to-server calls
+and native mobile clients all need `-H "Origin: $APP_URL"` (or the equivalent).
+This is a real constraint on a v1 API and it is deliberate: a CSRF defence that
+can be switched off per call site is not one. It is also the reason the check
+lives in the wrapper rather than in each route — adding an endpoint gets the
+check without deciding to.
+
+There is no opt-out and no per-route exemption list. `GET`, `HEAD` and `OPTIONS`
+are exempt because they are not mutating; a preflight carries no cookie.
 
 **There is no `organizationId` parameter anywhere in this API.** The active
 organisation is read from the session. The only way to change it is

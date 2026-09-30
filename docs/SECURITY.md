@@ -220,9 +220,30 @@ are stored and rendered as plain text. If rich text is ever introduced it goes
 through a sanitiser at write time, not at read time, and never as raw HTML.
 
 **CSRF.** Session cookies are `SameSite=Lax`, which blocks cross-site POSTs from
-a form. Mutating route handlers additionally verify the `Origin` header against
-the request host. Server Actions carry Next.js's own origin check. Defence in
-depth, not a single mechanism.
+a form, and `withApi` additionally refuses any mutating request whose `Origin`
+does not equal `env.APP_URL`. Four reasons the cookie attribute is not enough on
+its own, each one a way a server-side check earns its keep:
+
+- SameSite is a browser policy with no server-side enforcement. Nothing stops a
+  non-browser client from sending the request.
+- Same-site is not same-origin. A POST from `evil.vercel.app` to
+  `yourapp.vercel.app` is same-site, so the cookie rides along.
+- An open redirect on this origin turns a cross-site request into a same-site
+  one before it reaches the check.
+- Lax is blind to state-changing GETs.
+
+The expected origin is `env.APP_URL` and never `Host`, `X-Forwarded-Host` or
+`Referer`: those are request headers, so in any deployment not behind a trusted
+proxy that overwrites them the expected value would be supplied by the party
+being checked. The check **fails closed** — a missing `Origin`, and the literal
+`"null"` a sandboxed iframe sends, are both refused. Next.js's own Server Actions
+check allows a missing `Origin` through with a warning, and that leniency is
+deliberately not copied: "no Origin" is the exact shape of a probe. Browsers send
+`Origin` on every non-GET/HEAD request including same-origin, so an honest client
+loses nothing.
+
+Server Actions carry Next.js's own origin check as well. Defence in depth, not a
+single mechanism.
 
 **Open redirect.** Any redirect target supplied by a client is validated to be a
 path on this application. The post-login `redirect` parameter accepts a

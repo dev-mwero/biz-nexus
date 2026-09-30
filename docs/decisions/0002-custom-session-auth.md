@@ -74,7 +74,7 @@ whole lifetime. A leaked hash is not.
 |---|---|
 | One database read per authenticated request | The read is a single indexed lookup on a unique field, and the result is memoised per request in the Data Access Layer |
 | Sessions do not work if the database is down | Correct. The alternative is serving authenticated requests from a cache that may be stale — strictly worse |
-| Cookie-based auth is CSRF-exposed | `SameSite=Lax` plus an `Origin` check on mutating route handlers. See `SECURITY.md` §7 |
+| Cookie-based auth is CSRF-exposed | `SameSite=Lax` plus an `Origin` check on mutating route handlers, enforced centrally in `withApi` against `env.APP_URL` and failing closed. See `SECURITY.md` §7 |
 | No built-in OAuth | Not required in the MVP. Adding a provider later means a new `POST /auth/oauth/:provider` that creates a user and a session, using the same primitives |
 
 ## The boundary that matters

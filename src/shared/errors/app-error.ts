@@ -63,6 +63,20 @@ export const ERROR_CATALOGUE = {
     message: "Not permitted.",
     expose: true,
   },
+  /**
+   * A cross-origin refusal, deliberately not `INSUFFICIENT_PERMISSION`.
+   *
+   * A 403 from the permission system means "you are who you say you are, and you
+   * may not do this". A 403 from here means "this request did not come from this
+   * site". They are different events, and `withApi` logs a burst of refusals
+   * precisely so that somebody enumerating is visible — folding the two together
+   * poisons that signal with every cross-site request a browser ever makes.
+   */
+  ORIGIN_NOT_ALLOWED: {
+    status: 403,
+    message: "This request did not come from this site.",
+    expose: true,
+  },
   MEMBERSHIP_INACTIVE: {
     status: 403,
     message: "Your access to this organization is not active.",

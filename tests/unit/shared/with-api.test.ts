@@ -1,5 +1,10 @@
 import { unstable_rethrow } from "next/navigation";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  connectToDatabase,
+  disconnectDatabase,
+  isDatabaseConnected,
+} from "@/db/connection";
 import {
   type ApiHandler,
   consoleLogger,
@@ -19,9 +24,15 @@ import { ok } from "@/shared/responses/envelope";
  *
  * The acceptance criterion for 1.23 is one line — an unexpected error returns a
  * 500 with nothing leaked — so that is the first test and the one mutation
- * testing was run against. The rest is the wrapper's other three jobs, plus the
- * cases that only bite in production: a framework signal arriving as a throw,
- * a client-supplied request id, and a secret on its way to the log.
+ * testing was run against. The rest is the wrapper's other jobs, plus the cases
+ * that only bite in production: a framework signal arriving as a throw, a
+ * client-supplied request id, and a secret on its way to the log.
+ *
+ * No longer hermetic. The wrapper connects the database before it runs a
+ * handler, so this suite opens a connection like every integration suite does.
+ * That is a deliberate cost, paid for the one thing it buys: an assertion that
+ * the handler cannot run before the connection resolves, which is the whole
+ * point of doing the connect here rather than in each route.
  */
 
 vi.mock("next/navigation", () => ({
@@ -35,6 +46,17 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+beforeAll(async () => {
+  await connectToDatabase();
+});
+
+afterAll(async () => {
+  await disconnectDatabase();
+});
+
+/** The origin `env.APP_URL` declares, which is the one the wrapper trusts. */
+const ORIGIN = "http://localhost:3000";
+
 function recordingLogger(): Logger & { entries: Record<string, unknown>[] } {
   const entries: Record<string, unknown>[] = [];
   return {
@@ -45,11 +67,20 @@ function recordingLogger(): Logger & { entries: Record<string, unknown>[] } {
   };
 }
 
+/**
+ * A request from this site, which is every mutating request a real client makes.
+ *
+ * The `origin` default is here rather than at each call site for one reason: the
+ * check fails closed, so a mutating request built without it is a 403. A suite
+ * where adding a test silently requires remembering a header is a suite where the
+ * next test is wrong.
+ */
 const post = (body?: BodyInit, init: RequestInit = {}) =>
-  new Request("https://biz.test/api/v1/things", {
+  new Request(`${ORIGIN}/api/v1/things`, {
     method: "POST",
-    ...init,
     body,
+    ...init,
+    headers: { origin: ORIGIN, ...init.headers },
   });
 
 describe("the acceptance criterion", () => {
@@ -214,6 +245,62 @@ describe("mapping deliberate errors", () => {
     )(post());
 
     expect(logger.entries.at(-1)?.level).toBe("warn");
+  });
+
+  it("puts the log-only reason in the warning, and only in the log", async () => {
+    // The whole point of `internal`. `loginWithPassword` gives every failed
+    // sign-in the same body, so "locked out" and "wrong password" are
+    // indistinguishable to the client by design — which makes the log the only
+    // place the question can be answered. An operator asking whether an account
+    // is being credential-stuffed has nothing to read without this.
+    //
+    // Both halves asserted, because either alone is satisfied by a change that
+    // puts it in the response or drops it from the log.
+    const logger = recordingLogger();
+    const response = await withApi(
+      () => {
+        throw new AppError("UNAUTHENTICATED", {
+          message: "Sign in to continue.",
+          internal: "login failed: locked-out",
+        });
+      },
+      { logger },
+    )(post());
+    const body = (await response.json()) as { error: Record<string, unknown> };
+
+    expect(logger.entries.at(-1)?.internal).toBe("login failed: locked-out");
+    expect(JSON.stringify(body)).not.toContain("locked-out");
+    expect(body.error).not.toHaveProperty("internal");
+  });
+
+  it("omits `internal` from a warning that has none", async () => {
+    // Not an empty string. A key reading `internal: undefined` claims there was
+    // no internal detail, which is a different claim from "none was recorded".
+    const logger = recordingLogger();
+    await withApi(
+      () => {
+        throw AppError.forbidden();
+      },
+      { logger },
+    )(post());
+
+    expect(logger.entries.at(-1)).not.toHaveProperty("internal");
+  });
+
+  it("still leaves a stack out of a warning", async () => {
+    // Mirrors the error branch's caution. A stack on every 401 turns a real
+    // signal into noise, and a refusal is not a failure.
+    const logger = recordingLogger();
+    await withApi(
+      () => {
+        throw AppError.forbidden();
+      },
+      { logger },
+    )(post());
+
+    const entry = JSON.stringify(logger.entries.at(-1));
+    expect(entry).not.toContain("stack");
+    expect(entry).not.toContain("at AppError");
   });
 
   it("replaces the message of a non-exposed code", async () => {
@@ -594,5 +681,178 @@ describe("jsonResponse", () => {
 
     expect(response.headers.get("content-type")).toMatch(/application\/json/);
     expect(response.headers.get("x-custom")).toBe("1");
+  });
+});
+
+describe("the Origin check", () => {
+  /**
+   * The gap this closes was found by a probe: a POST with no `Origin` at all
+   * received 201. Nothing in any of the nine auth handlers checked it, while
+   * docs/SECURITY.md §7 and ADR-0002 both said they did.
+   */
+  it("passes a mutating request from this site", async () => {
+    const response = await withApi(() => ok({ created: true }))(post());
+
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a mutating request from another site, with its own code", async () => {
+    const response = await withApi(() => ok({ created: true }))(
+      post(undefined, { headers: { origin: "https://evil.example" } }),
+    );
+    const body = (await response.json()) as { error: { code: string } };
+
+    expect(response.status).toBe(403);
+    // Not INSUFFICIENT_PERMISSION. A cross-origin refusal is not a permission
+    // decision, and conflating them poisons the "a burst of 403s is somebody
+    // enumerating" signal with every cross-site request a browser makes.
+    expect(body.error.code).toBe("ORIGIN_NOT_ALLOWED");
+  });
+
+  it("refuses a request with no Origin at all", async () => {
+    // Fail closed, and this is the case that matters: "no Origin" is exactly the
+    // shape of the probe that found the gap. Browsers send Origin on every
+    // non-GET/HEAD request including same-origin, so an honest client loses
+    // nothing by being refused here.
+    const response = await withApi(() => ok({ created: true }))(
+      new Request(`${ORIGIN}/api/v1/things`, { method: "POST" }),
+    );
+    const body = (await response.json()) as { error: { code: string } };
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("ORIGIN_NOT_ALLOWED");
+  });
+
+  it("refuses the literal `null` a sandboxed iframe sends", async () => {
+    const response = await withApi(() => ok({ created: true }))(
+      post(undefined, { headers: { origin: "null" } }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("compares the whole origin, not a host or a suffix", async () => {
+    // Host-only comparison would accept all three of these.
+    for (const origin of [
+      "https://localhost:3000.evil.example",
+      "https://evil.example/http://localhost:3000",
+      "https://localhost:3001",
+    ]) {
+      const response = await withApi(() => ok({ created: true }))(
+        post(undefined, { headers: { origin } }),
+      );
+      expect(response.status, origin).toBe(403);
+    }
+  });
+
+  it("does not believe a forwarded host", async () => {
+    // The failure mode this avoids. If the trusted origin were read from
+    // `Host`, `X-Forwarded-Host` or `Referer`, the caller would supply the
+    // expected value itself — here they all name the origin this API runs on,
+    // and the request is still refused, because the only header that counts is
+    // one the caller does not get to set.
+    const response = await withApi(() => ok({ created: true }))(
+      new Request(`${ORIGIN}/api/v1/things`, {
+        method: "POST",
+        headers: {
+          host: "localhost:3000",
+          "x-forwarded-host": "localhost:3000",
+          referer: "https://localhost:3000/app",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("lets a GET through with no Origin, so the proxy and the UI still work", async () => {
+    const response = await withApi(() => ok(true))(
+      new Request(`${ORIGIN}/api/v1/things`, { method: "GET" }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("lets a preflight through with no Origin", async () => {
+    // If OPTIONS were checked, every cross-origin read would fail at preflight
+    // instead of at the request — and preflight carries no cookie, so there is
+    // nothing to protect.
+    const response = await withApi(() => ok(true))(
+      new Request(`${ORIGIN}/api/v1/things`, { method: "OPTIONS" }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("checks a method it has never heard of", async () => {
+    // The allow-list is the point: a method added by a framework later is
+    // checked until somebody decides otherwise, rather than passing by default.
+    for (const method of ["PUT", "PATCH", "DELETE", "PROPFIND"]) {
+      const request = new Request(`${ORIGIN}/api/v1/things`, { method });
+      const response = await withApi(() => ok(true))(request);
+
+      expect(response.status, method).toBe(403);
+    }
+  });
+
+  it("reports a refusal through the normal envelope, with a request id", async () => {
+    // Inside the try, deliberately: a refusal that escaped the wrapper would be
+    // a bare unhandled rejection rather than something a client can act on and
+    // an operator can find in the log.
+    const logger = recordingLogger();
+    const response = await withApi(() => ok({ created: true }), { logger })(
+      new Request(`${ORIGIN}/api/v1/things`, { method: "POST" }),
+    );
+    const body = (await response.json()) as { error: { requestId: string } };
+
+    expect(body.error.requestId).toBeTruthy();
+    expect(response.headers.get("x-request-id")).toBe(body.error.requestId);
+    expect(logger.entries.at(-1)).toMatchObject({
+      level: "warn",
+      code: "ORIGIN_NOT_ALLOWED",
+      status: 403,
+    });
+  });
+
+  it("never reaches the handler when the origin is refused", async () => {
+    const handler = vi.fn(() => ok({ created: true }));
+    await withApi(handler)(
+      new Request(`${ORIGIN}/api/v1/things`, { method: "POST" }),
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe("connecting once per request", () => {
+  it("resolves the connection before the handler runs", async () => {
+    // The property, not the mechanism. `bufferCommands: false` means a query
+    // issued before the socket exists is not queued — it is rejected — so a
+    // handler that ran first would 500 on a cold instance, intermittently, for
+    // every endpoint except the one that happened to open a transaction.
+    const order: string[] = [];
+    await withApi(() => {
+      order.push(`handler:${String(isDatabaseConnected())}`);
+      return ok(true);
+    })(post());
+
+    expect(order).toEqual(["handler:true"]);
+  });
+
+  it("does not need a branch for an unavailable database", async () => {
+    // A database outage arriving as an enveloped 500 with a request id is the
+    // correct behaviour and the one contract every route already has. A second
+    // error shape here would mean the route had to know which one it got.
+    const response = await withApi(async () => {
+      throw new Error("connection refused");
+    })(post());
+    const body = (await response.json()) as {
+      error: { code: string; message: string; requestId: string };
+    };
+
+    expect(response.status).toBe(500);
+    expect(body.error.code).toBe("INTERNAL");
+    expect(body.error.message).toBe("Something went wrong.");
+    expect(body.error.requestId).toBeTruthy();
   });
 });
