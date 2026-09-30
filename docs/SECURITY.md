@@ -237,9 +237,27 @@ relative path only.
 - The application validates the environment once at boot and fails loudly if a
   required variable is missing or a placeholder value is still in place in
   production. A missing secret must never degrade to an insecure default.
+- The boot check has two halves, and they run at different times.
+  - **Presence is validated at build.** A missing `MONGODB_URI` or
+    `SESSION_SECRET` fails `next build`, because the build imports every route
+    module and therefore evaluates this module. A deployment cannot be produced
+    from a configuration that is missing a value.
+  - **Production hardening is validated at the first boot of a running
+    process.** The placeholder-secret, console-mail and plaintext-origin rules
+    describe properties of a deployment, and none of them affects build output.
+    `next build` forces `NODE_ENV=production` for itself and evaluates the
+    modules it imports, so enforcing them there would make
+    `cp .env.example .env.local && npm run build` — the setup step this repository
+    documents — a hard failure. The rules still run before the process serves a
+    single request, which is the point of a boot check.
+- `NODE_ENV` is required rather than defaulted. It is the single variable in
+  front of all three hardening rules, so a value that defaulted silently would
+  have a failure mode of *off* — an unset `NODE_ENV` skips every rule and
+  nothing reports it.
 - `MONGODB_URI`, `SESSION_SECRET`, `MAIL_API_KEY` and similar are never logged,
   never returned by an endpoint, and never included in an error message.
-- Secrets are validated at startup rather than discovered on first use at 3am.
+- Secrets are validated when the application boots rather than discovered on
+  first use at 3am.
 
 ---
 

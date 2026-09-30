@@ -74,11 +74,28 @@ const mailFromSchema = z
     "Must be an email address, optionally with a display name: 'BizNexus <no-reply@example.com>'",
   );
 
+/**
+ * True only inside `next build`'s page-data collection.
+ *
+ * `next build` forces `NODE_ENV=production` for the whole build, and its page-data
+ * pass imports every route module, so this module is evaluated in a process that
+ * will never serve a request. See the gate in `serverSchema` for what that means
+ * and for why the literal is compared rather than imported from `next/constants`.
+ */
+const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
+
 const serverSchema = z
   .object({
-    NODE_ENV: z
-      .enum(["development", "test", "production"])
-      .default("development"),
+    /**
+     * Required, not defaulted. A single unvalidated variable sitting in front of
+     * every production-hardening rule is a gate whose failure mode is *off*: an
+     * unset `NODE_ENV` would silently skip all four. The required-idiom error is
+     * used rather than Zod's enum default, which would describe the accepted
+     * values instead of the thing that is wrong.
+     */
+    NODE_ENV: z.enum(["development", "test", "production"], {
+      error: REQUIRED,
+    }),
     APP_NAME: z
       .string({ error: REQUIRED })
       .min(1, REQUIRED)
@@ -167,9 +184,36 @@ const serverSchema = z
 
     /* ── Production hardening ─────────────────────────────────────────────
        These are the rules that make a copied `.env.example` fail loudly
-       instead of running a staging environment in production. */
+       instead of running a staging environment in production.
 
-    if (env.NODE_ENV !== "production") return;
+       THE GATE IS "production AND not the build phase". A build-time
+       evaluation is not a deployed process. `next build` sets
+       NODE_ENV=production for itself and imports every route module while
+       collecting page data, so evaluating the hardening rules there refuses
+       `cp .env.example .env.local && npm run build` — a build that is not
+       wrong about anything, failing on properties of a process that does not
+       exist yet. The Next adapter documentation draws the same line: the
+       build emits outputs, and a separate runtime invokes them
+       (node_modules/next/dist/docs/01-app/03-api-reference/07-adapters/09-output-types.md).
+       Presence checks still run at the build, so a missing MONGODB_URI or
+       SESSION_SECRET still fails a build; only the three rules below defer,
+       and all three describe a deployment rather than a build artefact.
+
+       NEXT_PHASE is assigned in exactly one place in Next itself — build/index.js
+       — to exactly the literal below. `next start` and the serverless runtime
+       never set it, so this predicate cannot be true at request time. The
+       literal is compared rather than imported from `next/constants` to keep this
+       module's dependency graph empty, which is the property its own docstring
+       values.
+
+       DO NOT WIDEN THIS GATE to "not test" or "not development". That is the
+       dangerous future edit: it disables every rule below, in every deployed
+       environment, silently — and the failure it ships is the placeholder secret
+       and the console mail driver. NODE_ENV is required for exactly this reason:
+       one unvalidated variable deciding four hardening rules, with a failure mode
+       of off rather than loud. */
+
+    if (env.NODE_ENV !== "production" || isProductionBuild) return;
 
     if (PLACEHOLDER_PATTERN.test(env.SESSION_SECRET)) {
       ctx.addIssue({

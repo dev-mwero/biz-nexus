@@ -25,6 +25,7 @@ const VALID = {
  */
 const MANAGED_KEYS = [
   "NODE_ENV",
+  "NEXT_PHASE",
   "APP_NAME",
   "APP_URL",
   "MONGODB_URI",
@@ -287,6 +288,91 @@ describe("env", () => {
           SESSION_SECRET: "replace-with-openssl-rand-base64-32",
         }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe("NODE_ENV is required, not defaulted", () => {
+    // The failure mode of an unvalidated NODE_ENV in front of the hardening
+    // gate is off, not loud: unset means "not production", so every rule above
+    // is skipped and nothing anywhere reports it.
+    it("rejects an unset NODE_ENV rather than defaulting it", async () => {
+      await expect(loadEnv({ NODE_ENV: undefined })).rejects.toThrow(
+        /NODE_ENV/,
+      );
+    });
+
+    it("rejects a value outside the three environments", async () => {
+      await expect(loadEnv({ NODE_ENV: "staging" })).rejects.toThrow(
+        /NODE_ENV/,
+      );
+    });
+
+    it("rejects an empty NODE_ENV", async () => {
+      await expect(loadEnv({ NODE_ENV: "" })).rejects.toThrow(/NODE_ENV/);
+    });
+  });
+
+  describe("the build phase defers production hardening", () => {
+    // `next build` sets NODE_ENV=production for itself and imports every route
+    // module while collecting page data. Without this, the documented local
+    // setup — `cp .env.example .env.local && npm run build` — is a hard
+    // failure, which is what 1.29 introduced when the first route.ts appeared.
+    const unhardened = {
+      NODE_ENV: "production",
+      SESSION_SECRET: "replace-with-openssl-rand-base64-32",
+      MAIL_DRIVER: "console",
+      RESEND_API_KEY: undefined,
+      APP_URL: "http://biz-nexus.example.com",
+    } as const;
+
+    it("refuses all three in a process that will serve requests", async () => {
+      await expect(loadEnv(unhardened)).rejects.toThrow(/placeholder/i);
+    });
+
+    it("resolves during page-data collection, which is not a deployment", async () => {
+      const { env } = await loadEnv({
+        ...unhardened,
+        NEXT_PHASE: "phase-production-build",
+      });
+      expect(env.NODE_ENV).toBe("production");
+    });
+
+    it("still validates presence during the build", async () => {
+      // The deferral is for the hardening rules only. A missing database URL is
+      // a fact about the build too, and failing the build is what it is for.
+      await expect(
+        loadEnv({
+          ...unhardened,
+          NEXT_PHASE: "phase-production-build",
+          MONGODB_URI: undefined,
+        }),
+      ).rejects.toThrow(/MONGODB_URI/);
+    });
+
+    it("still rejects a missing secret during the build", async () => {
+      await expect(
+        loadEnv({
+          ...unhardened,
+          NEXT_PHASE: "phase-production-build",
+          SESSION_SECRET: undefined,
+        }),
+      ).rejects.toThrow(/SESSION_SECRET/);
+    });
+
+    it("does not defer for any other NEXT_PHASE value", async () => {
+      // Only Next's production-build literal defers. A typo in the predicate
+      // would otherwise be a silent hole rather than a failed test.
+      for (const phase of [
+        "phase-production-server",
+        "phase-development-server",
+        "phase-production-build ",
+        "PRODUCTION-BUILD",
+      ]) {
+        await expect(
+          loadEnv({ ...unhardened, NEXT_PHASE: phase }),
+          phase,
+        ).rejects.toThrow(/placeholder/i);
+      }
     });
   });
 });
