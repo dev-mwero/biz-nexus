@@ -54,7 +54,10 @@ created implicitly.
 
 **Rule against blind indexing.** An index that no query in the codebase uses is
 write amplification for nothing. Every index below names the query it serves.
-When a query is added, its index is added in the same commit.
+When a query is added, its index is added in the same commit. There is exactly
+one exception — the `auth_events` retention TTL in §8, which serves no query
+because it exists to delete, and which is named there rather than left for the
+next reader of this paragraph to trip over.
 
 **`explain()` before optimising.** A collection is not "slow"; a specific query
 against a specific shape is. Use the `mongodb-query-optimizer` skill rather than
@@ -585,6 +588,63 @@ projection above is a requirement on callers rather than a suggestion.
 `changes` is stored as one `Mixed` value rather than a nested subdocument,
 because mongoose gives a subdocument its own `_id` and a meaningless id inside
 every diff is weight every consumer would have to learn to ignore.
+
+### `auth_events`
+
+Global and tenant-free. See
+[ADR-0006](./decisions/0006-global-authentication-event-log.md). Append-only,
+and carrying no `organizationId` field of any kind — not a nullable one — so a
+cross-tenant read is not merely guarded against but unexpressible.
+
+| Field | Type | Notes |
+|---|---|---|
+| `userId` | `ObjectId?` | Null when the address has no account |
+| `email` | `String` | Denormalised, so the row still reads after the user is deleted. Bounded |
+| `action` | `String` | Server-side enum: `auth.login`, `auth.login_failed`, `auth.lockout`, `auth.logout`, `auth.logout_all`, `auth.register`, `auth.password_reset_requested`, `auth.password_reset_completed` |
+| `outcome` | `String` | `success` \| `failure`, always present |
+| `ip`, `userAgent` | `String?` | Truncated in the schema setter, as on `sessions` |
+| `createdAt` | `Date` | Automatic. No `updatedAt` |
+
+There is no `changes` and no `metadata`. That absence is load-bearing rather than
+incidental: a `Mixed` field accepts a caller-supplied shape, a shape can violate
+a server-side constraint, and this collection's write is permitted to fail
+without failing the request that produced it — so a constraint a caller can trip
+is a request that can be turned into a 500 by the log.
+`tests/unit/architecture/auth-event.test.ts` asserts the absence.
+
+**Indexes**
+
+| Index | Serves |
+|---|---|
+| `{ userId: 1, createdAt: -1 }` | The account owner's "your sign-in history" |
+| `{ createdAt: 1 }` TTL `expireAfterSeconds: 7776000` | 90-day retention — **serves no query; see below** |
+
+Any further index is added in the same commit as the query that needs it, per §1.
+
+**The TTL index is a named exception to §1's rule.** Every other index in this
+document names the query it serves, and this one names none: it exists to delete.
+It is the first index in the repository to break that rule, and the first TTL
+that deletes a *live* record. All four existing TTLs — `sessions`,
+`password_reset_tokens`, `email_verification_tokens`, `invitations` — remove rows
+already dead by their own `expiresAt`, which is the reasoning recorded at
+`src/modules/identity/session.model.ts:81-82`: cleanup is the database's job, so
+there is no cron and no cron to forget to run.
+
+`auth_events` rows are not dead when they expire. Deleting them is a decision
+about what to stop being able to prove, and it is the reason a shorter window is
+deliberate rather than accidental. Naming the exception is what keeps the next
+person applying §1 mechanically from removing it.
+
+The period is `AUTH_EVENT_TTL_DAYS`, exported beside `SESSION_TTL_DAYS`,
+`PASSWORD_RESET_TTL_MINUTES`, `EMAIL_VERIFICATION_TTL_HOURS` and
+`INVITATION_TTL_DAYS`. It is deliberately not an environment variable: a
+retention period configuration can change is one nobody has decided. Two
+consequences worth stating. An investigator querying the raw collection still gets
+an empty result for an expired row, indistinguishable from an event that never
+happened — MongoDB's TTL monitor emits nothing — so the account-owner read surface
+states the retention period and never presents "nothing before date X" as "you
+never signed in before date X". And a 30-day session TTL means a stale session row
+can outlive the event that explains it.
 
 ---
 

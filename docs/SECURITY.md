@@ -415,8 +415,9 @@ the body.
 
 | Gap | What is true today | What closes it |
 |---|---|---|
-| Rate limiting | No limit is enforced on login, registration, forgot-password or resend-verification. `RATELIMIT_DRIVER` is configured and the in-memory driver exists, but no auth route calls it. Lockout is the only brake, and it is per-account — so it does nothing against credential stuffing across accounts, and it is the wrong tool for `forgot-password` and `resend-verification`, which are aimed at one victim. | Task 1.31 |
+| Rate limiting | No limit is enforced on login, registration, forgot-password or resend-verification. `RATELIMIT_DRIVER` and the `UPSTASH_REDIS_REST_*` variables exist (`src/env.ts:134-139`), but no rate-limit module exists and no auth route calls one. Lockout is the only brake, and it is per-account — so it does nothing against credential stuffing across accounts, and it is the wrong tool for `forgot-password` and `resend-verification`, which are aimed at one victim. | Task 1.31 |
 | Audit events | No sign-in, sign-out, failed sign-in, password change or token redemption is recorded. `src/modules/audit` is tenant-scoped and none of these events has a tenant — a sign-in happens before any organisation exists. | [ADR-0006](./decisions/0006-global-authentication-event-log.md), task 1.30 |
+| Detecting a dropped auth event | Manual only. A failed `auth_events` write is dropped so the request can still succeed, so absence in the collection is ambiguous by construction. The sole record of a loss is one error log line carrying the literal `event: "auth_event_write_failed"`, and the query below is run by hand. Nothing pages anyone. | [ADR-0006](./decisions/0006-global-authentication-event-log.md); anything automatic needs a scheduler this repository does not have |
 | Email verification not enforced | Verification issues a token and `GET /auth/me` reports `emailVerified`, but nothing refuses an unverified account. The mailer in 1.33 is not built, so no token reaches anybody. The account is usable the moment it is created. | 1.33 for delivery; a policy decision for enforcement |
 | Delivery of tokens | Registration and forgot-password issue a token, discard it, and mail nothing. `MAIL_DRIVER=console` is a placeholder. A token exists in the database and in no inbox. | 1.33 |
 | No email change, no MFA, no recovery codes | — | Post-MVP, by product decision |
@@ -436,6 +437,45 @@ happens. Making `organizationId` nullable is not the fix — §6 Layer 2 and
 ADR-0003 make the required scope a documented invariant, and weakening a tenant
 invariant to accommodate auth would be a far worse trade than a second
 collection.
+
+**Runbook — was an auth event lost? Manual, on demand.** A failed `auth_events`
+write is dropped rather than failing the request it describes, so the collection
+is not proof that nothing was lost: a missing row is a *missing row*, and a
+dropped one looks identical. The only record of a loss is a single error line
+carrying the stable literal `event: "auth_event_write_failed"` alongside `action`,
+`userId` and the `requestId` of the request it was describing.
+
+This is manual. Nothing runs it, nothing pages anyone, and this repository has no
+scheduler, no cron and no long-lived workers (`docs/ARCHITECTURE.md:65`). A query
+being written down is not automation, and reading it as a control that is always
+on is the false assurance it exists to prevent.
+
+Log lines are single-line JSON, and the fields are not secret — none of `event`,
+`action`, `requestId` or `userId` is in `SENSITIVE_KEYS`
+(`src/shared/lib/redact.ts:17-40`) — so these are field matches rather than
+searches over prose, which is the point of the token being a fixed literal:
+
+```sh
+# Which events are being lost, and how often. A sustained non-zero is a finding;
+# one line is not.
+jq -c 'select(.event=="auth_event_write_failed")' <log-lines> \
+  | jq -r '"\(.action) \(.userId // "-")"' | sort | uniq -c | sort -rn
+
+# Per request, definitively. A user can quote the id: it is returned on every
+# response as x-request-id. No output means this request's event was written.
+jq -c --arg id "$REQUEST_ID" \
+  'select(.event=="auth_event_write_failed" and .requestId==$id)' <log-lines>
+```
+
+The second query is what closes the false-assurance gap, at no infrastructure
+cost: it turns "absence is ambiguous" into a per-request answer.
+
+One boundary this cannot see past. `auth_events` rows expire after 90 days and
+MongoDB's TTL monitor is silent, so a row outside the window is gone with nothing
+anywhere recording that it was deleted — an investigator querying the collection
+directly still gets an empty result that reads as "it never happened". That is
+mitigated at the account-owner read surface, which states the retention period
+and never presents a truncated history as a complete one. It is not solved.
 
 ---
 
