@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-if [ -z "$(git diff --cached --name-only --diff-filter=ACM | grep -vE '^\.(md|json|jsonc)$' || true)" ]; then
+if [ -z "$(git diff --cached --name-only --diff-filter=ACM | grep -vE '\.(md|json|jsonc)$' || true)" ]; then
   # Documentation-only change: lint and typecheck have nothing to say.
   exit 0
 fi
