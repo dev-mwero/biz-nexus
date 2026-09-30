@@ -23,7 +23,7 @@ import { AppError } from "@/shared/errors/app-error";
  *
  * Scoped here for 1.18 because the task is "provision on organisation
  * creation" and there was no organisation creation to hang that on. Settings
- * validation and the onboarding checklist belong to 1.33.
+ * validation and the onboarding checklist belong to 1.34.
  */
 
 export class OrganizationCreationError extends AppError {

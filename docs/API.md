@@ -365,18 +365,18 @@ speculatively now.
 **The limits below are the target, not the current state.** Of these, only the
 5-consecutive-failures lockout is enforced today; it lives in the database, on
 the `users` row, and is covered by the login suite. The per-IP and per-email
-limits are task 1.30, and no auth route calls the rate-limit driver yet. This
+limits are task 1.31, and no auth route calls the rate-limit driver yet. This
 section says so rather than being aspirational, because a table of limits with
 no marker on which ones work is how a reviewer concludes the whole table works.
 
 | Scope | Limit | Response | Enforced |
 |---|---|---|---|
 | `POST /auth/login` | 5 consecutive failures / account | 15-minute lockout | **yes** — database |
-| `POST /auth/login` | 10 / 15 min / IP | `429` | no — 1.30 |
-| `POST /auth/register` | 5 / hour / IP | `429` | no — 1.30 |
-| `POST /auth/forgot-password` | 3 / hour / email | Always `200`; throttled silently | no — 1.30 |
-| `POST /auth/resend-verification` | 3 / hour / user | Always `200`; throttled silently | no — 1.30 |
-| `POST /auth/reset-password` | 5 / hour / IP | `429` | no — 1.30 |
+| `POST /auth/login` | 10 / 15 min / IP | `429` | no — 1.31 |
+| `POST /auth/register` | 5 / hour / IP | `429` | no — 1.31 |
+| `POST /auth/forgot-password` | 3 / hour / email | Always `200`; throttled silently | no — 1.31 |
+| `POST /auth/resend-verification` | 3 / hour / user | Always `200`; throttled silently | no — 1.31 |
+| `POST /auth/reset-password` | 5 / hour / IP | `429` | no — 1.31 |
 | `POST /organizations/current/members/invitations` | 20 / day / organisation | `429` | no — not built |
 | `GET /search` | 60 / minute / user | `429` | no — not built |
 | Everything else | 300 / minute / user | `429` | no — not built |

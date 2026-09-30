@@ -13,7 +13,7 @@ import { requestMeta } from "@/shared/auth/session-http";
  * already verified asking again is not an error worth surfacing, and telling
  * them so would leak verification state to a session that has been borrowed.
  *
- * Rate limiting is task 1.30. Until then this is an unthrottled way to have the
+ * Rate limiting is task 1.31. Until then this is an unthrottled way to have the
  * system mail somebody repeatedly, which is why the limit is called out here and
  * not left to be discovered.
  */

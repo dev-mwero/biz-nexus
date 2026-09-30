@@ -19,7 +19,7 @@ import { requestMeta } from "@/shared/auth/session-http";
  * the whole user table.
  *
  * The token is produced by the service and discarded here; the mailer that sends
- * it lands in 1.32. No token is returned in the body, for the same reason
+ * it lands in 1.33. No token is returned in the body, for the same reason
  * `/register` does not return its verification token.
  */
 export const POST = withApi(async (request: Request): Promise<Response> => {

@@ -30,6 +30,7 @@ existing ones are never rewritten.
 | [0003](./decisions/0003-tenant-scoped-repositories.md) | Tenant scoping lives in the repository, not in the caller |
 | [0004](./decisions/0004-per-organization-roles.md) | Per-organisation role documents over a code-level permission catalogue |
 | [0005](./decisions/0005-service-layer-and-adapters.md) | Services hold the logic; route handlers and Server Actions are thin adapters |
+| [0006](./decisions/0006-global-authentication-event-log.md) | Authentication events go to their own global, tenant-free collection, readable by the account owner only |
 
 ## Where the roadmap lives
 

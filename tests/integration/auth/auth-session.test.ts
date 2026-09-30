@@ -150,7 +150,7 @@ describe("POST /auth/register", () => {
 
   it("returns no verification token, but still issues one", async () => {
     // A token in a JSON body is a token in every log, proxy and history on the
-    // way there. The mailer in 1.32 is the only consumer, and it gets the row.
+    // way there. The mailer in 1.33 is the only consumer, and it gets the row.
     const raw = await registerAda().then((response) => response.text());
 
     expect(raw).not.toMatch(/verificationToken/);

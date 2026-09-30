@@ -97,83 +97,97 @@ system is provably incapable of leaking data across organisation boundaries.
 | # | Task | Commit | Done when |
 |---|---|---|---|
 | 1.29 | Auth API: `POST /register`, `/login`, `/logout`, `/forgot-password`, `/reset-password`, `/verify-email`; `GET /me` | `feat(auth): add versioned auth endpoints` | contract tests green |
-| 1.30 | Rate limiting on auth endpoints, with a serverless-safe driver interface | `feat(auth): rate limit auth endpoints` | lockout after N failures |
-| 1.31 | Auth pages: sign in, register, forgot, reset, with inline validation and accessible errors | `feat(auth): add authentication pages` | keyboard-navigable, errors announced |
-| 1.32 | Password-reset mailer abstraction with a `console` development driver | `feat(auth): add mailer abstraction` | reset link printed in dev, never in prod logs |
+| 1.30 | Global append-only authentication event log: `auth.login`, `auth.login_failed`, `auth.lockout`, `auth.logout`, `auth.logout_all`, `auth.register`, `auth.password_reset_requested`, `auth.password_reset_completed` | `feat(audit): add global authentication event log` | every 1.29 auth event is recorded, and no read or write of it requires an `organizationId` |
+| 1.31 | Rate limiting on auth endpoints, with a serverless-safe driver interface | `feat(auth): rate limit auth endpoints` | lockout after N failures; limits sized against the measured `bcryptjs` cost, not the documented 250ms |
+| 1.32 | Auth pages: sign in, register, forgot, reset, with inline validation and accessible errors | `feat(auth): add authentication pages` | keyboard-navigable, errors announced; the sign-in activity view reads the 1.30 log, so this cannot land before it |
+| 1.33 | Password-reset mailer abstraction with a `console` development driver | `feat(auth): add mailer abstraction` | reset link printed in dev, never in prod logs |
 
 ## 1F — Organisation and members
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.33 | Onboarding: create organisation, first-run checklist | `feat(org): add organization onboarding` | first org usable end to end |
-| 1.34 | Organisation switcher, persisted to the session | `feat(org): add organization switching` | switching changes every query's scope |
-| 1.35 | Members API: list, invite, update role, suspend, remove, leave | `feat(org): add member management endpoints` | contract tests green |
-| 1.36 | Members UI: directory, invite dialog, role management | `feat(org): add member management screens` | owner can invite and assign a role |
-| 1.37 | Organisation settings UI | `feat(org): add organization settings screens` | settings changes audited |
+| 1.34 | Onboarding: create organisation, first-run checklist | `feat(org): add organization onboarding` | first org usable end to end |
+| 1.35 | Organisation switcher, persisted to the session | `feat(org): add organization switching` | switching changes every query's scope |
+| 1.36 | Members API: list, invite, update role, suspend, remove, leave | `feat(org): add member management endpoints` | contract tests green |
+| 1.37 | Members UI: directory, invite dialog, role management | `feat(org): add member management screens` | owner can invite and assign a role |
+| 1.38 | Organisation settings UI | `feat(org): add organization settings screens` | settings changes audited |
 
 ## 1G — CRM
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.38 | Tag collection + service | `feat(crm): add tag model and service` | unique per organisation |
-| 1.39 | Field-definition collection + service (custom fields) | `feat(crm): add custom field definitions` | definitions validated per entity type |
-| 1.40 | Saved-view collection + service | `feat(crm): add saved views` | views are per user per entity |
-| 1.41 | Contact schema + repository + service | `feat(crm): add contacts` | search, filter, sort, paginate, soft delete |
-| 1.42 | Contacts API | `feat(crm): add contact endpoints` | contract tests green |
-| 1.43 | Contacts UI: list, filters, form drawer, detail, merge-later placeholder | `feat(crm): add contact screens` | full CRUD from the UI |
-| 1.44 | Company schema + repository + service | `feat(crm): add companies` | contacts nested under company |
-| 1.45 | Companies API | `feat(crm): add company endpoints` | contract tests green |
-| 1.46 | Companies UI | `feat(crm): add company screens` | full CRUD from the UI |
-| 1.47 | Lead schema + repository + service | `feat(crm): add leads` | status transitions validated |
-| 1.48 | Lead conversion service — Contact + optional Company + optional Deal, in one audited operation | `feat(crm): add lead conversion` | conversion is atomic and idempotent |
-| 1.49 | Leads API | `feat(crm): add lead endpoints` | contract tests green |
-| 1.50 | Leads UI, including the conversion dialog | `feat(crm): add lead screens` | conversion works from the UI |
+| 1.39 | Tag collection + service | `feat(crm): add tag model and service` | unique per organisation |
+| 1.40 | Field-definition collection + service (custom fields) | `feat(crm): add custom field definitions` | definitions validated per entity type |
+| 1.41 | Saved-view collection + service | `feat(crm): add saved views` | views are per user per entity |
+| 1.42 | Contact schema + repository + service | `feat(crm): add contacts` | search, filter, sort, paginate, soft delete |
+| 1.43 | Contacts API | `feat(crm): add contact endpoints` | contract tests green |
+| 1.44 | Contacts UI: list, filters, form drawer, detail, merge-later placeholder | `feat(crm): add contact screens` | full CRUD from the UI |
+| 1.45 | Company schema + repository + service | `feat(crm): add companies` | contacts nested under company |
+| 1.46 | Companies API | `feat(crm): add company endpoints` | contract tests green |
+| 1.47 | Companies UI | `feat(crm): add company screens` | full CRUD from the UI |
+| 1.48 | Lead schema + repository + service | `feat(crm): add leads` | status transitions validated |
+| 1.49 | Lead conversion service — Contact + optional Company + optional Deal, in one audited operation | `feat(crm): add lead conversion` | conversion is atomic and idempotent |
+| 1.50 | Leads API | `feat(crm): add lead endpoints` | contract tests green |
+| 1.51 | Leads UI, including the conversion dialog | `feat(crm): add lead screens` | conversion works from the UI |
 
 ## 1H — Pipelines and deals
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.51 | Pipeline schema (stages embedded) + service + default provisioning | `feat(pipelines): add pipeline and stage management` | new org gets a working default pipeline |
-| 1.52 | Pipelines API + UI (list, create, rename, reorder stages) | `feat(pipelines): add pipeline screens and endpoints` | reorder is atomic |
-| 1.53 | Deal schema + repository + service | `feat(crm): add deals` | value, probability, expected close |
-| 1.54 | Deal stage-move service with a STAGE_CHANGE activity and audit entry | `feat(crm): add deal stage transitions` | every move is attributed |
-| 1.55 | Deals API | `feat(crm): add deal endpoints` | contract tests green |
-| 1.56 | Deals UI: list, filters, and drag-and-drop Kanban | `feat(crm): add deal list and kanban board` | a move is reflected in the timeline |
-| 1.57 | Deal detail page with the unified activity timeline | `feat(crm): add deal detail view` | timeline renders in order |
+| 1.52 | Pipeline schema (stages embedded) + service + default provisioning | `feat(pipelines): add pipeline and stage management` | new org gets a working default pipeline |
+| 1.53 | Pipelines API + UI (list, create, rename, reorder stages) | `feat(pipelines): add pipeline screens and endpoints` | reorder is atomic |
+| 1.54 | Deal schema + repository + service | `feat(crm): add deals` | value, probability, expected close |
+| 1.55 | Deal stage-move service with a STAGE_CHANGE activity and audit entry | `feat(crm): add deal stage transitions` | every move is attributed |
+| 1.56 | Deals API | `feat(crm): add deal endpoints` | contract tests green |
+| 1.57 | Deals UI: list, filters, and drag-and-drop Kanban | `feat(crm): add deal list and kanban board` | a move is reflected in the timeline |
+| 1.58 | Deal detail page with the unified activity timeline | `feat(crm): add deal detail view` | timeline renders in order |
 
 ## 1I — Activities and tasks
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.58 | Task schema + repository + service | `feat(tasks): add task management` | assignment, due date, priority, status |
-| 1.59 | Tasks API | `feat(tasks): add task endpoints` | contract tests green |
-| 1.60 | Tasks UI: list, board-by-status, form, complete | `feat(tasks): add task screens` | completion writes an activity |
-| 1.61 | Activity API: list by entity, list by organisation, create note/call/meeting | `feat(activities): add activity endpoints` | chronological, paginated |
-| 1.62 | Activity composer + timeline component, reusable on every record page | `feat(activities): add activity timeline component` | one component, used in four places |
-| 1.63 | Organisation-wide activity feed | `feat(activities): add organization activity feed` | respects permission and tenant scope |
+| 1.59 | Task schema + repository + service | `feat(tasks): add task management` | assignment, due date, priority, status |
+| 1.60 | Tasks API | `feat(tasks): add task endpoints` | contract tests green |
+| 1.61 | Tasks UI: list, board-by-status, form, complete | `feat(tasks): add task screens` | completion writes an activity |
+| 1.62 | Activity API: list by entity, list by organisation, create note/call/meeting | `feat(activities): add activity endpoints` | chronological, paginated |
+| 1.63 | Activity composer + timeline component, reusable on every record page | `feat(activities): add activity timeline component` | one component, used in four places |
+| 1.64 | Organisation-wide activity feed | `feat(activities): add organization activity feed` | respects permission and tenant scope |
 
 ## 1J — Notifications, dashboard, polish
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.64 | Notifications API + bell menu + unread count + mark read | `feat(notify): add notification screens` | unread count accurate after a task is assigned |
-| 1.65 | Dashboard API: all MVP metrics in one round trip | `feat(dashboard): add metrics endpoint` | no N+1 |
-| 1.66 | Dashboard UI: metric cards, pipeline summary, overdue tasks, recent activity | `feat(dashboard): add dashboard screens` | loads with skeletons, then data |
-| 1.67 | Audit log API + admin UI | `feat(audit): add audit log screens` | org-scoped, filterable |
-| 1.68 | Global search across contacts, companies, deals, tasks | `feat(ui): add global search` | scoped to the active organisation |
-| 1.69 | App shell: sidebar, header, command palette, breadcrumbs, responsive nav | `feat(ui): build authenticated app shell` | works at 375px and 1440px |
-| 1.70 | Error, loading, empty, not-found and forbidden boundaries | `feat(ui): add route boundaries and states` | every route has all four |
-| 1.71 | Accessibility pass: focus rings, labels, landmarks, contrast, keyboard traps | `test(ui): cover keyboard and screen reader basics` | no violation in a manual audit |
+| 1.65 | Notifications API + bell menu + unread count + mark read | `feat(notify): add notification screens` | unread count accurate after a task is assigned |
+| 1.66 | Dashboard API: all MVP metrics in one round trip | `feat(dashboard): add metrics endpoint` | no N+1 |
+| 1.67 | Dashboard UI: metric cards, pipeline summary, overdue tasks, recent activity | `feat(dashboard): add dashboard screens` | loads with skeletons, then data |
+| 1.68 | Audit log API + admin UI | `feat(audit): add audit log screens` | org-scoped, filterable |
+| 1.69 | Global search across contacts, companies, deals, tasks | `feat(ui): add global search` | scoped to the active organisation |
+| 1.70 | App shell: sidebar, header, command palette, breadcrumbs, responsive nav | `feat(ui): build authenticated app shell` | works at 375px and 1440px |
+| 1.71 | Error, loading, empty, not-found and forbidden boundaries | `feat(ui): add route boundaries and states` | every route has all four |
+| 1.72 | Accessibility pass: focus rings, labels, landmarks, contrast, keyboard traps | `test(ui): cover keyboard and screen reader basics` | no violation in a manual audit |
 
 ## 1K — Verification and hardening
 
 | # | Task | Commit | Done when |
 |---|---|---|---|
-| 1.72 | Playwright e2e for the critical path | `test(e2e): cover mvp critical path` | the full flow passes from a clean database |
-| 1.73 | Playwright e2e for the isolation path | `test(e2e): prove cross tenant access is denied` | organisation A cannot reach B by URL or API |
-| 1.74 | Security review against `docs/SECURITY.md` | `fix(security): remediate phase 1 security findings` | no open high or critical finding |
-| 1.75 | CI: lint, typecheck, unit, integration, build | `ci: add continuous integration workflow` | green on a clean checkout |
-| 1.76 | Update documentation to match reality | `docs: update documentation for mvp completion` | docs describe what exists, not what was planned |
+| 1.73 | Playwright e2e for the critical path | `test(e2e): cover mvp critical path` | the full flow passes from a clean database |
+| 1.74 | Playwright e2e for the isolation path | `test(e2e): prove cross tenant access is denied` | organisation A cannot reach B by URL or API |
+| 1.75 | Security review against `docs/SECURITY.md` | `fix(security): remediate phase 1 security findings` | no open high or critical finding |
+| 1.76 | CI: lint, typecheck, unit, integration, build | `ci: add continuous integration workflow` | green on a clean checkout |
+| 1.77 | Update documentation to match reality | `docs: update documentation for mvp completion` | docs describe what exists, not what was planned |
+| 1.78 | Evaluate a native bcrypt binding (`bcrypt`/`argon2`) against `bcryptjs`, cost 12 held constant | `deps(auth): evaluate native password hashing binding` | the choice is measured on this codebase, and the ~250ms figure in `SECURITY.md`/`DATABASE.md` is corrected to whatever was actually observed |
+
+**The cost factor is not part of 1.78.** `docs/SECURITY.md` §2 and
+`docs/DATABASE.md` §2 pin bcrypt at cost 12, and that pin is a correctness
+decision: it is the number that makes an offline attack expensive, and it is
+revisited only by a decision to change it, not by a decision to make hashing
+faster. What 1.78 evaluates is the *implementation* — `bcryptjs` is pure
+JavaScript and measures roughly 2.2s per verification here, against the
+~250ms the documentation describes for a native bcrypt. That is not a security
+finding; it is a nine-fold discrepancy between what the docs say a sign-in
+costs and what it costs, and it has a consequence that is a security concern:
+1.31 sizes a rate limiter, and a limiter configured against 250ms on a machine
+that spends 2.2s hashing does not bound the attack it exists to bound.
 
 **Exit criteria (Gate 1):**
 

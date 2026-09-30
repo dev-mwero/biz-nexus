@@ -21,7 +21,7 @@ import { requestMeta, setSessionCookie } from "@/shared/auth/session-http";
  * the reason every other endpoint in this directory answers identically for
  * known and unknown addresses.
  *
- * The verification token is issued but not delivered - the mailer lands in 1.32.
+ * The verification token is issued but not delivered - the mailer lands in 1.33.
  * It is not returned in the body, because a token in a JSON response is a token
  * in every log, proxy and browser history along the way.
  */

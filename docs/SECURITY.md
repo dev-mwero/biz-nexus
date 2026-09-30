@@ -2,7 +2,8 @@
 
 Companion documents: [`ARCHITECTURE.md`](./ARCHITECTURE.md) ·
 [`DATABASE.md`](./DATABASE.md) · [ADR-0002](./decisions/0002-custom-session-auth.md) ·
-[ADR-0003](./decisions/0003-tenant-scoped-repositories.md)
+[ADR-0003](./decisions/0003-tenant-scoped-repositories.md) ·
+[ADR-0006](./decisions/0006-global-authentication-event-log.md)
 
 ---
 
@@ -414,15 +415,27 @@ the body.
 
 | Gap | What is true today | What closes it |
 |---|---|---|
-| Rate limiting | No limit is enforced on login, registration, forgot-password or resend-verification. `RATELIMIT_DRIVER` is configured and the in-memory driver exists, but no auth route calls it. Lockout is the only brake, and it is per-account — so it does nothing against credential stuffing across accounts, and it is the wrong tool for `forgot-password` and `resend-verification`, which are aimed at one victim. | Task 1.30 |
-| Audit events | No sign-in, sign-out, failed sign-in, password change or token redemption is recorded. `src/modules/audit` is tenant-scoped and none of these events has a tenant — a sign-in happens before any organisation exists. | Auth event log, before the first audit consumer |
-| Email verification not enforced | Verification issues a token and `GET /auth/me` reports `emailVerified`, but nothing refuses an unverified account. The mailer in 1.32 is not built, so no token reaches anybody. The account is usable the moment it is created. | 1.32 for delivery; a policy decision for enforcement |
-| Delivery of tokens | Registration and forgot-password issue a token, discard it, and mail nothing. `MAIL_DRIVER=console` is a placeholder. A token exists in the database and in no inbox. | 1.32 |
+| Rate limiting | No limit is enforced on login, registration, forgot-password or resend-verification. `RATELIMIT_DRIVER` is configured and the in-memory driver exists, but no auth route calls it. Lockout is the only brake, and it is per-account — so it does nothing against credential stuffing across accounts, and it is the wrong tool for `forgot-password` and `resend-verification`, which are aimed at one victim. | Task 1.31 |
+| Audit events | No sign-in, sign-out, failed sign-in, password change or token redemption is recorded. `src/modules/audit` is tenant-scoped and none of these events has a tenant — a sign-in happens before any organisation exists. | [ADR-0006](./decisions/0006-global-authentication-event-log.md), task 1.30 |
+| Email verification not enforced | Verification issues a token and `GET /auth/me` reports `emailVerified`, but nothing refuses an unverified account. The mailer in 1.33 is not built, so no token reaches anybody. The account is usable the moment it is created. | 1.33 for delivery; a policy decision for enforcement |
+| Delivery of tokens | Registration and forgot-password issue a token, discard it, and mail nothing. `MAIL_DRIVER=console` is a placeholder. A token exists in the database and in no inbox. | 1.33 |
 | No email change, no MFA, no recovery codes | — | Post-MVP, by product decision |
 
 The first three are the ones that matter. A sign-in endpoint with no rate limit
 and no audit trail is the realistic attack surface in this codebase, and both are
 known and scheduled rather than overlooked.
+
+The audit gap is structural, and the decision that closes it is
+[ADR-0006](./decisions/0006-global-authentication-event-log.md). `RecordActionInput.organizationId`
+is required and the log is tenant-scoped by design, while authentication is
+inherently pre-tenant: a new user has `activeOrganizationId: null` by design, and
+register, login, forgot, verify and reset all happen before any organisation
+exists. The audit trail is scoped to a tenant that does not yet exist, so it
+structurally cannot record the phase of the lifecycle where account takeover
+happens. Making `organizationId` nullable is not the fix — §6 Layer 2 and
+ADR-0003 make the required scope a documented invariant, and weakening a tenant
+invariant to accommodate auth would be a far worse trade than a second
+collection.
 
 ---
 
