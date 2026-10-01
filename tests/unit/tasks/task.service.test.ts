@@ -148,7 +148,7 @@ describe("createTask", () => {
 
   it("rejects an invalid status", async () => {
     await expect(
-      createTask(taskInput({ status: "INVALID" as any })),
+      createTask(taskInput({ status: "INVALID" as never })),
     ).rejects.toThrow("Invalid status");
   });
 
@@ -177,7 +177,7 @@ describe("findTaskById", () => {
     const found = await findTaskById(org, created._id);
 
     expect(found).not.toBeNull();
-    expect(found!._id).toEqual(created._id);
+    expect(found?._id).toEqual(created._id);
   });
 
   it("returns null for non-existent task", async () => {
@@ -213,10 +213,10 @@ describe("updateTask", () => {
     });
 
     expect(updated).not.toBeNull();
-    expect(updated!.title).toBe("Updated title");
-    expect(updated!.description).toBe("Updated description");
-    expect(updated!.priority).toBe("URGENT");
-    expect(updated!.updatedBy).toEqual(user);
+    expect(updated?.title).toBe("Updated title");
+    expect(updated?.description).toBe("Updated description");
+    expect(updated?.priority).toBe("URGENT");
+    expect(updated?.updatedBy).toEqual(user);
   });
 
   it("validates status transitions", async () => {
@@ -260,9 +260,9 @@ describe("updateTask", () => {
     });
 
     expect(completed).not.toBeNull();
-    expect(completed!.status).toBe("DONE");
-    expect(completed!.completedAt).toBeInstanceOf(Date);
-    expect(completed!.completedById).toEqual(user);
+    expect(completed?.status).toBe("DONE");
+    expect(completed?.completedAt).toBeInstanceOf(Date);
+    expect(completed?.completedById).toEqual(user);
   });
 
   it("clears completedAt and completedById when reopening", async () => {
@@ -273,9 +273,9 @@ describe("updateTask", () => {
     });
 
     expect(reopened).not.toBeNull();
-    expect(reopened!.status).toBe("TODO");
-    expect(reopened!.completedAt).toBeNull();
-    expect(reopened!.completedById).toBeNull();
+    expect(reopened?.status).toBe("TODO");
+    expect(reopened?.completedAt).toBeNull();
+    expect(reopened?.completedById).toBeNull();
   });
 
   it("emits task.completed event on completion", async () => {
@@ -507,9 +507,9 @@ describe("completeTask", () => {
     const completed = await completeTask(org, created._id, user);
 
     expect(completed).not.toBeNull();
-    expect(completed!.status).toBe("DONE");
-    expect(completed!.completedAt).toBeInstanceOf(Date);
-    expect(completed!.completedById).toEqual(user);
+    expect(completed?.status).toBe("DONE");
+    expect(completed?.completedAt).toBeInstanceOf(Date);
+    expect(completed?.completedById).toEqual(user);
   });
 });
 
@@ -519,9 +519,9 @@ describe("reopenTask", () => {
     const reopened = await reopenTask(org, created._id, user);
 
     expect(reopened).not.toBeNull();
-    expect(reopened!.status).toBe("TODO");
-    expect(reopened!.completedAt).toBeNull();
-    expect(reopened!.completedById).toBeNull();
+    expect(reopened?.status).toBe("TODO");
+    expect(reopened?.completedAt).toBeNull();
+    expect(reopened?.completedById).toBeNull();
   });
 });
 

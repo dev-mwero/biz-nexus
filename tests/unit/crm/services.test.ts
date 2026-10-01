@@ -112,7 +112,7 @@ describe("CRM Services", () => {
 
       await expect(service.create(input)).rejects.toThrow(TagError);
       await expect(service.create(input)).rejects.toMatchObject({
-        code: "CONFLICT",
+        code: "SLUG_CONFLICT",
       });
     });
 
@@ -160,7 +160,7 @@ describe("CRM Services", () => {
 
       await expect(service.delete(tag._id, actorId)).rejects.toThrow(TagError);
       await expect(service.delete(tag._id, actorId)).rejects.toMatchObject({
-        code: "CONFLICT",
+        code: "VALIDATION_FAILED",
       });
     });
 
@@ -516,7 +516,9 @@ describe("CRM Services", () => {
       // Reading the field back hid that: `undefined` is not `null`, so the
       // old assertion passed while nothing was deleted.
       expect(await SavedViewModel.findById(view._id)).not.toBeNull();
-      await expect(service.listByUser(userId, "CONTACT")).resolves.toHaveLength(0);
+      await expect(service.listByUser(userId, "CONTACT")).resolves.toHaveLength(
+        0,
+      );
       await expect(service.getById(view._id)).resolves.toBeNull();
     });
 

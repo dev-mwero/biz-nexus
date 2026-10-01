@@ -21,7 +21,9 @@ export const PATCH = withApi(async (request: Request) => {
   // used. A malformed id is a 404 rather than a 422 because the caller is not
   // asking about a field of a body — it is asking for a record that cannot
   // exist.
-  const id = pathParam(request);
+  // `fromEnd: 2` — this path ends in a static segment (`route.ts`), so the
+  // default of 1 would read that literal as the record id.
+  const id = pathParam(request, 2);
   if (!Types.ObjectId.isValid(id)) {
     throw new AppError("RECORD_NOT_FOUND");
   }

@@ -1,7 +1,8 @@
 import type { Types } from "mongoose";
 import { connectToDatabase } from "@/db/connection";
 import { ActivityModel } from "@/modules/activities";
-import { DealModel, TaskModel } from "@/modules/crm";
+import { DealModel, LeadModel, TaskModel } from "@/modules/crm";
+import { buildDashboardAggregationPipeline } from "@/modules/dashboard/dashboard-aggregation";
 import { PipelineModel } from "@/modules/pipelines";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
@@ -49,125 +50,20 @@ export const GET = withApi(async (request: Request): Promise<Response> => {
   const wonStage = defaultPipeline.stages.find((s) => s.isWon);
   const lostStage = defaultPipeline.stages.find((s) => s.isLost);
 
-  // Single $facet aggregation for all metrics
-  const [aggregationResult] = await DealModel.aggregate([
-    { $match: { organizationId } },
-    {
-      $facet: {
-        // Pipeline summary: deals by stage (OPEN only)
-        pipelineSummary: [
-          { $match: { status: "OPEN", stageId: { $in: stageIds } } },
-          {
-            $group: {
-              _id: "$stageId",
-              count: { $sum: 1 },
-              totalValue: { $sum: "$value" },
-            },
-          },
-          {
-            $project: {
-              stageId: "$_id",
-              count: 1,
-              totalValue: 1,
-              _id: 0,
-            },
-          },
-        ],
-
-        // Won deals this month
-        wonThisMonth: [
-          {
-            $match: {
-              status: "WON",
-              closedAt: { $gte: startOfMonth },
-              ...(wonStage ? { stageId: wonStage._id } : {}),
-            },
-          },
-          { $count: "total" },
-        ],
-
-        // Lost deals this month
-        lostThisMonth: [
-          {
-            $match: {
-              status: "LOST",
-              closedAt: { $gte: startOfMonth },
-              ...(lostStage ? { stageId: lostStage._id } : {}),
-            },
-          },
-          { $count: "total" },
-        ],
-
-        // Pipeline value (open deals)
-        pipelineValue: [
-          { $match: { status: "OPEN" } },
-          { $group: { _id: null, totalValue: { $sum: "$value" } } },
-        ],
-
-        // Lead conversion rate (converted leads / total leads this month)
-        leadConversion: [
-          {
-            $match: {
-              createdAt: { $gte: startOfMonth },
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: 1 },
-              converted: {
-                $sum: { $cond: [{ $eq: ["$status", "CONVERTED"] }, 1, 0] },
-              },
-            },
-          },
-        ],
-
-        // Win rate (won / (won + lost) for closed deals this month)
-        winRate: [
-          {
-            $match: {
-              status: { $in: ["WON", "LOST"] },
-              closedAt: { $gte: startOfMonth },
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: 1 },
-              won: { $sum: { $cond: [{ $eq: ["$status", "WON"] }, 1, 0] } },
-            },
-          },
-        ],
-
-        // Overdue tasks count
-        overdueTasks: [
-          { $match: { organizationId } },
-          {
-            $match: {
-              status: { $in: ["TODO", "IN_PROGRESS"] },
-              dueAt: { $lt: now },
-            },
-          },
-          { $count: "total" },
-        ],
-
-        // Recent activity (10 items)
-        recentActivity: [
-          { $match: { organizationId, occurredAt: { $gte: thirtyDaysAgo } } },
-          { $sort: { occurredAt: -1 } },
-          { $limit: 10 },
-          {
-            $project: {
-              title: 1,
-              occurredAt: 1,
-              type: 1,
-              metadata: 1,
-            },
-          },
-        ],
-      },
-    },
-  ]);
+  const [aggregationResult] = await DealModel.aggregate(
+    buildDashboardAggregationPipeline({
+      organizationId,
+      now,
+      startOfMonth,
+      thirtyDaysAgo,
+      stageIds,
+      wonStageId: wonStage?._id,
+      lostStageId: lostStage?._id,
+      leadCollection: LeadModel.collection.name,
+      taskCollection: TaskModel.collection.name,
+      activityCollection: ActivityModel.collection.name,
+    }),
+  );
 
   // Process pipeline summary
   const pipelineSummary = (

@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { TenantRepository } from "@/db/tenant-repository";
 import {
   type Company,

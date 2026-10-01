@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Command, Loader2, Search, X } from "lucide-react";
+import { ChevronRight, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/cn";
@@ -291,17 +291,18 @@ export function CommandPalette() {
           </div>
 
           {/* Results */}
+          {/* ARIA combobox popup: the trigger owns `aria-activedescendant`, so
+              this container is a listbox and each row is an option. The headings
+              are presentational separators, labelled by their own text. */}
           <div
             id="command-palette-results"
             className="max-h-[500px] overflow-y-auto"
-            // biome-ignore lint/a11y/useSemanticElements: a rich listbox has no HTML equivalent
             role="listbox"
             aria-label="Commands and search results"
           >
             {/* Commands */}
             {filteredCommands.length > 0 && (
-              // biome-ignore lint/a11y/useSemanticElements: a listbox group is not a form-control group
-              <div role="group" aria-label="Commands">
+              <div role="presentation">
                 <div
                   className="px-4 py-2 text-xs font-semibold tracking-[0.06em] uppercase text-ink-500 dark:text-ink-400 border-b border-line"
                   id="commands-heading"
@@ -363,8 +364,7 @@ export function CommandPalette() {
 
             {/* Search Results */}
             {searchResults.length > 0 && (
-              // biome-ignore lint/a11y/useSemanticElements: a listbox group is not a form-control group
-              <div role="group" aria-label="Search results">
+              <div role="presentation">
                 <div
                   className="px-4 py-2 text-xs font-semibold tracking-[0.06em] uppercase text-ink-500 dark:text-ink-400 border-b border-line flex items-center gap-2"
                   id="results-heading"
@@ -437,9 +437,9 @@ export function CommandPalette() {
             {filteredCommands.length === 0 &&
               searchResults.length === 0 &&
               !searchLoading && (
-                <output className="px-4 py-8 block text-center text-ink-500 dark:text-ink-400">
+                <p className="px-4 py-8 block text-center text-ink-500 dark:text-ink-400">
                   No results found
-                </output>
+                </p>
               )}
           </div>
         </div>

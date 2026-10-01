@@ -1,5 +1,6 @@
 import mongoose, { type Model, Schema, type Types } from "mongoose";
 import { type AuditFields, auditFields } from "@/db/mixins/audit-fields";
+import { type SoftDeleteFields, softDelete } from "@/db/mixins/soft-delete";
 
 /**
  * A saved view (filter/sort/column configuration) for an entity type.
@@ -20,7 +21,7 @@ export const SAVED_VIEW_ENTITY_TYPES = [
 
 export type SavedViewEntityType = (typeof SAVED_VIEW_ENTITY_TYPES)[number];
 
-export interface SavedView extends AuditFields {
+export interface SavedView extends AuditFields, SoftDeleteFields {
   _id: Types.ObjectId;
   organizationId: Types.ObjectId;
   userId: Types.ObjectId;
@@ -66,6 +67,7 @@ const savedViewSchema = new Schema<SavedView>(
     columns: {
       type: [
         {
+          _id: false,
           key: { type: String, required: true },
           width: { type: Number, min: 50, max: 600 },
         },
@@ -78,6 +80,7 @@ const savedViewSchema = new Schema<SavedView>(
 );
 
 savedViewSchema.plugin(auditFields());
+savedViewSchema.plugin(softDelete({ scopeField: "organizationId" }));
 
 // Unique per organisation + user + entity type + name
 savedViewSchema.index(

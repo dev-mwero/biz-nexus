@@ -49,6 +49,10 @@ export class TagService {
 
   /** Create a new tag. */
   async create(input: CreateTagInput): Promise<Tag> {
+    if (!this.repo.organizationId.equals(input.organizationId)) {
+      throw new TagError("RECORD_NOT_FOUND", "Tag not found.");
+    }
+
     const existing = await this.repo.findByName(input.name);
     if (existing) {
       throw new TagError(
@@ -150,11 +154,24 @@ export class TagService {
   async merge(
     input: MergeTagsInput,
   ): Promise<{ targetTag: Tag; movedCount: number }> {
+    if (!this.repo.organizationId.equals(input.organizationId)) {
+      throw new TagError("RECORD_NOT_FOUND", "One or both tags not found.");
+    }
+
     return withTransaction(async (session) => {
-      const [sourceTag, targetTag] = await Promise.all([
-        this.repo.findById(input.sourceTagId),
-        this.repo.findById(input.targetTagId),
-      ]);
+      // Every read carries the session. A read without one runs outside the
+      // transaction and cannot see the writes below, so the tag returned at the
+      // end would be the tag as it was before the merge moved anything onto it.
+      //
+      // Sequentially, not in `Promise.all`: a session carries one operation at
+      // a time, and two concurrent operations on it race to advance the same
+      // transaction number, which the server rejects.
+      const sourceTag = await this.repo.findById(input.sourceTagId, {
+        session,
+      });
+      const targetTag = await this.repo.findById(input.targetTagId, {
+        session,
+      });
 
       if (!sourceTag || !targetTag) {
         throw new TagError("RECORD_NOT_FOUND", "One or both tags not found.");
@@ -180,8 +197,8 @@ export class TagService {
       interface ModelWithTags {
         updateMany: (
           filter: Record<string, unknown>,
-          update: Record<string, unknown>,
-          options: { session: any },
+          update: Array<Record<string, unknown>>,
+          options: { session: any; updatePipeline: true },
         ) => Promise<{ modifiedCount: number }>;
       }
 
@@ -198,23 +215,41 @@ export class TagService {
       for (const { model, field } of modelsToUpdate) {
         const result = await model.updateMany(
           { organizationId: input.organizationId, [field]: input.sourceTagId },
-          {
-            $pull: { [field]: input.sourceTagId },
-            $addToSet: { [field]: input.targetTagId },
-          },
-          { session },
+          [
+            {
+              $set: {
+                [field]: {
+                  $setUnion: [
+                    {
+                      $setDifference: [`$${field}`, [input.sourceTagId]],
+                    },
+                    [input.targetTagId],
+                  ],
+                },
+              },
+            },
+          ],
+          { session, updatePipeline: true },
         );
         totalMoved += result.modifiedCount;
       }
 
       // Update usage counts
-      await this.repo.incrementUsage(input.targetTagId, sourceTag.usageCount);
-      await this.repo.incrementUsage(input.sourceTagId, -sourceTag.usageCount);
+      const movedUsage = Math.max(sourceTag.usageCount, totalMoved);
+      await this.repo.incrementUsage(input.targetTagId, movedUsage, {
+        session,
+      });
+      await this.repo.incrementUsage(input.sourceTagId, -sourceTag.usageCount, {
+        session,
+      });
 
       // Soft delete source tag
-      await this.repo.softDeleteById(input.sourceTagId);
+      await this.repo.softDeleteById(input.sourceTagId, { session });
 
-      const updatedTarget = await this.repo.findById(input.targetTagId);
+      // In the session, so it observes the usage-count write above.
+      const updatedTarget = await this.repo.findById(input.targetTagId, {
+        session,
+      });
       if (!updatedTarget) {
         throw new TagError(
           "RECORD_NOT_FOUND",

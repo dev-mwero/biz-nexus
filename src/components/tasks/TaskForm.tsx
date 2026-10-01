@@ -1,7 +1,6 @@
 "use client";
 
 import { Calendar, Link2, User, X } from "lucide-react";
-import { Types } from "mongoose";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
@@ -27,8 +26,10 @@ import {
   TASK_STATUSES,
   type TaskPriority,
   type TaskStatus,
-} from "@/modules/tasks/task.model";
+} from "@/modules/tasks/task.constants";
 import { cn } from "@/shared/lib/cn";
+
+const OBJECT_ID_PATTERN = /^[0-9a-fA-F]{24}$/;
 
 /**
  * A related-entity row as held in form state. `rowKey` is client-only identity
@@ -167,7 +168,7 @@ export function TaskForm({
     if (
       newRelatedType &&
       newRelatedId &&
-      Types.ObjectId.isValid(newRelatedId)
+      OBJECT_ID_PATTERN.test(newRelatedId)
     ) {
       setRelated((prev) => [
         ...prev,

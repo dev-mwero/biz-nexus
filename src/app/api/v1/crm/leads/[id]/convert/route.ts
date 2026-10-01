@@ -38,7 +38,9 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("leads.convert");
 
-    const id = pathParam(request);
+    // `fromEnd: 2` — this path ends in a static segment (`route.ts`), so the
+    // default of 1 would read that literal as the record id.
+    const id = pathParam(request, 2);
     const body = await request.json();
     const input = convertLeadSchema.parse(body);
 

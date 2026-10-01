@@ -74,6 +74,7 @@ object disagree.
 | 409 | `ORGANIZATION_CREATION_FAILED` | Could not create the organisation |
 | 409 | `ROLE_PROVISIONING_FAILED` | System roles already provisioned |
 | 409 | `OWNER_REQUIRED` | Would leave the organisation with no active owner |
+| 409 | `INVALID_STATE` | Record is in a state that forbids the action — merged contact, already-converted lead, already-closed deal |
 | 410 | `INVITATION_EXPIRED` | Past its seven-day window |
 | 410 | `INVITATION_USED` | Already accepted |
 | 410 | `INVITATION_REVOKED` | Revoked by an administrator |
@@ -150,8 +151,7 @@ Content-Type: application/json
 |---|---|---|---|
 | `GET` | `/activities` | `activities.read` | Organisation feed, filterable by `type`, `actorId`, `ownerId`, `entityType`, `entityId`, `before` |
 | `POST` | `/activities` | `activities.create` | Create note, call, or meeting. Body: `{ entityType, entityId, type: "NOTE"\|"CALL"\|"MEETING", title, body?, direction?, durationSeconds?, occurredAt? }` |
-| `GET` | `/activities/:id` | `activities.read` | Get a single activity |
-| `DELETE` | `/activities/:id` | `activities.create` | Delete own activity, or `settings.manage` |
+| `DELETE` | `/activities/:id` | `activities.delete` | Delete own activity |
 | `GET` | `/activities/feed` | `activities.read` | Cursor-paginated organisation feed |
 
 ### Activity feed cursor pagination
@@ -188,9 +188,11 @@ Base path: `/crm/companies`
 | `POST` | `/crm/companies` | `companies.create` |
 | `GET` | `/crm/companies/:id` | `companies.read` |
 | `PATCH` | `/crm/companies/:id` | `companies.update` |
+| `POST` | `/crm/companies/:id/restore` | `companies.update` | Restore a soft-deleted company |
 | `DELETE` | `/crm/companies/:id` | `companies.delete` — soft delete |
+| `GET` | `/crm/companies/:id/contacts` | `contacts.read` | List contacts for a company |
 
-**Filters:** `status`, `industry`, `ownerId`, `tag[]`, `createdFrom`, `createdTo`
+**Filters:** `status`, `industry`, `ownerId`, `tag` (repeat the parameter, or comma-separate), `createdFrom`, `createdTo`
 
 ---
 
@@ -204,10 +206,11 @@ Base path: `/crm/contacts`
 | `POST` | `/crm/contacts` | `contacts.create` |
 | `GET` | `/crm/contacts/:id` | `contacts.read` |
 | `PATCH` | `/crm/contacts/:id` | `contacts.update` |
+| `POST` | `/crm/contacts/:id/restore` | `contacts.update` | Restore a soft-deleted contact |
 | `DELETE` | `/crm/contacts/:id` | `contacts.delete` — soft delete |
 | `POST` | `/crm/contacts/:id/merge` | `contacts.update` | Merge into another contact |
 
-**Filters:** `status`, `companyId`, `ownerId`, `tag[]`, `createdFrom`, `createdTo`, `hasEmail`
+**Filters:** `status`, `companyId`, `ownerId`, `tag` (repeat the parameter, or comma-separate), `createdFrom`, `createdTo`, `hasEmail`
 
 ---
 
@@ -221,6 +224,7 @@ Base path: `/crm/leads`
 | `POST` | `/crm/leads` | `leads.create` |
 | `GET` | `/crm/leads/:id` | `leads.read` |
 | `PATCH` | `/crm/leads/:id` | `leads.update` |
+| `POST` | `/crm/leads/:id/restore` | `leads.update` | Restore a soft-deleted lead |
 | `DELETE` | `/crm/leads/:id` | `leads.delete` — soft delete |
 | `POST` | `/crm/leads/:id/convert` | `leads.convert` | Convert to contact, optionally company and deal |
 | `GET` | `/crm/leads/:id/convert-preview` | `leads.read` | Preview conversion without executing |
@@ -282,7 +286,7 @@ Base path: `/crm/field-definitions`
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/crm/field-definitions?entityType=<type>` | `fieldDefinitions.read` |
+| `GET` | `/crm/field-definitions` | `fieldDefinitions.read` | List definitions; filter by `entityType` |
 | `POST` | `/crm/field-definitions` | `fieldDefinitions.create` |
 | `GET` | `/crm/field-definitions/:id` | `fieldDefinitions.read` |
 | `PATCH` | `/crm/field-definitions/:id` | `fieldDefinitions.update` |
@@ -298,7 +302,7 @@ Base path: `/crm/saved-views`
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/crm/saved-views?entityType=<type>` | `savedViews.read` |
+| `GET` | `/crm/saved-views` | `savedViews.read` | List views; filter by `entityType` |
 | `POST` | `/crm/saved-views` | `savedViews.create` |
 | `GET` | `/crm/saved-views/:id` | `savedViews.read` |
 | `PATCH` | `/crm/saved-views/:id` | owner only, or `isShared` and `savedViews.update` |
@@ -328,7 +332,7 @@ Base path: `/deals`
 | `GET` | `/deals/summary` | `deals.read` | Aggregated pipeline summary |
 
 **Filters:** `status`, `pipelineId`, `stageId`, `companyId`, `contactId`, `ownerId`,
-`valueMin`, `valueMax`, `closingFrom`, `closingTo`, `tag[]`
+`valueMin`, `valueMax`, `closingFrom`, `closingTo`, `tag` (repeat the parameter, or comma-separate)
 
 ### Deal stage move
 
@@ -478,12 +482,14 @@ One convention across every collection. Never a bespoke parameter set.
 
 Resource-specific filters, all optional, all validated:
 
+`*` marks a filter that may be given more than once.
+
 ```
-contacts      status, companyId, ownerId, tag[], createdFrom, createdTo, hasEmail
-companies     status, industry, ownerId, tag[], createdFrom, createdTo
+contacts      status, companyId, ownerId, tag*, createdFrom, createdTo, hasEmail
+companies     status, industry, ownerId, tag*, createdFrom, createdTo
 leads         status, source, ownerId, scoreMin, scoreMax, createdFrom, createdTo
 deals         status, pipelineId, stageId, companyId, contactId, ownerId,
-              valueMin, valueMax, closingFrom, closingTo, tag[]
+              valueMin, valueMax, closingFrom, closingTo, tag*
 tasks         status, priority, assigneeId, dueFrom, dueTo, overdue, relatedEntityType,
               relatedEntityId, completedFrom, completedTo
 activities     type, actorId, ownerId, entityType, entityId, before

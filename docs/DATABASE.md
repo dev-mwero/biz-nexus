@@ -501,6 +501,7 @@ appears in someone's timeline.
 | `{ organizationId: 1, assigneeId: 1, status: 1 }` | "My tasks" by status |
 | `{ organizationId: 1, "related.entityType": 1, "related.entityId": 1 }` | Tasks on a record page (multikey) |
 | `{ organizationId: 1, createdAt: -1 }` | "Created by me", newest first |
+| `{ organizationId: 1, title: "text", description: "text" }` | Task list search, task service `search`, global search. The only text index on the collection — MongoDB allows one. |
 
 ---
 

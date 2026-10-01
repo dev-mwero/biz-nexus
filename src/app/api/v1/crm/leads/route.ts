@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -18,7 +19,13 @@ const LEAD_STATUSES = [
 const contactSnapshotSchema = z.object({
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
-  email: z.string().email().optional().nullable(),
+  // Required, and required *here* rather than left to the database. The schema
+  // marks it `required: true`, so an optional field in this Zod object passes
+  // validation and then fails on insert as an unhandled `ValidationError` — a
+  // 500 for a request that is simply missing something the client can be told
+  // about. The snapshot is the lead's only record of the person it came from,
+  // and conversion needs an address to make a contact from.
+  email: z.string().email(),
   phone: z.string().max(50).optional().nullable(),
   companyName: z.string().max(160).optional().nullable(),
 });
@@ -61,7 +68,7 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("leads.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
 
   const service = new LeadService(context.organization._id, context.user._id);
 
@@ -82,14 +89,14 @@ export const GET = withApi(async (request: Request) => {
     pageSize: query.pageSize,
   });
 
-  return ok({
-    data: result.items,
-    meta: pageMeta({
+  return ok(
+    result.items,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: result.total,
     }),
-  });
+  );
 });
 
 /**

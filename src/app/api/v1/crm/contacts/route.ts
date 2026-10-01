@@ -5,6 +5,7 @@ import {
   ContactService,
   type CreateContactInput,
 } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -63,7 +64,9 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("contacts.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(
+    queryFromSearchParams(searchParams, ["tag"]),
+  );
 
   const service = new ContactService(
     context.organization._id,
@@ -89,14 +92,14 @@ export const GET = withApi(async (request: Request) => {
     pageSize: query.pageSize,
   });
 
-  return ok({
-    data: result.items,
-    meta: pageMeta({
+  return ok(
+    result.items,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: result.total,
     }),
-  });
+  );
 });
 
 /**

@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 /**
  * Per-file test setup.
  *
@@ -19,6 +21,15 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-bytes-long";
 process.env.MAIL_DRIVER = "console";
 process.env.MAIL_FROM = "BizNexus Test <no-reply@test.local>";
 process.env.RATELIMIT_DRIVER = "memory";
+
+// Deepin is not recognised by mongodb-memory-server's distro detector. Prefer
+// an installed mongod where available; this also avoids downloading a binary in
+// offline development and CI environments.
+const systemMongoBinary =
+  process.env.MONGOMS_SYSTEM_BINARY ?? "/usr/bin/mongod";
+if (existsSync(systemMongoBinary)) {
+  process.env.MONGOMS_SYSTEM_BINARY = systemMongoBinary;
+}
 
 // MONGODB_URI is set by tests/global-setup.ts and deliberately not defaulted
 // here. A missing value should fail loudly rather than silently connect to a

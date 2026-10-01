@@ -1,3 +1,6 @@
+import { passwordHash } from "@tests/support/auth-contract";
+import { memberWithout } from "@tests/support/crm-permission-member";
+import { callRoute } from "@tests/support/crm-route";
 import { Types } from "mongoose";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { connectToDatabase } from "@/db/connection";
@@ -6,14 +9,12 @@ import { CompanyService } from "@/modules/crm/company.service";
 import { ContactService } from "@/modules/crm/contact.service";
 import { TagModel } from "@/modules/crm/tag.model";
 import { SessionModel, UserModel } from "@/modules/identity";
-import { hashPassword } from "@/modules/identity/password";
 import { issueSession } from "@/modules/identity/session.service";
 import {
   createOrganization,
   MembershipModel,
   RoleModel,
 } from "@/modules/organizations";
-import { createAuthGuards } from "@/shared/auth/dal";
 
 const COMPANY_STATUSES = [
   "PROSPECT",
@@ -27,7 +28,7 @@ async function setupTestOrg() {
   const user = await UserModel.create({
     email: `test-${new Types.ObjectId()}@example.com`,
     name: "Test User",
-    passwordHash: await hashPassword("password"),
+    passwordHash: await passwordHash(),
   });
   const { organization } = await createOrganization({
     name: "Test Org",
@@ -119,25 +120,17 @@ describe("Company API Integration", () => {
     org = await setupTestOrg();
   });
 
-  const createRequest = async (
+  /**
+   * `createRequest(method, path, body, token)` — the signature these suites
+   * were written against, now dispatching to the real route handler instead of
+   * a dev server on port 3000 that nothing starts.
+   */
+  const createRequest = (
     method: string,
     path: string,
-    body?: any,
+    body?: unknown,
     token?: string,
-  ) => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (token) headers["Cookie"] = `session=${token}`;
-
-    const res = await fetch(`http://localhost:3000${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    return res;
-  };
+  ) => callRoute(path, { method, body, token });
 
   describe("GET /api/v1/crm/companies", () => {
     it("lists companies with pagination", async () => {
@@ -195,7 +188,7 @@ describe("Company API Integration", () => {
       const otherUser = await UserModel.create({
         email: `other-${new Types.ObjectId()}@example.com`,
         name: "Other User",
-        passwordHash: await hashPassword("password"),
+        passwordHash: await passwordHash(),
       });
 
       await createCompany(org.organization._id, org.user._id, {
@@ -334,28 +327,11 @@ describe("Company API Integration", () => {
     });
 
     it("returns 403 without companies.read permission", async () => {
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "companies.read",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "GET",
@@ -523,39 +499,32 @@ describe("Company API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400. The body parsed; the id it names is not a company. That
+      // distinction is the whole point of the two codes — a 400 tells the client
+      // its request is unreadable, and here the request is perfectly readable
+      // and the reference is what is wrong. See `VALIDATION_FAILED` in
+      // `app-error.ts`, which names this exact case.
+      expect(res.status).toBe(422);
     });
 
     it("returns 403 without companies.create permission", async () => {
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      // The member is in the same organisation as `org` and holds a real
+      // session. The earlier version of this test used a viewer from a
+      // *different* organization, so it was asserting tenant isolation and
+      // calling it a permission check — any 200 would have proved nothing about
+      // `companies.create`.
+      const { token, userId } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "companies.create",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "POST",
         "/api/v1/crm/companies",
         {
           name: "Test Company",
-          ownerId: viewer._id.toString(),
+          ownerId: userId.toString(),
         },
         token,
       );
@@ -594,28 +563,11 @@ describe("Company API Integration", () => {
     it("returns 403 without companies.read permission", async () => {
       const company = await createCompany(org.organization._id, org.user._id);
 
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "companies.read",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "GET",
@@ -732,7 +684,9 @@ describe("Company API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422 again: the request parsed and named a real company, and the answer
+      // is that this particular parent is not a legal one for this child.
+      expect(res.status).toBe(422);
     });
 
     it("removes parent when set to null", async () => {
@@ -759,28 +713,11 @@ describe("Company API Integration", () => {
     it("returns 403 without companies.update permission", async () => {
       const company = await createCompany(org.organization._id, org.user._id);
 
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "companies.update",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "PATCH",
@@ -853,33 +790,11 @@ describe("Company API Integration", () => {
       const company = await createCompany(org.organization._id, org.user._id);
 
       // Create member without delete permission
-      const member = await UserModel.create({
-        email: `member-${new Types.ObjectId()}@example.com`,
-        name: "Member",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "MEMBER",
+        without: "companies.delete",
       });
-      const { organization } = await createOrganization({
-        name: "Member Org",
-        ownerId: member._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "MEMBER",
-      });
-      await RoleModel.updateOne(
-        { _id: role!._id },
-        { $pull: { permissions: "companies.delete" } },
-      );
-
-      const { token, session } = await issueSession({ userId: member._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: member._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "DELETE",
@@ -961,28 +876,11 @@ describe("Company API Integration", () => {
     it("returns 403 without contacts.read permission", async () => {
       const company = await createCompany(org.organization._id, org.user._id);
 
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "contacts.read",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "GET",

@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
-import { AppError } from "@/shared/errors/app-error";
+import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 import { CompanyRepository } from "./company.repository";
 import {
@@ -12,7 +12,7 @@ import { ContactRepository } from "./contact.repository";
 import { FieldDefinitionService } from "./field-definition.service";
 
 export class ContactError extends AppError {
-  constructor(code: string, message: string, options?: { cause?: unknown }) {
+  constructor(code: ErrorCode, message: string, options?: { cause?: unknown }) {
     super(code, { message, cause: options?.cause });
     this.name = "ContactError";
   }
@@ -119,7 +119,7 @@ export class ContactService {
       const existing = await this.repo.findByPrimaryEmail(primaryEmail);
       if (existing) {
         throw new ContactError(
-          "CONFLICT",
+          "SLUG_CONFLICT",
           `A contact with email "${primaryEmail}" already exists.`,
         );
       }
@@ -207,7 +207,7 @@ export class ContactService {
         const duplicate = await this.repo.findByPrimaryEmail(primaryEmail);
         if (duplicate && !duplicate._id.equals(contactId)) {
           throw new ContactError(
-            "CONFLICT",
+            "SLUG_CONFLICT",
             `A contact with email "${primaryEmail}" already exists.`,
           );
         }
@@ -300,10 +300,20 @@ export class ContactService {
     actorId: Types.ObjectId,
   ): Promise<Contact> {
     return withTransaction(async (session) => {
-      const [source, target] = await Promise.all([
-        this.repo.findById(sourceContactId),
-        this.repo.findById(targetContactId),
-      ]);
+      // Every read in here carries the session. A read without one is issued
+      // outside the transaction, so it cannot see this transaction's own
+      // uncommitted writes — and the read that returns the merged contact is
+      // exactly the read that would return the contact as it was *before* the
+      // merge. The write lands; the response describes the old record.
+      //
+      // Sequentially, not in `Promise.all`: a session carries one operation at
+      // a time, and two concurrent operations on it race to advance the same
+      // transaction number. The server refuses the second with "Only servers
+      // in a sharded cluster can start a new transaction at the active
+      // transaction number", which is a driver-level error that says nothing
+      // about the merge.
+      const source = await this.repo.findById(sourceContactId, { session });
+      const target = await this.repo.findById(targetContactId, { session });
 
       if (!source || !target) {
         throw new ContactError(
@@ -387,7 +397,11 @@ export class ContactService {
 
       // Update activities to point to target (optional, for MVP we leave as-is)
 
-      const finalTarget = await this.repo.findById(targetContactId);
+      // In the session, so it observes the write above. See the note on the
+      // opening read.
+      const finalTarget = await this.repo.findById(targetContactId, {
+        session,
+      });
       if (!finalTarget) {
         throw new ContactError(
           "RECORD_NOT_FOUND",

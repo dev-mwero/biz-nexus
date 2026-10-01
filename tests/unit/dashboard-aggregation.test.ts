@@ -1,20 +1,16 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
+import mongoose from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { ActivityModel } from "@/modules/activities";
 import { DealModel, TaskModel } from "@/modules/crm";
 import { PipelineModel } from "@/modules/pipelines";
 
-let mongoServer: MongoMemoryServer;
-
 beforeEach(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri();
   await connectToDatabase();
 });
 
 afterEach(async () => {
-  await mongoServer.stop();
+  await mongoose.connection.dropDatabase();
   vi.clearAllMocks();
 });
 

@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { CompanyModel } from "@/modules/crm/company.model";
 import {
@@ -50,7 +50,7 @@ beforeAll(async () => {
   await connectToDatabase();
 });
 
-afterEach(async () => {
+afterAll(async () => {
   await Promise.all([
     CompanyModel.deleteMany({}),
     UserModel.deleteMany({}),

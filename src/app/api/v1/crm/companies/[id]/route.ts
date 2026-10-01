@@ -122,13 +122,10 @@ export const PATCH = withApi(async (request: Request) => {
       });
     }
     // A domain is the company's unique identifier, so the refusal is the same
-    // kind of refusal as a name that is taken.
-    if (error instanceof CompanyError && error.code === "CONFLICT") {
-      throw new AppError("SLUG_CONFLICT", { message: error.message });
-    }
-    if (error instanceof CompanyError && error.code === "VALIDATION_FAILED") {
-      throw new AppError("VALIDATION_FAILED", { message: error.message });
-    }
+    // kind of refusal as a name that is taken — the service already says so with
+    // `SLUG_CONFLICT`, a 409. Every other code it throws is already an
+    // `AppError` with a status from the catalogue, so it propagates unchanged
+    // rather than being restated here and drifting from the table.
     throw error;
   }
 });
@@ -157,46 +154,10 @@ export const DELETE = withApi(async (request: Request) => {
         message: "Company not found.",
       });
     }
-    // Contacts or child companies still point at this one. It is a 409 rather
-    // than a 422 because the record is fine and the caller's plan for it is not;
-    // `SLUG_CONFLICT` is the catalogue's general-purpose 409 and carries this
-    // project's message, which is the part that says what to do about it.
-    if (error instanceof CompanyError && error.code === "CONFLICT") {
-      throw new AppError("SLUG_CONFLICT", { message: error.message });
-    }
+    // Contacts or child companies still point at this one, which the service
+    // reports as `INVALID_STATE` and which the catalogue already maps to 409.
+    // It propagates as-is: it is an `AppError` subclass, so rewriting it here
+    // would only be a chance to pick the wrong code.
     throw error;
   }
-});
-
-/**
- * POST /api/v1/crm/companies/:id/restore
- * Restore a soft-deleted company.
- * Permission: companies.update
- */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("companies.update");
-
-  const id = pathParam(request);
-
-  // The repository rather than the service: `restoreById` reaches rows the
-  // tenant scope hides, which is the whole point of a restore, and the service
-  // deliberately does not expose it. `restoreById` is scoped to the same
-  // organization, so a foreign id matches nothing and is a 404 rather than a
-  // write.
-  const repo = new CompanyRepository(
-    context.organization._id,
-    context.user._id,
-  );
-  const restored = await repo.restoreById(id);
-  if (restored.matchedCount === 0) {
-    throw new AppError("RECORD_NOT_FOUND", { message: "Company not found." });
-  }
-
-  const service = new CompanyService(
-    context.organization._id,
-    context.user._id,
-  );
-  const company = await service.getById(id);
-  return ok(company);
 });

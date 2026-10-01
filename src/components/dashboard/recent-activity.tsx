@@ -54,6 +54,15 @@ const ACTIVITY_LABELS: Record<string, string> = {
   TASK: "Task",
 };
 
+// Placeholder rows are a fixed-length skeleton, so the slot is the identity.
+const LOADING_ROW_KEYS = [
+  "skeleton-1",
+  "skeleton-2",
+  "skeleton-3",
+  "skeleton-4",
+  "skeleton-5",
+] as const;
+
 export function RecentActivity({
   activities,
   loading = false,
@@ -65,13 +74,9 @@ export function RecentActivity({
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div
-            className="space-y-3"
-            role="status"
-            aria-label="Loading recent activity"
-          >
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-start gap-3">
+          <div className="space-y-3" aria-live="polite" aria-atomic="true">
+            {LOADING_ROW_KEYS.map((key) => (
+              <div key={key} className="flex items-start gap-3">
                 <Skeleton className="h-8 w-8 rounded-lg flex-shrink-0" />
                 <div className="flex-1 space-y-1">
                   <Skeleton className="h-4 w-3/4" />
@@ -95,12 +100,13 @@ export function RecentActivity({
         {activities.length === 0 ? (
           <div
             className="text-center py-8 text-ink-500 dark:text-ink-400"
-            role="status"
+            aria-live="polite"
+            aria-atomic="true"
           >
             No recent activity
           </div>
         ) : (
-          <ul className="space-y-3" role="list" aria-label="Recent activity">
+          <ul className="space-y-3" aria-label="Recent activity">
             {activities.map((activity) => {
               const Icon = ACTIVITY_ICONS[activity.type] ?? MessageSquare;
               const typeLabel =

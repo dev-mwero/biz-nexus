@@ -40,7 +40,7 @@ import {
   TASK_STATUSES,
   type TaskPriority,
   type TaskStatus,
-} from "@/modules/tasks/task.model";
+} from "@/modules/tasks/task.constants";
 import { cn } from "@/shared/lib/cn";
 import { formatRelativeTime } from "@/shared/lib/format";
 import { TaskForm } from "./TaskForm";
@@ -425,7 +425,7 @@ export function TaskList({
           <Filter className="w-4 h-4 mr-2" />
           Filters
         </Button>
-        <Dialog open={false}>
+        <Dialog>
           <DialogTrigger
             render={
               <Button>

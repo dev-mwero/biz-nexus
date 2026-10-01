@@ -1,6 +1,14 @@
-import type { QueryOptions, Types } from "mongoose";
+import type { Model, QueryOptions, Types } from "mongoose";
 import { TenantRepository } from "@/db/tenant-repository";
 import { type Tag, TagModel } from "./tag.model";
+
+/**
+ * Derived from the model rather than imported, for the reason
+ * `tenant-repository.ts` gives: `mongoose` exports no `UpdateOptions` at
+ * runtime, and a hand-written options type drifts from the one the driver
+ * actually accepts — quietly, because a narrower type still compiles.
+ */
+type UpdateOptionsOf<T> = NonNullable<Parameters<Model<T>["updateOne"]>[2]>;
 
 /**
  * Tag repository.
@@ -40,9 +48,24 @@ export class TagRepository extends TenantRepository<Tag> {
       .exec();
   }
 
-  /** Increment usage count. */
-  async incrementUsage(tagId: Types.ObjectId | string, delta: number) {
-    return this.updateOne({ _id: tagId }, { $inc: { usageCount: delta } });
+  /**
+   * Increment usage count.
+   *
+   * The options parameter is not decoration. Called from inside a transaction
+   * during a tag merge, it is what keeps the `$inc` inside that transaction —
+   * dropped, the count commits even if the merge around it aborts, and the
+   * count drifts from the rows that actually carry the tag.
+   */
+  async incrementUsage(
+    tagId: Types.ObjectId | string,
+    delta: number,
+    options?: UpdateOptionsOf<Tag>,
+  ) {
+    return this.updateOne(
+      { _id: tagId },
+      { $inc: { usageCount: delta } },
+      options,
+    );
   }
 
   /** Find tags by IDs. */

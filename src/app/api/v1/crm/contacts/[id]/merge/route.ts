@@ -25,7 +25,10 @@ export const POST = withApi(async (request: Request) => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("contacts.update");
 
-  const id = pathParam(request);
+  // `fromEnd: 2` — this path ends in `/merge`, so the default of 1 would read
+  // the literal string "merge" as the contact's id. The `pathParam` contract
+  // names this case explicitly.
+  const id = pathParam(request, 2);
   const body = await request.json();
   const input = mergeContactsSchema.parse(body);
 

@@ -124,6 +124,8 @@ tasks             read  create  update  delete
 notifications     read  update
 auditLogs         read
 savedViews        read  create  update  delete
+dashboard         read
+search            read
 ```
 
 **Roles are per-organisation documents.** Four are provisioned on creation:

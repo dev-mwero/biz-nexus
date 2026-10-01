@@ -1,20 +1,17 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
-import type { Types } from "mongoose";
+import mongoose, { type Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { ActivityModel } from "@/modules/activities";
-import { DealModel, TaskModel } from "@/modules/crm";
+import { DealModel, LeadModel, TaskModel } from "@/modules/crm";
+import { buildDashboardAggregationPipeline } from "@/modules/dashboard/dashboard-aggregation";
 import { PipelineModel } from "@/modules/pipelines";
 
-let mongoServer: MongoMemoryServer;
 let orgId: Types.ObjectId;
 let userId: Types.ObjectId;
 let pipelineId: Types.ObjectId;
 let stageIds: Types.ObjectId[];
 
 beforeEach(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri();
   await connectToDatabase();
 
   const mongoose = await import("mongoose");
@@ -75,7 +72,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await mongoServer.stop();
+  await mongoose.connection.dropDatabase();
   vi.clearAllMocks();
 });
 
@@ -220,72 +217,21 @@ describe("Dashboard Round-trip", () => {
       },
     ]);
 
-    // Run the aggregation (same as in dashboard route)
-    const [result] = await DealModel.aggregate([
-      { $match: { organizationId: orgId } },
-      {
-        $facet: {
-          pipelineSummary: [
-            { $match: { status: "OPEN", stageId: { $in: stageIds } } },
-            {
-              $group: {
-                _id: "$stageId",
-                count: { $sum: 1 },
-                totalValue: { $sum: "$value" },
-              },
-            },
-            { $project: { stageId: "$_id", count: 1, totalValue: 1, _id: 0 } },
-          ],
-          wonThisMonth: [
-            {
-              $match: {
-                status: "WON",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[4],
-              },
-            },
-            { $count: "total" },
-          ],
-          lostThisMonth: [
-            {
-              $match: {
-                status: "LOST",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[5],
-              },
-            },
-            { $count: "total" },
-          ],
-          pipelineValue: [
-            { $match: { status: "OPEN" } },
-            { $group: { _id: null, totalValue: { $sum: "$value" } } },
-          ],
-          overdueTasks: [
-            { $match: { organizationId: orgId } },
-            {
-              $match: {
-                status: { $in: ["TODO", "IN_PROGRESS"] },
-                dueAt: { $lt: now },
-              },
-            },
-            { $count: "total" },
-          ],
-          recentActivity: [
-            {
-              $match: {
-                organizationId: orgId,
-                occurredAt: {
-                  $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-                },
-              },
-            },
-            { $sort: { occurredAt: -1 } },
-            { $limit: 10 },
-            { $project: { title: 1, occurredAt: 1, type: 1, metadata: 1 } },
-          ],
-        },
-      },
-    ]);
+    // Exercise the same aggregation builder used by the dashboard endpoint.
+    const [result] = await DealModel.aggregate(
+      buildDashboardAggregationPipeline({
+        organizationId: orgId,
+        now,
+        startOfMonth,
+        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+        stageIds,
+        wonStageId: stageIds[4],
+        lostStageId: stageIds[5],
+        leadCollection: LeadModel.collection.name,
+        taskCollection: TaskModel.collection.name,
+        activityCollection: ActivityModel.collection.name,
+      }),
+    );
 
     // Verify results
     expect(result.pipelineSummary).toHaveLength(2); // Two stages with open deals
@@ -300,71 +246,20 @@ describe("Dashboard Round-trip", () => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [result] = await DealModel.aggregate([
-      { $match: { organizationId: orgId } },
-      {
-        $facet: {
-          pipelineSummary: [
-            { $match: { status: "OPEN", stageId: { $in: stageIds } } },
-            {
-              $group: {
-                _id: "$stageId",
-                count: { $sum: 1 },
-                totalValue: { $sum: "$value" },
-              },
-            },
-            { $project: { stageId: "$_id", count: 1, totalValue: 1, _id: 0 } },
-          ],
-          wonThisMonth: [
-            {
-              $match: {
-                status: "WON",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[4],
-              },
-            },
-            { $count: "total" },
-          ],
-          lostThisMonth: [
-            {
-              $match: {
-                status: "LOST",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[5],
-              },
-            },
-            { $count: "total" },
-          ],
-          pipelineValue: [
-            { $match: { status: "OPEN" } },
-            { $group: { _id: null, totalValue: { $sum: "$value" } } },
-          ],
-          overdueTasks: [
-            { $match: { organizationId: orgId } },
-            {
-              $match: {
-                status: { $in: ["TODO", "IN_PROGRESS"] },
-                dueAt: { $lt: now },
-              },
-            },
-            { $count: "total" },
-          ],
-          recentActivity: [
-            {
-              $match: {
-                organizationId: orgId,
-                occurredAt: {
-                  $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-                },
-              },
-            },
-            { $sort: { occurredAt: -1 } },
-            { $limit: 10 },
-            { $project: { title: 1, occurredAt: 1, type: 1, metadata: 1 } },
-          ],
-        },
-      },
-    ]);
+    const [result] = await DealModel.aggregate(
+      buildDashboardAggregationPipeline({
+        organizationId: orgId,
+        now,
+        startOfMonth,
+        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+        stageIds,
+        wonStageId: stageIds[4],
+        lostStageId: stageIds[5],
+        leadCollection: LeadModel.collection.name,
+        taskCollection: TaskModel.collection.name,
+        activityCollection: ActivityModel.collection.name,
+      }),
+    );
 
     expect(result.pipelineSummary).toHaveLength(0);
     expect(result.wonThisMonth[0]?.total).toBeUndefined();
@@ -375,9 +270,51 @@ describe("Dashboard Round-trip", () => {
   });
 
   it("should correctly calculate lead conversion rate", async () => {
-    // This would require LeadModel which we can test similarly
-    // The aggregation logic is tested above
-    expect(true).toBe(true);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    await LeadModel.create([
+      {
+        organizationId: orgId,
+        title: "Converted lead",
+        contactSnapshot: {
+          firstName: "Alex",
+          lastName: "Example",
+          email: "alex@example.com",
+        },
+        source: "Website",
+        status: "CONVERTED",
+        ownerId: userId,
+      },
+      {
+        organizationId: orgId,
+        title: "New lead",
+        contactSnapshot: {
+          firstName: "Sam",
+          lastName: "Example",
+          email: "sam@example.com",
+        },
+        source: "Referral",
+        status: "NEW",
+        ownerId: userId,
+      },
+    ]);
+
+    const [result] = await DealModel.aggregate(
+      buildDashboardAggregationPipeline({
+        organizationId: orgId,
+        now,
+        startOfMonth,
+        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+        stageIds,
+        leadCollection: LeadModel.collection.name,
+        taskCollection: TaskModel.collection.name,
+        activityCollection: ActivityModel.collection.name,
+      }),
+    );
+
+    expect(result.leadConversion[0]?.total).toBe(2);
+    expect(result.leadConversion[0]?.converted).toBe(1);
   });
 
   it("should correctly calculate win rate", async () => {

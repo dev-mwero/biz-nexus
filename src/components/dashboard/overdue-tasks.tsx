@@ -28,6 +28,9 @@ const PRIORITY_LABELS: Record<string, string> = {
   LOW: "Low priority",
 };
 
+// Placeholder rows are a fixed-length skeleton, so the slot is the identity.
+const LOADING_ROW_KEYS = ["skeleton-1", "skeleton-2", "skeleton-3"] as const;
+
 export function OverdueTasks({
   count,
   tasks,
@@ -46,14 +49,10 @@ export function OverdueTasks({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div
-            className="space-y-3"
-            role="status"
-            aria-label="Loading overdue tasks"
-          >
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="space-y-3" aria-live="polite" aria-atomic="true">
+            {LOADING_ROW_KEYS.map((key) => (
               <div
-                key={i}
+                key={key}
                 className="flex items-center gap-3 p-3 bg-surface-sunken dark:bg-surface-raised rounded-lg"
               >
                 <Skeleton className="h-4 w-40" />
@@ -79,18 +78,20 @@ export function OverdueTasks({
           />
           Overdue Tasks
           {count > 0 && (
-            <span
-              className="ml-auto font-mono tabular-nums text-sm font-semibold text-attention"
-              aria-label={`${count} overdue tasks`}
-            >
+            <span className="ml-auto font-mono tabular-nums text-sm font-semibold text-attention">
               {count}
+              <span className="sr-only"> overdue tasks</span>
             </span>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {count === 0 ? (
-          <div className="text-center py-8" role="status">
+          <div
+            className="text-center py-8"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <Clock
               className="size-12 mx-auto text-ink-300 dark:text-ink-600 mb-2"
               aria-hidden="true"
@@ -98,7 +99,7 @@ export function OverdueTasks({
             <p className="text-ink-500 dark:text-ink-400">No overdue tasks</p>
           </div>
         ) : (
-          <ul className="space-y-2" role="list" aria-label="Overdue tasks">
+          <ul className="space-y-2" aria-label="Overdue tasks">
             {tasks.slice(0, 5).map((task) => (
               <li
                 key={task._id}
@@ -125,11 +126,11 @@ export function OverdueTasks({
                         task.priority === "LOW" &&
                           "bg-neutral-surface text-ink-500",
                       )}
-                      aria-label={
-                        PRIORITY_LABELS[task.priority] ?? task.priority
-                      }
                     >
-                      {task.priority}
+                      <span aria-hidden="true">{task.priority}</span>
+                      <span className="sr-only">
+                        {PRIORITY_LABELS[task.priority] ?? task.priority}
+                      </span>
                     </span>
                     {task.dueAt && (
                       <time dateTime={task.dueAt} className="font-mono">

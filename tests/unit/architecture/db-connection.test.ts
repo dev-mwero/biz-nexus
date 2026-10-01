@@ -55,13 +55,15 @@ const IGNORED_DIRS = new Set([
  * reason to use it when the filter is a single id and the repository already
  * has a scoped equivalent, so all three are listed.
  */
-// The leading dot matters: it matches a call on a model and not the
-// repository's own method declarations of the same name.
+// Mongoose models are PascalCase; repository instances are lower-camel case
+// and provide the tenant-scoped equivalent of these methods. Restricting the
+// match to model-shaped receivers avoids flagging safe repository calls while
+// still catching direct model access such as `ContactModel.findById(...)`.
 const UNSAFE_FILTER_METHODS = [
-  /\.\s*findByIdAndUpdate\s*\(/,
-  /\.\s*findByIdAndDelete\s*\(/,
-  /\.\s*findByIdAndReplace\s*\(/,
-  /\.\s*findById\s*\(/,
+  /\b[A-Z][A-Za-z0-9_]*\s*\.\s*findByIdAndUpdate\s*\(/,
+  /\b[A-Z][A-Za-z0-9_]*\s*\.\s*findByIdAndDelete\s*\(/,
+  /\b[A-Z][A-Za-z0-9_]*\s*\.\s*findByIdAndReplace\s*\(/,
+  /\b[A-Z][A-Za-z0-9_]*\s*\.\s*findById\s*\(/,
 ];
 
 function* walk(dir: string): Generator<string> {

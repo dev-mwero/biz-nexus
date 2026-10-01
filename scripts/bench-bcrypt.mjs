@@ -118,7 +118,7 @@ async function main() {
   }
 
   // Summary
-  console.log("\n" + "=".repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
   console.log("SUMMARY");
   console.log("=".repeat(60));
   console.log(`bcryptjs hash avg: ${bcryptjsResults.avg.toFixed(2)} ms`);

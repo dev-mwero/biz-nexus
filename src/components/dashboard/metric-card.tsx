@@ -4,7 +4,7 @@ import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/cn";
-import { formatCompactNumber, formatCurrency } from "@/shared/lib/format";
+import { formatCurrency } from "@/shared/lib/format";
 
 interface MetricCardProps {
   title: string;
@@ -41,7 +41,6 @@ export function MetricCard({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p
-              id={`metric-title-${title.replace(/\s+/g, "-").toLowerCase()}`}
               className={cn(
                 "text-2xs font-semibold tracking-[0.06em] uppercase text-ink-500 dark:text-ink-400",
                 compact && "text-[10px]",
@@ -53,7 +52,6 @@ export function MetricCard({
               <Skeleton className="h-8 w-3/4 mt-1" aria-hidden="true" />
             ) : (
               <p
-                aria-labelledby={`metric-title-${title.replace(/\s+/g, "-").toLowerCase()}`}
                 className={cn(
                   "font-mono font-semibold tabular-nums text-ink-900 dark:text-ink-50 mt-1",
                   compact && "text-xl",
@@ -70,8 +68,14 @@ export function MetricCard({
                   compact && "text-xs",
                   !compact && "text-sm",
                 )}
-                aria-label={`Trend: ${trendValue > 0 ? "up" : trendValue < 0 ? "down" : "unchanged"} ${Math.abs(trendValue).toFixed(1)}% ${trendLabel}`}
               >
+                <span className="sr-only">
+                  {trendValue > 0
+                    ? "Trending up"
+                    : trendValue < 0
+                      ? "Trending down"
+                      : "No change"}
+                </span>
                 {trendValue > 0 ? (
                   <TrendingUp
                     className={cn(

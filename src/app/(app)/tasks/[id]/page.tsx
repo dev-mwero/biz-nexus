@@ -2,22 +2,15 @@
 
 import {
   ArrowLeft,
-  Calendar,
-  Calendar as CalendarIcon,
   Check,
   CheckCircle,
   Edit,
   Flag,
   Loader2,
-  MessageSquare,
   MoreHorizontal,
-  Phone,
   RotateCcw,
   Trash2,
-  User,
 } from "lucide-react";
-import { Types } from "mongoose";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityComposer, ActivityTimeline } from "@/components/activities";
@@ -48,7 +41,8 @@ import {
   TASK_STATUSES,
   type TaskPriority,
   type TaskStatus,
-} from "@/modules/tasks/task.model";
+} from "@/modules/tasks/task.constants";
+import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
 import { formatDate, formatRelativeTime } from "@/shared/lib/format";
 
@@ -111,11 +105,12 @@ function getInitials(name?: string | null): string {
 export default function TaskDetailPage() {
   const params = useParams();
   const taskId = params.id as string;
+  const { data: session } = useSession();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [organizationId] = useState<string>(""); // In real app, from auth context
+  const organizationId = session?.activeOrganizationId ?? "";
 
   const fetchTask = useCallback(async () => {
     setLoading(true);
@@ -179,9 +174,11 @@ export default function TaskDetailPage() {
               <div className="h-6 w-1/4 bg-muted rounded" />
               <div className="h-4 w-1/2 bg-muted rounded" />
               <div className="grid grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="h-20 bg-muted rounded" />
-                ))}
+                {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
+                  (key) => (
+                    <div key={key} className="h-20 bg-muted rounded" />
+                  ),
+                )}
               </div>
             </div>
           </CardContent>
@@ -334,6 +331,7 @@ export default function TaskDetailPage() {
                         return (
                           <button
                             key={status}
+                            type="button"
                             onClick={() => handleUpdateStatus(status)}
                             disabled={task.status === status}
                             className={cn(
@@ -367,6 +365,7 @@ export default function TaskDetailPage() {
                       {TASK_PRIORITIES.map((priority) => (
                         <button
                           key={priority}
+                          type="button"
                           disabled={task.priority === priority}
                           className={cn(
                             "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
@@ -448,9 +447,9 @@ export default function TaskDetailPage() {
                   </CardHeader>
                   <CardContent className="p-0">
                     <ul className="divide-y">
-                      {task.related.map((rel, i) => (
+                      {task.related.map((rel) => (
                         <li
-                          key={i}
+                          key={`${rel.entityType}:${rel.entityId}`}
                           className="px-4 py-2 flex items-center gap-2 text-sm"
                         >
                           <span className="text-muted-foreground capitalize">

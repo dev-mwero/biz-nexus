@@ -120,7 +120,7 @@ const sortDirSchema = z.enum(["asc", "desc"]);
  * collection, but it is also a slow way to ask for the whole collection, and
  * the honest reading of an empty search box is that the caller did not search.
  */
-const searchSchema = z
+export const searchSchema = z
   .string()
   .max(MAX_SEARCH_LENGTH)
   .transform((term) => term.trim())

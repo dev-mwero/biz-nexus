@@ -69,7 +69,6 @@ const fieldDefinitionSchema = new Schema<FieldDefinition>(
       minlength: 1,
       maxlength: 40,
       trim: true,
-      lowercase: true,
       match: /^[a-z][a-z0-9_]*$/,
     },
     label: {
@@ -90,6 +89,15 @@ const fieldDefinitionSchema = new Schema<FieldDefinition>(
   },
   { timestamps: true, collection: "field_definitions" },
 );
+
+fieldDefinitionSchema.pre("validate", function validateOptions() {
+  if (
+    (this.type === "SELECT" || this.type === "MULTI_SELECT") &&
+    this.options.length === 0
+  ) {
+    this.invalidate("options", "Select fields require at least one option.");
+  }
+});
 
 fieldDefinitionSchema.plugin(auditFields());
 

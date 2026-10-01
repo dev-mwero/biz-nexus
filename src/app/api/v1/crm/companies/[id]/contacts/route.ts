@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CompanyService, ContactService } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -23,7 +24,7 @@ export const GET = withApi(async (request: Request) => {
 
   const id = pathParam(request, 2);
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
 
   // Verify company exists
   const companyService = new CompanyService(
@@ -44,12 +45,12 @@ export const GET = withApi(async (request: Request) => {
     limit: query.pageSize,
   });
 
-  return ok({
-    data: contacts,
-    meta: pageMeta({
+  return ok(
+    contacts,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: contacts.length,
     }),
-  });
+  );
 });

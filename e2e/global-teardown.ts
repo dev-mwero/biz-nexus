@@ -7,7 +7,7 @@ import type { FullConfig } from "@playwright/test";
  * - Any other cleanup needed after test run
  */
 export default async function globalTeardown(
-  config: FullConfig,
+  _config: FullConfig,
 ): Promise<void> {
   console.log("[Global Teardown] Starting E2E test environment cleanup...");
 

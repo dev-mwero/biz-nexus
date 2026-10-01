@@ -1,16 +1,12 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
-import type { Types } from "mongoose";
+import mongoose, { type Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { NotificationModel } from "@/modules/notifications";
 
-let mongoServer: MongoMemoryServer;
 let orgId: Types.ObjectId;
 let userId: Types.ObjectId;
 
 beforeEach(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri();
   await connectToDatabase();
 
   const mongoose = await import("mongoose");
@@ -19,7 +15,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await mongoServer.stop();
+  await mongoose.connection.dropDatabase();
   vi.clearAllMocks();
 });
 

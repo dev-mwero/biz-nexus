@@ -1,6 +1,6 @@
 import type { ClientSession, Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
-import { AppError } from "@/shared/errors/app-error";
+import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 import { CompanyModel } from "./company.model";
 import { CompanyRepository } from "./company.repository";
@@ -8,16 +8,16 @@ import { ContactModel } from "./contact.model";
 import { ContactRepository } from "./contact.repository";
 import { FieldDefinitionService } from "./field-definition.service";
 import {
-  type ContactSnapshot,
   LEAD_STATUS_TRANSITIONS,
   type Lead,
+  type LeadContactSnapshot,
   type LeadStatus,
 } from "./lead.model";
 import { LeadRepository } from "./lead.repository";
 import { TagModel } from "./tag.model";
 
 export class LeadError extends AppError {
-  constructor(code: string, message: string, options?: { cause?: unknown }) {
+  constructor(code: ErrorCode, message: string, options?: { cause?: unknown }) {
     super(code, { message, cause: options?.cause });
     this.name = "LeadError";
   }
@@ -28,7 +28,7 @@ export interface CreateLeadInput {
   actorId: Types.ObjectId;
   title: string;
   contactId?: Types.ObjectId;
-  contactSnapshot: ContactSnapshot;
+  contactSnapshot: LeadContactSnapshot;
   companyId?: Types.ObjectId;
   source: string;
   status?: LeadStatus;
@@ -254,7 +254,7 @@ export class LeadService {
 
     for (const field of fields) {
       const newValue = input[field];
-      const oldValue = (existing as Record<string, unknown>)[field];
+      const oldValue = existing[field];
       if (newValue !== undefined && !this.deepEqual(newValue, oldValue)) {
         changes[field] = newValue;
       }

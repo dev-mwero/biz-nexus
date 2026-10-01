@@ -1,6 +1,6 @@
 import type { Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
-import { AppError } from "@/shared/errors/app-error";
+import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 import {
   type Address,
@@ -12,7 +12,7 @@ import { CompanyRepository } from "./company.repository";
 import { FieldDefinitionService } from "./field-definition.service";
 
 export class CompanyError extends AppError {
-  constructor(code: string, message: string, options?: { cause?: unknown }) {
+  constructor(code: ErrorCode, message: string, options?: { cause?: unknown }) {
     super(code, { message, cause: options?.cause });
     this.name = "CompanyError";
   }
@@ -80,6 +80,10 @@ export class CompanyService {
 
   /** Create a new company. */
   async create(input: CreateCompanyInput): Promise<Company> {
+    if (!this.repo.organizationId.equals(input.organizationId)) {
+      throw new CompanyError("RECORD_NOT_FOUND", "Company not found.");
+    }
+
     // Validate custom fields
     if (input.customFields) {
       const validation = await this.fieldDefService.validateValues(
@@ -114,7 +118,7 @@ export class CompanyService {
       const existing = await this.repo.findByDomain(input.domain);
       if (existing) {
         throw new CompanyError(
-          "CONFLICT",
+          "SLUG_CONFLICT",
           `A company with domain "${input.domain}" already exists.`,
         );
       }
@@ -210,7 +214,7 @@ export class CompanyService {
       const domainCompany = await this.repo.findByDomain(normalized);
       if (domainCompany && !domainCompany._id.equals(companyId)) {
         throw new CompanyError(
-          "CONFLICT",
+          "SLUG_CONFLICT",
           `A company with domain "${normalized}" already exists.`,
         );
       }
@@ -241,10 +245,7 @@ export class CompanyService {
     for (const field of fields) {
       if (
         input[field] !== undefined &&
-        !this.deepEqual(
-          input[field],
-          (existing as Record<string, unknown>)[field],
-        )
+        !this.deepEqual(input[field], existing[field])
       ) {
         changes[field] = input[field];
       }
@@ -282,6 +283,13 @@ export class CompanyService {
       throw new CompanyError("RECORD_NOT_FOUND", "Company not found.");
     }
 
+    // `INVALID_STATE`, not `VALIDATION_FAILED`. Nothing about the request is
+    // malformed — the id is a real company and DELETE is a real method — the
+    // record is simply one that other records point at, so the caller's plan for
+    // it cannot be carried out. It is a 409 because repeating the identical
+    // request gets the identical answer; only the dependants change it. A 422
+    // would tell the client to fix the request, and there is nothing to fix.
+    //
     // Check for dependent contacts
     const { ContactModel } = await import("./contact.model");
     const contactCount = await ContactModel.countDocuments({
@@ -292,7 +300,7 @@ export class CompanyService {
 
     if (contactCount > 0) {
       throw new CompanyError(
-        "CONFLICT",
+        "INVALID_STATE",
         "Cannot delete a company with contacts. Reassign or delete contacts first.",
       );
     }
@@ -301,7 +309,7 @@ export class CompanyService {
     const children = await this.repo.findChildren(companyId);
     if (children.length > 0) {
       throw new CompanyError(
-        "CONFLICT",
+        "INVALID_STATE",
         "Cannot delete a company with child companies. Reassign or delete children first.",
       );
     }

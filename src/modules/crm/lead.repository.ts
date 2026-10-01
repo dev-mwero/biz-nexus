@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import type { PipelineStage, Types } from "mongoose";
 import { TenantRepository } from "@/db/tenant-repository";
 import {
   LEAD_STATUSES,
@@ -96,7 +96,7 @@ export class LeadRepository extends TenantRepository<Lead> {
    * Returns an object with counts for each status.
    */
   async getStatusFunnel(): Promise<Record<LeadStatus, number>> {
-    const pipeline = [
+    const pipeline: PipelineStage[] = [
       { $match: this.scope({}) },
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ];
@@ -128,7 +128,7 @@ export class LeadRepository extends TenantRepository<Lead> {
   async getSourceFunnel(): Promise<
     Array<{ source: string; status: LeadStatus; count: number }>
   > {
-    const pipeline = [
+    const pipeline: PipelineStage[] = [
       { $match: this.scope({}) },
       {
         $group: {

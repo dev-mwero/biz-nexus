@@ -4,32 +4,32 @@ import { connectToDatabase } from "@/db/connection";
 import {
   COMPANY_STATUSES,
   type Company,
-  type CompanyStatus,
   CompanyModel,
+  type CompanyStatus,
   companySchemaDefinition,
 } from "@/modules/crm/company.model";
 import {
   CONTACT_STATUSES,
   type Contact,
-  type ContactStatus,
   ContactModel,
+  type ContactStatus,
   contactSchemaDefinition,
 } from "@/modules/crm/contact.model";
 import {
   FIELD_ENTITY_TYPES,
   FIELD_TYPES,
   type FieldDefinition,
-  type FieldEntityType,
   FieldDefinitionModel,
-  fieldDefinitionSchemaDefinition,
+  type FieldEntityType,
   type FieldType,
+  fieldDefinitionSchemaDefinition,
 } from "@/modules/crm/field-definition.model";
 import {
   LEAD_STATUS_TRANSITIONS,
   LEAD_STATUSES,
   type Lead,
-  type LeadStatus,
   LeadModel,
+  type LeadStatus,
   leadSchemaDefinition,
 } from "@/modules/crm/lead.model";
 import {
@@ -329,7 +329,9 @@ describe("CRM Models", () => {
       expect(view.name).toBe("My View");
       expect(view.filters).toEqual({ status: "CUSTOMER" });
       expect(view.sort).toBe("-createdAt");
-      expect(view.columns).toEqual([{ key: "name", width: 200 }]);
+      expect(view.columns.map(({ key, width }) => ({ key, width }))).toEqual([
+        { key: "name", width: 200 },
+      ]);
       expect(view.isShared).toBe(false);
     });
 

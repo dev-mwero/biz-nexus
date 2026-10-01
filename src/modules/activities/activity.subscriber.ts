@@ -87,7 +87,13 @@ export function registerActivitySubscribers(): () => void {
         organizationId: event.organizationId,
         type: "TASK",
         title: taskCompletedTitle(event.taskTitle, null), // assigneeName not available here
-        occurredAt: event.occurredAt ?? new Date(),
+        // `task.completed` carries no `occurredAt`, unlike `deal.stage_changed`,
+        // so there is no event time to prefer and `new Date()` is the only
+        // answer. That means a *replayed* task.completed is filed as having just
+        // happened. The fix belongs to the event contract, not here: add
+        // `occurredAt` to the `task.completed` payload in task.events.ts and
+        // pass it through here, as `deal.stage_changed` does.
+        occurredAt: new Date(),
         actorId: event.completedBy,
         ownerId: event.completedBy,
         subjects,

@@ -4,6 +4,7 @@ import {
   FieldDefinitionError,
   FieldDefinitionService,
 } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -63,7 +64,7 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("fieldDefinitions.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
 
   const service = new FieldDefinitionService(
     context.organization._id,

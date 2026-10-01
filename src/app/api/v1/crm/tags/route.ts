@@ -7,6 +7,7 @@ import {
   TagService,
   type UpdateTagInput,
 } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -103,34 +104,34 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("tags.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
 
   const service = new TagService(context.organization._id, context.user._id);
 
   if (query.q) {
     const tags = await service.search(query.q, query.pageSize);
-    return ok({
-      data: tags,
-      meta: pageMeta({
+    return ok(
+      tags,
+      pageMeta({
         page: query.page,
         pageSize: query.pageSize,
         total: tags.length,
       }),
-    });
+    );
   }
 
   const tags = await service.list();
   const start = (query.page - 1) * query.pageSize;
   const paginated = tags.slice(start, start + query.pageSize);
 
-  return ok({
-    data: paginated,
-    meta: pageMeta({
+  return ok(
+    paginated,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: tags.length,
     }),
-  });
+  );
 });
 
 /**

@@ -57,6 +57,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // `fetchSession` is redefined on every render, so it cannot be a dependency
+  // without refetching forever. Mount-only is the intent, and the exhaustive
+  // deps rule is right that this closes over a stale `setData` — which is safe
+  // precisely because React state setters are stable for a component's life.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only by design
   useEffect(() => {
     fetchSession();
   }, []);

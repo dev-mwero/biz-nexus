@@ -1,10 +1,8 @@
 "use client";
 
 import { Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/shared/lib/cn";
 import { MetricCard, MetricCardSkeleton } from "./metric-card";
 import { OverdueTasks } from "./overdue-tasks";
 import { PipelineSummary } from "./pipeline-summary";
@@ -41,7 +39,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setError(null);
       const response = await fetch("/api/v1/dashboard");
@@ -56,18 +54,18 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   if (loading) {
     return (
-      <div
+      <section
         className="space-y-6"
-        role="status"
         aria-live="polite"
+        aria-atomic="true"
         aria-label="Loading dashboard"
       >
         <div className="flex items-center justify-between">
@@ -90,16 +88,15 @@ export function Dashboard() {
           </Button>
         </div>
 
-        <div
+        <section
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          role="region"
           aria-label="Metric cards"
         >
           <MetricCardSkeleton />
           <MetricCardSkeleton />
           <MetricCardSkeleton />
           <MetricCardSkeleton />
-        </div>
+        </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
@@ -110,7 +107,7 @@ export function Dashboard() {
             <RecentActivity activities={[]} loading />
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -174,11 +171,7 @@ export function Dashboard() {
         <h2 id="metrics-heading" className="sr-only">
           Key Metrics
         </h2>
-        <div
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          role="region"
-          aria-label="Key metrics"
-        >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title="Deals Won This Month"
             value={metricCards.dealsWonThisMonth}

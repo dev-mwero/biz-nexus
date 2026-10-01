@@ -5,10 +5,35 @@ import {
   CompanyService,
   type CreateCompanyInput,
 } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok, pageMeta } from "@/shared/responses/envelope";
+
+/**
+ * Read an id that a query string may express as absent.
+ *
+ * Three states, not two. `undefined` means the parameter was not sent and the
+ * caller wants no filter; `null` means the caller explicitly asked for records
+ * with no such link; anything else is an id. The literal string `"null"` is the
+ * only way a URL can carry the second state, and a malformed id is a client
+ * error reported as such rather than a BSON exception that reaches the client
+ * as a 500.
+ */
+function parseNullableId(
+  value: string | null | undefined,
+): Types.ObjectId | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "" || value === "null") return null;
+  if (!Types.ObjectId.isValid(value)) {
+    throw AppError.validation(
+      [{ path: "parentId", message: 'Must be an id or "null"' }],
+      "Invalid query parameters",
+    );
+  }
+  return new Types.ObjectId(value);
+}
 
 const COMPANY_STATUSES = [
   "PROSPECT",
@@ -70,7 +95,9 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("companies.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(
+    queryFromSearchParams(searchParams, ["tag"]),
+  );
 
   const service = new CompanyService(
     context.organization._id,
@@ -82,7 +109,13 @@ export const GET = withApi(async (request: Request) => {
     ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
     tagIds: query.tag.map((id) => new Types.ObjectId(id)),
     q: query.q,
-    parentId: query.parentId ? new Types.ObjectId(query.parentId) : undefined,
+    // A query string has no null, so `parentId=null` is how a client asks for
+    // root companies — the filter is "has no parent", and `undefined` means
+    // "no filter at all". The two are different and conflating them makes the
+    // tree view unfilterable. Validated rather than handed to
+    // `new Types.ObjectId`, which throws a BSON error that surfaces as a 500
+    // for what is a malformed query.
+    parentId: parseNullableId(query.parentId),
   };
 
   const result = await service.list(filters, {
@@ -91,14 +124,14 @@ export const GET = withApi(async (request: Request) => {
     pageSize: query.pageSize,
   });
 
-  return ok({
-    data: result.items,
-    meta: pageMeta({
+  return ok(
+    result.items,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: result.total,
     }),
-  });
+  );
 });
 
 /**

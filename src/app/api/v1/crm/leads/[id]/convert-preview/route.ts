@@ -31,7 +31,9 @@ export const GET = withApi(async (request: Request) => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("leads.read");
 
-  const id = pathParam(request);
+  // `fromEnd: 2` — this path ends in a static segment (`route.ts`), so the
+  // default of 1 would read that literal as the record id.
+  const id = pathParam(request, 2);
   const service = new LeadService(context.organization._id, context.user._id);
 
   const lead = await service.getById(id);

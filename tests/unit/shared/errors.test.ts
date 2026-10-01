@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { SlugConflictError } from "@/db/mixins/slug";
 import { ActiveOrganizationError } from "@/modules/organizations/active-organization";
 import { InvitationError } from "@/modules/organizations/invitation.service";
@@ -197,6 +198,61 @@ describe("normalising anything thrown", () => {
       code: "VALIDATION_FAILED",
       message: ERROR_CATALOGUE.VALIDATION_FAILED.message,
       details: [{ path: "email", message: "Invalid email" }],
+    });
+  });
+
+  it("reports a zod parse failure as a client error, not a server fault", () => {
+    // Every route validates with `schema.parse`, so this is the answer a
+    // client sending one bad field actually gets. 500 here would report the
+    // application's own input handling as an unexpected crash.
+    const parsed = z.object({ firstName: z.string().min(1) }).safeParse({});
+
+    expect(parsed.success).toBe(false);
+    const error = (parsed as { error: z.ZodError }).error;
+
+    expect(toErrorStatus(error)).toBe(400);
+    expect(toErrorPayload(error)).toEqual({
+      code: "BAD_REQUEST",
+      message: ERROR_CATALOGUE.BAD_REQUEST.message,
+      details: [
+        {
+          path: "firstName",
+          // zod's own wording. Asserting it exactly pins the library's message
+          // to this test, which is the cost of proving the message is zod's
+          // and not one this codebase invented.
+          message: "Invalid input: expected string, received undefined",
+        },
+      ],
+    });
+  });
+
+  it("reads a zod failure nested under a path in the details", () => {
+    // `path.join(".")` rather than a dropped path: the client has to know which
+    // field was wrong, and an addressable path is the only way to say so.
+    const schema = z.object({
+      emails: z.array(z.object({ value: z.email() })),
+    });
+    const parsed = schema.safeParse({ emails: [{ value: "nope" }] });
+
+    const payload = toErrorPayload((parsed as { error: z.ZodError }).error);
+
+    expect(payload.details?.[0]?.path).toBe("emails.0.value");
+  });
+
+  it("does not let a hand-built object pose as a zod failure", () => {
+    // Recognising zod failures is the one place a thrown value is allowed to
+    // name its own status and contribute its own message. Doing that on a
+    // structural match rather than `instanceof` would hand that power to any
+    // object shaped like one.
+    const imposter = {
+      name: "ZodError",
+      issues: [{ path: ["passwordHash"], message: "process.env leaked" }],
+    };
+
+    expect(toErrorStatus(imposter)).toBe(500);
+    expect(toErrorPayload(imposter)).toEqual({
+      code: "INTERNAL",
+      message: ERROR_CATALOGUE.INTERNAL.message,
     });
   });
 

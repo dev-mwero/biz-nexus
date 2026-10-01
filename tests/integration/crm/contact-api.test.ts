@@ -1,3 +1,6 @@
+import { passwordHash } from "@tests/support/auth-contract";
+import { memberWithout } from "@tests/support/crm-permission-member";
+import { callRoute } from "@tests/support/crm-route";
 import { Types } from "mongoose";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { connectToDatabase } from "@/db/connection";
@@ -6,14 +9,12 @@ import { ContactModel } from "@/modules/crm/contact.model";
 import { ContactService } from "@/modules/crm/contact.service";
 import { TagModel } from "@/modules/crm/tag.model";
 import { SessionModel, UserModel } from "@/modules/identity";
-import { hashPassword } from "@/modules/identity/password";
 import { issueSession } from "@/modules/identity/session.service";
 import {
   createOrganization,
   MembershipModel,
   RoleModel,
 } from "@/modules/organizations";
-import { createAuthGuards } from "@/shared/auth/dal";
 
 const CONTACT_STATUSES = ["LEAD", "PROSPECT", "CUSTOMER", "INACTIVE"] as const;
 
@@ -21,7 +22,7 @@ async function setupTestOrg() {
   const user = await UserModel.create({
     email: `test-${new Types.ObjectId()}@example.com`,
     name: "Test User",
-    passwordHash: await hashPassword("password"),
+    passwordHash: await passwordHash(),
   });
   const { organization } = await createOrganization({
     name: "Test Org",
@@ -54,7 +55,16 @@ async function createContact(
     firstName: "John",
     lastName: "Doe",
     ownerId: actorId,
-    emails: [{ label: "Work", value: "john@example.com", isPrimary: true }],
+    // Unique per call. A shared `john@example.com` meant any test creating two
+    // contacts hit the duplicate-primary-email guard, so every list test died
+    // in its fixture rather than in an assertion about listing.
+    emails: [
+      {
+        label: "Work",
+        value: `john-${new Types.ObjectId()}@example.com`,
+        isPrimary: true,
+      },
+    ],
     phones: [{ label: "Mobile", value: "+15551234567", isPrimary: true }],
     status: "LEAD",
     ...overrides,
@@ -89,25 +99,17 @@ describe("Contact API Integration", () => {
     org = await setupTestOrg();
   });
 
-  const createRequest = async (
+  /**
+   * `createRequest(method, path, body, token)` — the signature these suites
+   * were written against, now dispatching to the real route handler instead of
+   * a dev server on port 3000 that nothing starts.
+   */
+  const createRequest = (
     method: string,
     path: string,
-    body?: any,
+    body?: unknown,
     token?: string,
-  ) => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (token) headers["Cookie"] = `session=${token}`;
-
-    const res = await fetch(`http://localhost:3000${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    return res;
-  };
+  ) => callRoute(path, { method, body, token });
 
   describe("GET /api/v1/crm/contacts", () => {
     it("lists contacts with pagination", async () => {
@@ -205,28 +207,11 @@ describe("Contact API Integration", () => {
 
     it("returns 403 without contacts.read permission", async () => {
       // Create a viewer user
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "contacts.read",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "GET",
@@ -275,8 +260,13 @@ describe("Contact API Integration", () => {
     });
 
     it("rejects duplicate primary email", async () => {
+      // The address has to be in `emails`, not in a `primaryEmail` field: the
+      // service reads the primary out of the array and `primaryEmail` is
+      // denormalised on the way out. Setting it here created a contact with an
+      // unrelated address, so the POST below was a genuine first use and the
+      // 409 it was written to provoke never came.
       await createContact(org.organization._id, org.user._id, {
-        primaryEmail: "dup@example.com",
+        emails: [{ label: "Work", value: "dup@example.com", isPrimary: true }],
       });
 
       const res = await createRequest(
@@ -297,28 +287,11 @@ describe("Contact API Integration", () => {
     });
 
     it("returns 403 without contacts.create permission", async () => {
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token, userId } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "contacts.create",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "POST",
@@ -326,7 +299,7 @@ describe("Contact API Integration", () => {
         {
           firstName: "Test",
           lastName: "Contact",
-          ownerId: viewer._id.toString(),
+          ownerId: userId.toString(),
         },
         token,
       );
@@ -365,28 +338,11 @@ describe("Contact API Integration", () => {
     it("returns 403 without contacts.read permission", async () => {
       const contact = await createContact(org.organization._id, org.user._id);
 
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "contacts.read",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "GET",
@@ -426,15 +382,24 @@ describe("Contact API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400: the body parsed — `companyId` is a well-formed ObjectId —
+      // and it is the *record* it names that cannot be used. The catalogue draws
+      // that line deliberately, and a caller can act on it: a 400 would say
+      // the request was malformed, which it was not.
+      expect(res.status).toBe(422);
+      expect((await res.json()).error.code).toBe("VALIDATION_FAILED");
     });
 
     it("rejects duplicate primary email on update", async () => {
-      const contact1 = await createContact(org.organization._id, org.user._id, {
-        primaryEmail: "first@example.com",
+      await createContact(org.organization._id, org.user._id, {
+        emails: [
+          { label: "Work", value: "first@example.com", isPrimary: true },
+        ],
       });
       const contact2 = await createContact(org.organization._id, org.user._id, {
-        primaryEmail: "second@example.com",
+        emails: [
+          { label: "Work", value: "second@example.com", isPrimary: true },
+        ],
       });
 
       const res = await createRequest(
@@ -454,28 +419,11 @@ describe("Contact API Integration", () => {
     it("returns 403 without contacts.update permission", async () => {
       const contact = await createContact(org.organization._id, org.user._id);
 
-      const viewer = await UserModel.create({
-        email: `viewer-${new Types.ObjectId()}@example.com`,
-        name: "Viewer",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "VIEWER",
+        without: "contacts.update",
       });
-      const { organization } = await createOrganization({
-        name: "Viewer Org",
-        ownerId: viewer._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "VIEWER",
-      });
-      const { token, session } = await issueSession({ userId: viewer._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: viewer._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "PATCH",
@@ -518,34 +466,11 @@ describe("Contact API Integration", () => {
 
       // MEMBER has contacts.delete? Check permissions - MEMBER does have delete for contacts
       // So let's test with a custom role that has no delete
-      const member = await UserModel.create({
-        email: `member-${new Types.ObjectId()}@example.com`,
-        name: "Member",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "MEMBER",
+        without: "contacts.delete",
       });
-      const { organization } = await createOrganization({
-        name: "Member Org",
-        ownerId: member._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "MEMBER",
-      });
-      // Remove contacts.delete from member role
-      await RoleModel.updateOne(
-        { _id: role!._id },
-        { $pull: { permissions: "contacts.delete" } },
-      );
-
-      const { token, session } = await issueSession({ userId: member._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: member._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "DELETE",
@@ -613,33 +538,11 @@ describe("Contact API Integration", () => {
       const target = await createContact(org.organization._id, org.user._id);
 
       // Create a member without update permission
-      const member = await UserModel.create({
-        email: `member-${new Types.ObjectId()}@example.com`,
-        name: "Member",
-        passwordHash: await hashPassword("password"),
+      const { token } = await memberWithout({
+        organizationId: org.organization._id,
+        roleKey: "MEMBER",
+        without: "contacts.update",
       });
-      const { organization } = await createOrganization({
-        name: "Member Org",
-        ownerId: member._id,
-      });
-      const role = await RoleModel.findOne({
-        organizationId: organization._id,
-        key: "MEMBER",
-      });
-      await RoleModel.updateOne(
-        { _id: role!._id },
-        { $pull: { permissions: "contacts.update" } },
-      );
-
-      const { token, session } = await issueSession({ userId: member._id });
-      await SessionModel.updateOne(
-        { _id: session._id },
-        { $set: { activeOrganizationId: organization._id } },
-      );
-      await MembershipModel.updateOne(
-        { organizationId: organization._id, userId: member._id },
-        { $set: { roleId: role!._id } },
-      );
 
       const res = await createRequest(
         "POST",

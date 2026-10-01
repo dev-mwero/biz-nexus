@@ -30,7 +30,7 @@ import {
   TASK_STATUSES,
   type TaskPriority,
   type TaskStatus,
-} from "@/modules/tasks/task.model";
+} from "@/modules/tasks/task.constants";
 import { cn } from "@/shared/lib/cn";
 import { formatRelativeTime } from "@/shared/lib/format";
 

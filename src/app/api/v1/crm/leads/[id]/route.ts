@@ -134,29 +134,3 @@ export const DELETE = withApi(async (request: Request) => {
     throw error;
   }
 });
-
-/**
- * POST /api/v1/crm/leads/:id/restore
- * Restore a soft-deleted lead.
- * Permission: leads.update
- */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("leads.update");
-
-  const id = pathParam(request);
-  const service = new LeadService(context.organization._id, context.user._id);
-
-  // The repository rather than the service: `restoreById` reaches rows the
-  // tenant scope hides, which is the whole point of a restore, and the service
-  // deliberately does not expose it. It is scoped to the same organization, so
-  // a foreign id matches nothing and is a 404 rather than a write.
-  const repo = new LeadRepository(context.organization._id, context.user._id);
-  const restored = await repo.restoreById(id);
-  if (restored.matchedCount === 0) {
-    throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-  }
-
-  const lead = await service.getById(id);
-  return ok(lead);
-});

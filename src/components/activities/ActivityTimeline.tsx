@@ -50,6 +50,10 @@ interface ActivityTimelineProps {
   allowedTypes?: ActivityType[];
   /** Current user ID for ownership checks */
   currentUserId?: string;
+  /** Feed scope: only activities this member personally performed */
+  actorId?: string;
+  /** Bounded search term matched against title and body. */
+  search?: string;
   /** Mode: 'feed' for org feed (cursor pagination), 'timeline' for entity (occurredAt pagination) */
   mode?: "feed" | "timeline";
 }
@@ -227,6 +231,8 @@ export function ActivityTimeline({
   showComposer = true,
   allowedTypes,
   currentUserId,
+  actorId,
+  search,
   mode = "feed",
 }: ActivityTimelineProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -266,7 +272,20 @@ export function ActivityTimeline({
         }
 
         if (allowedTypes && allowedTypes.length > 0) {
-          params.set("type", allowedTypes[0]); // Simplified - would need array support
+          // One repeated parameter per type, not the first type alone: a
+          // multi-select that silently applies to only its first choice is a
+          // filter the user believes is working and is not.
+          for (const type of allowedTypes) {
+            params.append("type", type);
+          }
+        }
+
+        if (actorId) {
+          params.set("actorId", actorId);
+        }
+
+        if (search) {
+          params.set("q", search);
         }
 
         const response = await fetch(`${endpoint}?${params.toString()}`);
@@ -312,7 +331,16 @@ export function ActivityTimeline({
         setLoadingMore(false);
       }
     },
-    [entity, organizationId, initialPageSize, allowedTypes, cursor, mode],
+    [
+      entity,
+      organizationId,
+      initialPageSize,
+      allowedTypes,
+      actorId,
+      search,
+      cursor,
+      mode,
+    ],
   );
 
   useEffect(() => {

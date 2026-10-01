@@ -4,6 +4,7 @@ import {
   SavedViewError,
   SavedViewService,
 } from "@/modules/crm";
+import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -49,7 +50,7 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("savedViews.read");
 
   const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(Object.fromEntries(searchParams));
+  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
 
   const service = new SavedViewService(
     context.organization._id,
@@ -74,14 +75,14 @@ export const GET = withApi(async (request: Request) => {
   const start = (query.page - 1) * query.pageSize;
   const paginated = unique.slice(start, start + query.pageSize);
 
-  return ok({
-    data: paginated,
-    meta: pageMeta({
+  return ok(
+    paginated,
+    pageMeta({
       page: query.page,
       pageSize: query.pageSize,
       total: unique.length,
     }),
-  });
+  );
 });
 
 /**

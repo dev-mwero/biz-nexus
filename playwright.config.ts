@@ -4,7 +4,9 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // Critical/isolation paths pass state between ordered steps; keep each file
+  // serial so worker scheduling cannot race that shared setup.
+  fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 2 : 1,
   forbidOnly: Boolean(process.env.CI),
@@ -33,7 +35,13 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       NODE_ENV: "production",
-      MAIL_DRIVER: "console",
+      // Production boot refuses console mail. Registration currently does not
+      // send mail, so use complete SMTP configuration for the E2E server.
+      MAIL_DRIVER: "smtp",
+      SMTP_HOST: "127.0.0.1",
+      SMTP_PORT: "2525",
+      SMTP_USER: "e2e",
+      SMTP_PASSWORD: "e2e-only",
       RATELIMIT_DRIVER: "memory",
     },
   },

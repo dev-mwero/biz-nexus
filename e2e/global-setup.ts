@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import type { FullConfig } from "@playwright/test";
 
