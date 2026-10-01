@@ -143,6 +143,17 @@ Content-Type: application/json
 { "email": "owner@acme.com", "password": "correct horse battery staple" }
 ```
 
+### Organisation bootstrap
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/organizations` | authenticated | The organisations the caller can act in. Both a brand-new account with none and a member who has lost their active organisation are answered normally. |
+| `POST` | `/organizations` | authenticated | Create an organisation. Body: `{ name }`. The creator becomes OWNER and the new organisation becomes the session's active one. |
+| `POST` | `/organizations/active` | authenticated | Switch the session's active organisation. Body: `{ organizationId }`. A 404 that does not distinguish "no such organisation" from "not a member". |
+
+These are deliberately outside the active-organisation requirement: onboarding
+exists precisely for the caller who has no active organisation yet.
+
 ---
 
 ## 4. Activities
@@ -595,11 +606,8 @@ are **not implemented** in the current codebase:
 | Endpoint | Status | Notes |
 |---|---|---|
 | `POST /auth/accept-invitation` | Not implemented | Invitation acceptance not built |
-| `POST /organizations` | Not implemented | Organisation creation not built |
 | `GET /organizations/current` | Not implemented | Organisation management not built |
 | `PATCH /organizations/current` | Not implemented | Organisation settings not built |
-| `GET /organizations` | Not implemented | User's organisations list not built |
-| `POST /organizations/active` | Not implemented | Organisation switching not built |
 | `GET /organizations/current/members` | Not implemented | Member management not built |
 | `POST /organizations/current/members/invitations` | Not implemented | Invitation management not built |
 | `GET /organizations/current/invitations` | Not implemented | |

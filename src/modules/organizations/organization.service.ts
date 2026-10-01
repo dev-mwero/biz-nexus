@@ -13,6 +13,69 @@ import { provisionSystemRoles } from "@/modules/rbac/role.service";
 import { AppError } from "@/shared/errors/app-error";
 
 /**
+ * A membership projection for the organisation switcher.
+ *
+ * Deliberately not the mongoose documents. The switcher needs a name to render
+ * and an id to send back, and returning the membership and organisation
+ * documents would put `createdBy`, soft-delete bookkeeping and every other
+ * internal field on the wire for a list of two or three entries.
+ */
+export interface UserOrganization {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/**
+ * The organisations a user can actually act in.
+ *
+ * ACTIVE memberships only, and only organisations that are themselves active
+ * and undeleted. A membership to a suspended organisation is not a choice the
+ * switcher can offer: selecting it would fail the DAL's organisation check on
+ * the very next request, so surfacing it would be offering a door that does not
+ * open. INVITED is excluded for the same reason - an invitation that has not
+ * been accepted is not a place the user is.
+ *
+ * Ordered by when the user joined, so the list is stable across refreshes
+ * rather than whatever order the database happens to return.
+ */
+export async function listOrganizationsForUser(
+  userId: Types.ObjectId | string,
+): Promise<UserOrganization[]> {
+  const memberships = await MembershipModel.find({
+    userId,
+    status: "ACTIVE",
+    deletedAt: null,
+  }).sort({ joinedAt: 1, _id: 1 });
+
+  if (memberships.length === 0) return [];
+
+  const organizations = await OrganizationModel.find({
+    _id: { $in: memberships.map((membership) => membership.organizationId) },
+    isActive: true,
+    deletedAt: null,
+  });
+  const byId = new Map(
+    organizations.map((organization) => [
+      organization._id.toString(),
+      organization,
+    ]),
+  );
+
+  return memberships.flatMap((membership) => {
+    const organization = byId.get(membership.organizationId.toString());
+    if (!organization) return [];
+    return [
+      {
+        id: organization._id.toString(),
+        name: organization.name,
+        slug: organization.slug,
+      },
+    ];
+  });
+}
+
+/**
  * Creating an organisation.
  *
  * The four system roles, the founder's membership, and the organisation itself
