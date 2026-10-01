@@ -1,62 +1,65 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
-  Mail,
-  Phone,
+  ArrowLeft,
   Building2,
-  Users,
   Calendar,
-  Target,
   DollarSign,
   Edit2,
-  Trash2,
-  ArrowLeft,
-  RotateCcw,
-  Trophy,
-  XCircle,
-  MessageSquare,
+  Mail,
   MessageCircle,
+  MessageSquare,
+  Phone,
+  RotateCcw,
+  Target,
+  Trash2,
+  Trophy,
+  Users,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+  Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogActions,
+  Input,
+  Label,
+  ScrollArea,
+  Separator,
+  Skeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  Separator,
-  ScrollArea,
-  Skeleton,
-  Label,
-  Input,
 } from "@/components/ui";
-import { toast } from "sonner";
 import { cn } from "@/shared/lib/cn";
 import { formatRelativeTime } from "@/shared/lib/format";
 
 const DEAL_STATUSES = ["OPEN", "WON", "LOST"] as const;
 type DealStatus = (typeof DEAL_STATUSES)[number];
 
-const statusBadgeTone: Record<DealStatus, "neutral" | "positive" | "attention" | "critical" | "info" | "outline"> = {
+const statusBadgeTone: Record<
+  DealStatus,
+  "neutral" | "positive" | "attention" | "critical" | "info" | "outline"
+> = {
   OPEN: "info",
   WON: "positive",
   LOST: "critical",
@@ -100,7 +103,10 @@ interface ActivityItem {
   metadata?: Record<string, unknown>;
 }
 
-const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+const ACTIVITY_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
   NOTE: () => <Mail className="h-4 w-4" />,
   CALL: () => <Phone className="h-4 w-4" />,
   MEETING: () => <Calendar className="h-4 w-4" />,
@@ -148,21 +154,28 @@ export default function DealDetailPage() {
     }
   }, [dealId, router]);
 
-  const fetchActivities = useCallback(async (page = 1, append = false) => {
-    if (page === 1) setActivitiesLoading(true);
-    try {
-      const res = await fetch(`/api/v1/deals/${dealId}/timeline?page=${page}&pageSize=25`);
-      if (!res.ok) throw new Error("Failed to fetch activities");
-      const data = await res.json();
-      const newActivities = data.data || [];
-      setActivities((prev) => (append ? [...prev, ...newActivities] : newActivities));
-      setHasMoreActivities(data.meta?.totalPages > page);
-    } catch (err) {
-      console.error("Failed to load activities:", err);
-    } finally {
-      if (page === 1) setActivitiesLoading(false);
-    }
-  }, [dealId]);
+  const fetchActivities = useCallback(
+    async (page = 1, append = false) => {
+      if (page === 1) setActivitiesLoading(true);
+      try {
+        const res = await fetch(
+          `/api/v1/deals/${dealId}/timeline?page=${page}&pageSize=25`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch activities");
+        const data = await res.json();
+        const newActivities = data.data || [];
+        setActivities((prev) =>
+          append ? [...prev, ...newActivities] : newActivities,
+        );
+        setHasMoreActivities(data.meta?.totalPages > page);
+      } catch (err) {
+        console.error("Failed to load activities:", err);
+      } finally {
+        if (page === 1) setActivitiesLoading(false);
+      }
+    },
+    [dealId],
+  );
 
   const loadMoreActivities = useCallback(() => {
     fetchActivities(activitiesPage + 1, true);
@@ -233,7 +246,9 @@ export default function DealDetailPage() {
       fetchDeal();
       fetchActivities(1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to mark as lost");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to mark as lost",
+      );
     } finally {
       setLosing(false);
     }
@@ -266,7 +281,10 @@ export default function DealDetailPage() {
 
   if (!deal) return null;
 
-  const isOverdue = deal.expectedCloseDate && new Date(deal.expectedCloseDate) < new Date() && deal.status === "OPEN";
+  const isOverdue =
+    deal.expectedCloseDate &&
+    new Date(deal.expectedCloseDate) < new Date() &&
+    deal.status === "OPEN";
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -281,9 +299,7 @@ export default function DealDetailPage() {
           <div>
             <h1 className="text-2xl font-semibold text-ink-900">{deal.name}</h1>
             <div className="flex items-center gap-3 mt-1">
-              <Badge tone={statusBadgeTone[deal.status]}>
-                {deal.status}
-              </Badge>
+              <Badge tone={statusBadgeTone[deal.status]}>{deal.status}</Badge>
               {deal.pipelineName && (
                 <span className="text-sm text-ink-500 flex items-center gap-1">
                   <Target className="h-3 w-3" />
@@ -296,11 +312,19 @@ export default function DealDetailPage() {
         <div className="flex items-center gap-2">
           {deal.status === "OPEN" && (
             <>
-              <Button variant="secondary" onClick={handleWin} disabled={winning}>
+              <Button
+                variant="secondary"
+                onClick={handleWin}
+                disabled={winning}
+              >
                 <Trophy className="h-4 w-4 mr-2" />
                 Mark Won
               </Button>
-              <Button variant="destructive" onClick={() => setShowLoseDialog(true)} disabled={losing}>
+              <Button
+                variant="destructive"
+                onClick={() => setShowLoseDialog(true)}
+                disabled={losing}
+              >
                 <XCircle className="h-4 w-4 mr-2" />
                 Mark Lost
               </Button>
@@ -330,7 +354,8 @@ export default function DealDetailPage() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Deal</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to delete this deal? This action cannot be undone.
+                      Are you sure you want to delete this deal? This action
+                      cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogActions
@@ -364,49 +389,74 @@ export default function DealDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <dt className="text-sm text-ink-500">Value</dt>
-                      <dd className="text-2xl font-semibold text-ink-900">{formatCurrency(deal.value, deal.currency)}</dd>
+                      <dd className="text-2xl font-semibold text-ink-900">
+                        {formatCurrency(deal.value, deal.currency)}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-sm text-ink-500">Probability</dt>
-                      <dd className="text-2xl font-semibold text-ink-900">{deal.probability}%</dd>
+                      <dd className="text-2xl font-semibold text-ink-900">
+                        {deal.probability}%
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-sm text-ink-500">Expected Close</dt>
-                      <dd className={cn("font-medium", isOverdue && "text-red-600")}>
-                        {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
-                        {isOverdue && <span className="ml-1 text-sm">⚠ Overdue</span>}
+                      <dd
+                        className={cn(
+                          "font-medium",
+                          isOverdue && "text-red-600",
+                        )}
+                      >
+                        {deal.expectedCloseDate
+                          ? formatDate(deal.expectedCloseDate)
+                          : "—"}
+                        {isOverdue && (
+                          <span className="ml-1 text-sm">⚠ Overdue</span>
+                        )}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-sm text-ink-500">Status</dt>
                       <dd className="font-medium">
-                        <Badge tone={statusBadgeTone[deal.status]}>{deal.status}</Badge>
+                        <Badge tone={statusBadgeTone[deal.status]}>
+                          {deal.status}
+                        </Badge>
                       </dd>
                     </div>
                     {deal.closedAt && (
                       <div>
                         <dt className="text-sm text-ink-500">Closed</dt>
-                        <dd className="font-medium">{formatDate(deal.closedAt)}</dd>
+                        <dd className="font-medium">
+                          {formatDate(deal.closedAt)}
+                        </dd>
                       </div>
                     )}
                     {deal.lostReason && deal.status === "LOST" && (
                       <div>
                         <dt className="text-sm text-ink-500">Lost Reason</dt>
-                        <dd className="font-medium text-red-600">{deal.lostReason}</dd>
+                        <dd className="font-medium text-red-600">
+                          {deal.lostReason}
+                        </dd>
                       </div>
                     )}
                   </div>
 
                   {deal.description && (
                     <div className="pt-4 border-t">
-                      <h4 className="font-medium text-sm text-ink-700 mb-2">Description</h4>
-                      <p className="whitespace-pre-wrap text-ink-600">{deal.description}</p>
+                      <h4 className="font-medium text-sm text-ink-700 mb-2">
+                        Description
+                      </h4>
+                      <p className="whitespace-pre-wrap text-ink-600">
+                        {deal.description}
+                      </p>
                     </div>
                   )}
 
                   {deal.companyName && (
                     <div className="pt-4 border-t">
-                      <h4 className="font-medium text-sm text-ink-700 mb-2">Company</h4>
+                      <h4 className="font-medium text-sm text-ink-700 mb-2">
+                        Company
+                      </h4>
                       <p className="flex items-center gap-2 text-ink-600">
                         <Building2 className="h-4 w-4 text-ink-400" />
                         {deal.companyName}
@@ -416,7 +466,9 @@ export default function DealDetailPage() {
 
                   {deal.contactName && (
                     <div className="pt-4 border-t">
-                      <h4 className="font-medium text-sm text-ink-700 mb-2">Contact</h4>
+                      <h4 className="font-medium text-sm text-ink-700 mb-2">
+                        Contact
+                      </h4>
                       <p className="flex items-center gap-2 text-ink-600">
                         <Target className="h-4 w-4 text-ink-400" />
                         {deal.contactName}
@@ -437,7 +489,9 @@ export default function DealDetailPage() {
                         <div key={key}>
                           <dt className="text-sm text-ink-500">{key}</dt>
                           <dd className="text-sm font-medium text-ink-900">
-                            {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            {typeof value === "object"
+                              ? JSON.stringify(value)
+                              : String(value)}
                           </dd>
                         </div>
                       ))}
@@ -537,8 +591,12 @@ export default function DealDetailPage() {
                 ) : (
                   <div className="space-y-3">
                     {activities.map((activity) => {
-                      const Icon = ACTIVITY_ICONS[activity.type] || (() => <Mail className="h-4 w-4" />);
-                      const typeLabel = activity.type.replace(/_/g, " ").toLowerCase();
+                      const Icon =
+                        ACTIVITY_ICONS[activity.type] ||
+                        (() => <Mail className="h-4 w-4" />);
+                      const typeLabel = activity.type
+                        .replace(/_/g, " ")
+                        .toLowerCase();
 
                       return (
                         <div
@@ -566,20 +624,31 @@ export default function DealDetailPage() {
                                 {formatRelativeTime(activity.occurredAt)}
                               </time>
                             </div>
-                            {activity.metadata?.fromStage && activity.metadata?.toStage && (
-                              <div className="text-xs text-ink-500">
-                                From: <span className="font-medium">{activity.metadata.fromStage.stageName}</span>{" "}
-                                →{" "}
-                                To: <span className="font-medium">{activity.metadata.toStage.stageName}</span>
-                              </div>
-                            )}
+                            {activity.metadata?.fromStage &&
+                              activity.metadata?.toStage && (
+                                <div className="text-xs text-ink-500">
+                                  From:{" "}
+                                  <span className="font-medium">
+                                    {activity.metadata.fromStage.stageName}
+                                  </span>{" "}
+                                  → To:{" "}
+                                  <span className="font-medium">
+                                    {activity.metadata.toStage.stageName}
+                                  </span>
+                                </div>
+                              )}
                           </div>
                         </div>
                       );
                     })}
                     {hasMoreActivities && (
                       <div className="text-center pt-4">
-                        <Button variant="ghost" size="sm" onClick={loadMoreActivities} disabled={activitiesLoading}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={loadMoreActivities}
+                          disabled={activitiesLoading}
+                        >
                           Load more
                         </Button>
                       </div>
@@ -597,7 +666,8 @@ export default function DealDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Mark Deal as Lost</AlertDialogTitle>
             <AlertDialogDescription>
-              This will move the deal to the lost stage. Please provide a reason.
+              This will move the deal to the lost stage. Please provide a
+              reason.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4">

@@ -1,6 +1,7 @@
 "use client";
 
 export * from "./alert-dialog";
+export * from "./avatar";
 export * from "./badge";
 export * from "./button";
 export * from "./card";
@@ -10,8 +11,11 @@ export * from "./dropdown-menu";
 export * from "./empty-state";
 export * from "./field";
 export * from "./input";
+export * from "./scroll-area";
 export * from "./select";
+export * from "./separator";
 export * from "./skeleton";
 export * from "./spinner";
 export * from "./table";
+export * from "./tabs";
 export * from "./textarea";

@@ -68,20 +68,38 @@ export async function authenticateWithPassword(
   now = new Date(),
 ): Promise<
   | { ok: true; user: User }
-  | { ok: false; reason: "invalid-credentials" | "locked-out" | "suspended" }
+  | {
+      ok: false;
+      reason: "invalid-credentials" | "locked-out" | "suspended";
+      /**
+       * Whether *this* attempt is the one that tripped the lockout.
+       *
+       * Always present on the failure branch, and always false on the two
+       * branches that cannot have tripped it, so a caller never has to infer it
+       * from `reason` — which cannot tell a first-from-fifth failure apart, since
+       * `recordFailedLogin` counts without resetting and only then refuses. See
+       * ADR-0006: the lockout is its own `auth_events` row rather than something
+       * reconstructed from the end of a run of `auth.login_failed` rows, and this
+       * is the flag that makes that row writable. It is also why the branch is
+       * not `reason: "lockout"`: one of these two attempts is a wrong password
+       * *and* the trip, and a single reason field cannot say both without
+       * losing the fact that the password was wrong.
+       */
+      locked: boolean;
+    }
 > {
   if (user.status === "SUSPENDED") {
     await burnPasswordTiming(plainPassword);
-    return { ok: false, reason: "suspended" };
+    return { ok: false, reason: "suspended", locked: false };
   }
   if (isLockedOut(user, now)) {
     await burnPasswordTiming(plainPassword);
-    return { ok: false, reason: "locked-out" };
+    return { ok: false, reason: "locked-out", locked: false };
   }
 
   if (!(await verifyPassword(plainPassword, user.passwordHash))) {
-    await recordFailedLogin(user._id, now);
-    return { ok: false, reason: "invalid-credentials" };
+    const locked = await recordFailedLogin(user._id, now);
+    return { ok: false, reason: "invalid-credentials", locked };
   }
 
   // A successful sign-in clears the counter and the lockout, and opportunistically
@@ -113,18 +131,22 @@ export async function authenticateWithPassword(
  * incremented in JavaScript and written back would let two concurrent failures
  * from different addresses overwrite each other, so an attacker guessing one
  * password at a time from two connections would never reach the limit.
+ *
+ * Returns whether this attempt is the one that tripped the lockout. The caller
+ * writes the `auth.lockout` event from it — see ADR-0006 for why the emission is
+ * not here, where it would put an audit concern in the password service.
  */
 async function recordFailedLogin(
   userId: Types.ObjectId,
   now: Date,
-): Promise<void> {
+): Promise<boolean> {
   const updated = await UserModel.findOneAndUpdate(
     { _id: userId },
     { $inc: { failedLoginCount: 1 } },
     { returnDocument: "after" },
   ).select("failedLoginCount");
 
-  if ((updated?.failedLoginCount ?? 0) < MAX_FAILED_LOGINS) return;
+  if ((updated?.failedLoginCount ?? 0) < MAX_FAILED_LOGINS) return false;
 
   // The `lockedUntil: null` guard keeps a lockout from being pushed forward by
   // every further attempt, which would let someone hold an account locked for as
@@ -133,6 +155,8 @@ async function recordFailedLogin(
     { _id: userId, lockedUntil: null },
     { $set: { lockedUntil: new Date(now.getTime() + LOCKOUT_MS) } },
   );
+
+  return true;
 }
 
 /**
@@ -201,12 +225,22 @@ export async function createPasswordResetToken(
  * retries its callback on a write conflict, and a retry re-running a deliberate
  * cost-12 hash holds the transaction open against every other writer for
  * another quarter of a second.
+ *
+ * The success case names the account it changed. A reset request carries a token
+ * and nothing else — no address, no id — so the caller cannot say who was reset
+ * without asking, and an `auth.password_reset_completed` row with a null
+ * `userId` is not the record of an account takeover that ADR-0006 is about. The
+ * failure cases return no id on purpose: those requests named no real token, and
+ * inventing an owner for one would put a real account next to a forgery.
  */
 export async function redeemPasswordResetToken(
   token: string,
   newPassword: string,
   now = new Date(),
-): Promise<{ ok: boolean; reason?: "invalid" | "expired" | "already-used" }> {
+): Promise<
+  | { ok: true; userId: Types.ObjectId }
+  | { ok: false; reason: "invalid" | "expired" | "already-used" }
+> {
   const tokenHash = hashToken(token);
   const nowDate = new Date(now.getTime());
 
@@ -253,5 +287,5 @@ export async function redeemPasswordResetToken(
   // password change.
   await revokeAllSessionsForUser(consumed.userId);
 
-  return { ok: true };
+  return { ok: true, userId: consumed.userId };
 }

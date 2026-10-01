@@ -81,6 +81,8 @@ export interface TimelineInput {
   organizationId: Types.ObjectId;
   limit?: number;
   before?: Date;
+  /** Cursor-based pagination: activity _id to start after */
+  afterId?: Types.ObjectId;
 }
 
 /** Everything that happened to one record, newest first. */
@@ -92,6 +94,7 @@ export async function timelineForEntity(
       organizationId: input.organizationId,
       "subjects.entityId": input.entityId,
       ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+      ...(input.afterId ? { _id: { $lt: input.afterId } } : {}),
     },
     input.limit,
   );
@@ -105,9 +108,41 @@ export async function organizationFeed(
     {
       organizationId: input.organizationId,
       ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+      ...(input.afterId ? { _id: { $lt: input.afterId } } : {}),
     },
     input.limit,
   );
+}
+
+/** Cursor-based pagination for organization feed. */
+export async function organizationFeedCursor(
+  input: TimelineInput & { cursor?: string; limit?: number },
+): Promise<{ activities: Activity[]; nextCursor: string | null }> {
+  const limit = Math.min(Math.max(input.limit ?? ACTIVITY_PAGE_SIZE, 1), 100);
+
+  const filter: Record<string, unknown> = {
+    organizationId: input.organizationId,
+    ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+  };
+
+  // If cursor is provided, decode it (it's an _id)
+  if (input.cursor) {
+    filter._id = { $lt: new Types.ObjectId(input.cursor) };
+  }
+
+  const activities = await ActivityModel.find(filter)
+    .sort({ occurredAt: -1, _id: -1 })
+    .limit(limit + 1) // Fetch one extra to determine if there's a next page
+    .lean<Activity[]>()
+    .exec();
+
+  let nextCursor: string | null = null;
+  if (activities.length > limit) {
+    const nextActivity = activities.pop()!;
+    nextCursor = nextActivity._id.toString();
+  }
+
+  return { activities, nextCursor };
 }
 
 /** "My activity": what a member did, not what was attributed to them. */

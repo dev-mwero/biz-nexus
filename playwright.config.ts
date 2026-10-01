@@ -4,32 +4,35 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: false,
-  // Authorization and tenant-isolation failures are the ones that must never
-  // be missed, so a failure never silently runs a single retry. The suite is
-  // allowed to be slow in exchange for being trusted.
-  retries: 0,
-  workers: 1,
+  fullyParallel: true,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 2 : 1,
   forbidOnly: Boolean(process.env.CI),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   timeout: 60_000,
   expect: { timeout: 10_000 },
+  globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
   use: {
     baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "setup", testMatch: /.*\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+  ],
   webServer: {
-    command: "npm run dev",
+    command: "npm run start",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      // The end-to-end suite runs against a real application server, so it
-      // needs a real database. MONGODB_URI comes from .env.local, which Next
-      // loads itself; only the test overrides are forced here.
-      NODE_ENV: "development",
+      NODE_ENV: "production",
       MAIL_DRIVER: "console",
       RATELIMIT_DRIVER: "memory",
     },

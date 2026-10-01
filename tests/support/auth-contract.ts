@@ -1,5 +1,6 @@
 import type { Types } from "mongoose";
 import { connectToDatabase, disconnectDatabase } from "@/db/connection";
+import { AuthEventModel } from "@/modules/audit";
 import {
   EmailVerificationTokenModel,
   PasswordResetTokenModel,
@@ -226,6 +227,10 @@ export async function resetAuthTables(): Promise<void> {
     SessionModel.deleteMany({}),
     EmailVerificationTokenModel.deleteMany({}),
     PasswordResetTokenModel.deleteMany({}),
+    // Every auth endpoint writes here now, so a row left behind is the normal
+    // case rather than the exception, and a suite that forgets to clear it makes
+    // the *next* test depend on it.
+    AuthEventModel.deleteMany({}),
   ]);
 }
 

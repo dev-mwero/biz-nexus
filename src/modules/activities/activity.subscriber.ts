@@ -22,6 +22,13 @@ function stageChangeTitle(dealName: string, to: string, from: string | null) {
     : `Moved ${dealName} from ${from} to ${to}`;
 }
 
+/** "Completed 'Call client' — assigned to Jane" */
+function taskCompletedTitle(taskTitle: string, assigneeName?: string | null) {
+  return assigneeName
+    ? `Completed "${taskTitle}" — assigned to ${assigneeName}`
+    : `Completed "${taskTitle}"`;
+}
+
 const unsubscribes: Array<() => void> = [];
 
 /**
@@ -61,6 +68,52 @@ export function registerActivitySubscribers(): () => void {
         metadata: {
           fromStage: event.fromStage,
           toStage: event.toStage,
+        },
+      });
+    }),
+  );
+
+  unsubscribes.push(
+    events.subscribe("task.completed", async (event) => {
+      // The task service emits `task.completed` with the task's related entities.
+      // We record a TASK_COMPLETED activity on each related entity so it appears
+      // on the timeline of the contact, company, or deal the task was about.
+      const subjects =
+        event.related.length > 0
+          ? event.related
+          : [{ entityType: "task", entityId: event.taskId }];
+
+      await recordActivity({
+        organizationId: event.organizationId,
+        type: "TASK",
+        title: taskCompletedTitle(event.taskTitle, null), // assigneeName not available here
+        occurredAt: event.occurredAt ?? new Date(),
+        actorId: event.completedBy,
+        ownerId: event.completedBy,
+        subjects,
+        metadata: {
+          taskId: event.taskId.toString(),
+          completedBy: event.completedBy.toString(),
+        },
+      });
+    }),
+  );
+
+  unsubscribes.push(
+    events.subscribe("task.assigned", async (event) => {
+      // A TASK activity for assignment, so the timeline shows who was assigned what
+      await recordActivity({
+        organizationId: event.organizationId,
+        type: "TASK",
+        title: `Assigned "${event.taskTitle}" to ${event.assigneeId}`,
+        occurredAt: new Date(),
+        actorId: event.assignedBy,
+        ownerId: event.assignedBy,
+        subjects: [{ entityType: "task", entityId: event.taskId }],
+        metadata: {
+          taskId: event.taskId.toString(),
+          assigneeId: event.assigneeId.toString(),
+          action: "assigned",
         },
       });
     }),

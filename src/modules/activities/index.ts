@@ -13,6 +13,7 @@ export {
   activityByActor,
   activityByOwner,
   organizationFeed,
+  organizationFeedCursor,
   type RecordActivityInput,
   recordActivity,
   type TimelineInput,

@@ -1,0 +1,36 @@
+export {
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  type Task,
+  TaskModel,
+  type TaskPriority,
+  type TaskRelated,
+  type TaskStatus,
+  taskSchemaDefinition,
+} from "./task.model";
+export {
+  countByStatus,
+  create,
+  findByAssignee,
+  findById,
+  findOverdue,
+  list,
+  softDelete,
+  type TaskListOptions,
+  type TaskRepositoryFilters,
+  update,
+} from "./task.repository";
+export {
+  type CreateTaskInput,
+  completeTask,
+  createTask,
+  deleteTask,
+  findTaskById,
+  getOverdueTasks,
+  getTasksByAssignee,
+  listTasks,
+  reopenTask,
+  type TaskListFilters,
+  type UpdateTaskInput,
+  updateTask,
+} from "./task.service";

@@ -34,7 +34,7 @@ test suite exists to continuously disprove.
 | Edge | `proxy.ts` redirects unauthenticated requests. Optimistic only, no database. |
 | Transport | HTTPS enforced. `Secure`, `HttpOnly`, `SameSite=Lax` session cookie. |
 | Session | Opaque 32-byte token, SHA-256 hashed at rest, revocable, sliding 30-day expiry. |
-| Identity | bcrypt cost 12. Lockout after repeated failures. Email verification before organisation creation. |
+| Identity | bcrypt cost 12 (~1.8s/hash on i5-7200U; ~250ms on modern server CPU). Lockout after repeated failures. Email verification before organisation creation. |
 | Tenant | `TenantRepository` forces the scope on every query. `organizationId` is never read from request input. |
 | Authorization | Per-organisation `Role` documents over a code-level permission catalogue. Guards run in the Data Access Layer on every read and write. |
 | Validation | Zod schemas, `strict()`, rejecting unknown keys. `organizationId` in a body is stripped, not honoured. |

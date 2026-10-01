@@ -472,8 +472,39 @@ describe("password authentication", () => {
       "nope",
     );
 
-    expect(result).toEqual({ ok: false, reason: "invalid-credentials" });
+    expect(result).toEqual({
+      ok: false,
+      reason: "invalid-credentials",
+      locked: false,
+    });
     expect((await loadUser(user._id)).failedLoginCount).toBe(1);
+  });
+
+  it("reports which failure is the one that locked the account", async () => {
+    // The flag is what lets the route write an `auth.lockout` row rather than
+    // reconstructing the moment from the end of a run of failures. The fourth
+    // failure is a wrong password and not a lockout; the fifth is both, and a
+    // single `reason` cannot say both.
+    const user = await makeUser();
+    for (let i = 1; i < MAX_FAILED_LOGINS; i += 1) {
+      const earlier = await authenticateWithPassword(
+        await loadUser(user._id),
+        "nope",
+      );
+      expect(earlier).toEqual({
+        ok: false,
+        reason: "invalid-credentials",
+        locked: false,
+      });
+    }
+
+    expect(
+      await authenticateWithPassword(await loadUser(user._id), "nope"),
+    ).toEqual({
+      ok: false,
+      reason: "invalid-credentials",
+      locked: true,
+    });
   });
 
   it("locks the account after the failure limit", async () => {
@@ -501,7 +532,11 @@ describe("password authentication", () => {
       PASSWORD,
     );
 
-    expect(result).toEqual({ ok: false, reason: "locked-out" });
+    expect(result).toEqual({
+      ok: false,
+      reason: "locked-out",
+      locked: false,
+    });
   });
 
   it("does not push the lockout forward on further attempts", async () => {
@@ -572,7 +607,11 @@ describe("password authentication", () => {
       PASSWORD,
     );
 
-    expect(result).toEqual({ ok: false, reason: "suspended" });
+    expect(result).toEqual({
+      ok: false,
+      reason: "suspended",
+      locked: false,
+    });
   });
 });
 
@@ -591,8 +630,12 @@ describe("password reset", () => {
     const user = await makeUser();
     const { token } = await createPasswordResetToken(user._id);
 
+    // The success case names the account, because the caller writes the
+    // `auth.password_reset_completed` row and a reset request carries no address
+    // to attribute one to.
     expect(await redeemPasswordResetToken(token, "a new password")).toEqual({
       ok: true,
+      userId: user._id,
     });
 
     const result = await authenticateWithPassword(

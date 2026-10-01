@@ -16,6 +16,10 @@
 /playwright-report
 /blob-report
 /playwright/.cache
+/e2e/.auth
+
+# agent tooling
+/.opencode
 
 # mongo local replica-set data (see .env.example, DATABASE.md §10)
 .mongo-data

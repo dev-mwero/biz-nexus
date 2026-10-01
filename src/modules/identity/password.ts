@@ -18,7 +18,7 @@ import bcrypt from "bcryptjs";
  * Both are one-way, so a database dump yields no usable credential either way.
  */
 
-/** Cost 12, per docs/DATABASE.md §2. ~250ms per hash on current hardware. */
+/** Cost 12, per docs/DATABASE.md §2. ~1.8s/hash on i5-7200U; ~250ms on modern server CPU (Vercel). */
 export const BCRYPT_COST = 12;
 
 /** 32 bytes of entropy, per docs/SECURITY.md §4. */
@@ -68,7 +68,7 @@ export async function verifyPassword(
  * step with `BCRYPT_COST`.
  *
  * Computed on first use and then kept. `bcrypt.hashSync` at module scope was the
- * obvious version and it cost a full cost-12 hash on *import* — about 250ms of
+ * obvious version and it cost a full cost-12 hash on *import* — about 1.8s of
  * blocked CPU before anything could run, in the test runner, in `next build`, and
  * in every serverless cold start, paid on every process whether or not anyone
  * ever tried to sign in. The cost is a per-process constant, so there is nothing

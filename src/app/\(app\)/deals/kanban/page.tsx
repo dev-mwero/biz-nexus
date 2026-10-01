@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { KanbanBoard } from "@/components/deals/KanbanBoard";
 import {
   Button,
   Select,
@@ -12,7 +13,6 @@ import {
   SelectValue,
   Toaster,
 } from "@/components/ui";
-import { KanbanBoard } from "@/components/deals/KanbanBoard";
 
 interface PipelineWithStages {
   id: string;
@@ -34,8 +34,12 @@ interface PipelineWithStages {
 
 export default function DealsKanbanPage() {
   const [pipelines, setPipelines] = useState<PipelineWithStages[]>([]);
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
-  const [columns, setColumns] = useState<Array<{ stage: PipelineWithStages["stages"][0]; deals: any[] }>>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(
+    null,
+  );
+  const [columns, setColumns] = useState<
+    Array<{ stage: PipelineWithStages["stages"][0]; deals: any[] }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [pipelinesLoading, setPipelinesLoading] = useState(true);
 
@@ -59,7 +63,9 @@ export default function DealsKanbanPage() {
   const fetchBoard = useCallback(async (pipelineId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/deals/pipeline-board?pipelineId=${pipelineId}`);
+      const res = await fetch(
+        `/api/v1/deals/pipeline-board?pipelineId=${pipelineId}`,
+      );
       if (!res.ok) throw new Error("Failed to fetch board");
       const data = await res.json();
       setColumns(data.data.columns);
@@ -84,7 +90,11 @@ export default function DealsKanbanPage() {
     setSelectedPipelineId(pipelineId);
   };
 
-  const handleDealMove = async (dealId: string, stageId: string, sortOrder: number) => {
+  const handleDealMove = async (
+    dealId: string,
+    stageId: string,
+    sortOrder: number,
+  ) => {
     const res = await fetch(`/api/v1/deals/${dealId}/move`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,7 +138,7 @@ export default function DealsKanbanPage() {
   return (
     <div className="flex flex-col h-full">
       <Toaster />
-      
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <Link href="/deals">
@@ -138,20 +148,29 @@ export default function DealsKanbanPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-ink-900">Kanban Board</h1>
-            <p className="text-sm text-ink-500">Drag and drop deals between stages</p>
+            <h1 className="text-2xl font-semibold text-ink-900">
+              Kanban Board
+            </h1>
+            <p className="text-sm text-ink-500">
+              Drag and drop deals between stages
+            </p>
           </div>
         </div>
         {pipelines.length > 0 && (
           <div className="flex items-center gap-2">
-            <Select value={selectedPipelineId || ""} onValueChange={handlePipelineChange} disabled={pipelinesLoading}>
+            <Select
+              value={selectedPipelineId || ""}
+              onValueChange={handlePipelineChange}
+              disabled={pipelinesLoading}
+            >
               <SelectTrigger className="w-[280px]">
                 <SelectValue placeholder="Select pipeline" />
               </SelectTrigger>
               <SelectContent>
                 {pipelines.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.name}{p.isDefault && " (Default)"}
+                    {p.name}
+                    {p.isDefault && " (Default)"}
                   </SelectItem>
                 ))}
               </SelectContent>

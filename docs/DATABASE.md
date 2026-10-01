@@ -76,7 +76,7 @@ organisation.
 |---|---|---|
 | `email` | `String` | Lower-cased and trimmed on write. **Unique.** |
 | `name` | `String` | Required, 1–120 |
-| `passwordHash` | `String` | bcrypt, cost 12. Never selected by default. |
+| `passwordHash` | `String` | bcrypt, cost 12 (~1.8s/hash on i5-7200U; ~250ms on modern server CPU). Never selected by default. |
 | `avatarUrl` | `String?` | |
 | `emailVerifiedAt` | `Date?` | Null means unverified |
 | `lastLoginAt` | `Date?` | |
@@ -479,27 +479,28 @@ appears in someone's timeline.
 | Field | Type | Notes |
 |---|---|---|
 | `organizationId` | `ObjectId` | |
-| `title` | `String` | 1–200 |
+| `title` | `String` | 1–255 |
 | `description` | `String?` | |
 | `assigneeId` | `ObjectId?` | Member; null means unassigned |
 | `createdBy` | `ObjectId` | User |
-| `status` | `String` | `TODO` \| `IN_PROGRESS` \| `DONE` \| `CANCELED` |
+| `updatedBy` | `ObjectId` | User |
+| `status` | `String` | `TODO` \| `IN_PROGRESS` \| `DONE` |
 | `priority` | `String` | `LOW` \| `MEDIUM` \| `HIGH` \| `URGENT` |
 | `dueAt` | `Date?` | |
-| `completedAt` | `Date?` | |
+| `completedAt` | `Date?` | Set when status becomes `DONE` |
+| `completedById` | `ObjectId?` | User who completed it |
 | `related` | `[{ entityType, entityId }]` | Same shape as `Activity.subjects` |
-| `reminders` | `[{ remindAt, sentAt }]` | MVP records the intent; dispatch is Stage 7 |
-| `estimatedMinutes` | `Number?` | |
+| `metadata` | `Mixed` | |
 | `deletedAt` | `Date?` | |
 
 **Indexes**
 
 | Index | Serves |
 |---|---|
-| `{ organizationId: 1, assigneeId: 1, status: 1, dueAt: 1 }` | "My open tasks", overdue detection |
-| `{ organizationId: 1, status: 1, dueAt: 1 }` | Team task board |
-| `{ organizationId: 1, 'related.entityId': 1 }` | Tasks on a record page |
-| `{ organizationId: 1, createdBy: 1, createdAt: -1 }` | "Created by me" |
+| `{ organizationId: 1, status: 1, dueAt: 1 }` | Team task board, overdue tasks |
+| `{ organizationId: 1, assigneeId: 1, status: 1 }` | "My tasks" by status |
+| `{ organizationId: 1, "related.entityType": 1, "related.entityId": 1 }` | Tasks on a record page (multikey) |
+| `{ organizationId: 1, createdAt: -1 }` | "Created by me", newest first |
 
 ---
 

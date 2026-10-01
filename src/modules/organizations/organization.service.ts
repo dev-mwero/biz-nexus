@@ -8,6 +8,7 @@ import {
   type Organization,
   OrganizationModel,
 } from "@/modules/organizations";
+import { PipelineService } from "@/modules/pipelines/pipeline.service";
 import { provisionSystemRoles } from "@/modules/rbac/role.service";
 import { AppError } from "@/shared/errors/app-error";
 
@@ -167,6 +168,13 @@ export async function createOrganization(
         );
       }
     }
+
+    // Provision default pipeline
+    await PipelineService.provisionDefault(
+      organization._id,
+      input.ownerId,
+      session,
+    );
 
     return { organization, ownerRoleId: ownerRole._id, membership };
   });
