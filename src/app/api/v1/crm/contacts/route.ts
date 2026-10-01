@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { z } from "zod";
 import {
   ContactError,
@@ -36,7 +36,7 @@ const createContactSchema = z.object({
   status: z.enum(CONTACT_STATUSES).default("LEAD"),
   tags: z.array(z.string()).default([]),
   notes: z.string().max(2000).optional().nullable(),
-  customFields: z.record(z.unknown()).default({}),
+  customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
 const listQuerySchema = z.object({
@@ -73,12 +73,10 @@ export const GET = withApi(async (request: Request) => {
   const filters = {
     status: query.status,
     companyId: query.companyId
-      ? new context.organization.constructor(query.companyId)
+      ? new Types.ObjectId(query.companyId)
       : undefined,
-    ownerId: query.ownerId
-      ? new context.organization.constructor(query.ownerId)
-      : undefined,
-    tagIds: query.tag.map((id) => new context.organization.constructor(id)),
+    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
+    tagIds: query.tag.map((id) => new Types.ObjectId(id)),
     q: query.q,
     createdFrom: query.createdFrom ? new Date(query.createdFrom) : undefined,
     createdTo: query.createdTo ? new Date(query.createdTo) : undefined,
@@ -106,46 +104,58 @@ export const GET = withApi(async (request: Request) => {
  * Create a new contact.
  * Permission: contacts.create
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("contacts.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("contacts.create");
 
-  const body = await request.json();
-  const input = createContactSchema.parse(body);
+    const body = await request.json();
+    const input = createContactSchema.parse(body);
 
-  const service = new ContactService(
-    context.organization._id,
-    context.user._id,
-  );
+    const service = new ContactService(
+      context.organization._id,
+      context.user._id,
+    );
 
-  try {
-    const contact = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      salutation: input.salutation,
-      jobTitle: input.jobTitle,
-      companyId: input.companyId
-        ? new context.organization.constructor(input.companyId)
-        : undefined,
-      ownerId: new context.organization.constructor(input.ownerId),
-      emails: input.emails,
-      phones: input.phones,
-      status: input.status,
-      tags: input.tags.map((id) => new context.organization.constructor(id)),
-      notes: input.notes,
-      customFields: input.customFields,
-    });
+    try {
+      const createInput: CreateContactInput = {
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        // Create records absence as "not supplied" rather than as an empty
+        // value, so an explicit null in the body becomes undefined here.
+        salutation: input.salutation ?? undefined,
+        jobTitle: input.jobTitle ?? undefined,
+        companyId: input.companyId
+          ? new Types.ObjectId(input.companyId)
+          : undefined,
+        ownerId: new Types.ObjectId(input.ownerId),
+        emails: input.emails,
+        phones: input.phones,
+        status: input.status,
+        tags: input.tags.map((id) => new Types.ObjectId(id)),
+        notes: input.notes ?? undefined,
+        customFields: input.customFields,
+      };
 
-    return ok(contact, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof ContactError && error.code === "CONFLICT") {
-      throw new AppError("CONFLICT", { message: error.message });
+      const contact = await service.create(createInput);
+
+      return ok(contact);
+    } catch (error) {
+      // The only conflict the service raises is a second contact claiming an
+      // address that is already some contact's primary one, so the response
+      // names the address rather than a generic resource clash.
+      if (error instanceof ContactError && error.code === "CONFLICT") {
+        throw new AppError("EMAIL_ALREADY_REGISTERED", {
+          message: error.message,
+        });
+      }
+      if (error instanceof ContactError && error.code === "VALIDATION_FAILED") {
+        throw new AppError("VALIDATION_FAILED", { message: error.message });
+      }
+      throw error;
     }
-    if (error instanceof ContactError && error.code === "VALIDATION_FAILED") {
-      throw new AppError("VALIDATION_FAILED", { message: error.message });
-    }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

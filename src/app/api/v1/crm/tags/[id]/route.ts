@@ -1,10 +1,10 @@
-import type { Types } from "mongoose";
 import { z } from "zod";
 import { TagError, TagService, type UpdateTagInput } from "@/modules/crm";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
-import { fail, ok } from "@/shared/responses/envelope";
+import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../_lib/path-param";
 
 const updateTagSchema = z
   .object({
@@ -46,82 +46,79 @@ const updateTagSchema = z
  * Get a tag by ID.
  * Permission: tags.read
  */
-export const GET = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("tags.read");
+export const GET = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("tags.read");
 
-    const { id } = await params;
-    const service = new TagService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new TagService(context.organization._id, context.user._id);
 
-    const tag = await service.getById(id);
-    if (!tag) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
-    }
+  const tag = await service.getById(id);
+  if (!tag) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
+  }
 
-    return ok(tag);
-  },
-);
+  return ok(tag);
+});
 
 /**
  * PATCH /api/v1/crm/tags/:id
  * Update a tag.
  * Permission: tags.update
  */
-export const PATCH = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("tags.update");
+export const PATCH = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("tags.update");
 
-    const { id } = await params;
-    const body = await request.json();
-    const input = updateTagSchema.parse(body);
+  const id = pathParam(request);
+  const body = await request.json();
+  const input = updateTagSchema.parse(body);
 
-    const service = new TagService(context.organization._id, context.user._id);
+  const service = new TagService(context.organization._id, context.user._id);
 
-    try {
-      const tag = await service.update(
-        id,
-        input as UpdateTagInput,
-        context.user._id,
-      );
-      return ok(tag);
-    } catch (error) {
-      if (error instanceof TagError && error.code === "CONFLICT") {
-        throw new AppError("CONFLICT", { message: error.message });
-      }
-      if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
-      }
-      throw error;
+  try {
+    // The schema narrows to exactly the fields the service accepts, so this is a
+    // narrowing of an already-checked shape rather than a way of silencing the
+    // compiler.
+    const tag = await service.update(
+      id,
+      input as UpdateTagInput,
+      context.user._id,
+    );
+    return ok(tag);
+  } catch (error) {
+    // The service raises SLUG_CONFLICT for a rename onto a name that is already
+    // in use within the organization; the catalogue has no narrower
+    // duplicate-name code.
+    if (error instanceof TagError && error.code === "SLUG_CONFLICT") {
+      throw new AppError("SLUG_CONFLICT", { message: error.message });
     }
-  },
-);
+    if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
+    }
+    throw error;
+  }
+});
 
 /**
  * DELETE /api/v1/crm/tags/:id
  * Soft delete a tag.
  * Permission: tags.delete
  */
-export const DELETE = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("tags.delete");
+export const DELETE = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("tags.delete");
 
-    const { id } = await params;
-    const service = new TagService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new TagService(context.organization._id, context.user._id);
 
-    try {
-      await service.delete(id, context.user._id);
-      return new Response(null, { status: 204 });
-    } catch (error) {
-      if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
-      }
-      if (error instanceof TagError && error.code === "CONFLICT") {
-        throw new AppError("CONFLICT", { message: error.message });
-      }
-      throw error;
+  try {
+    await service.delete(id, context.user._id);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", { message: "Tag not found." });
     }
-  },
-);
+    throw error;
+  }
+});

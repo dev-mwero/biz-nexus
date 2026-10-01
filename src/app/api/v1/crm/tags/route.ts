@@ -138,28 +138,34 @@ export const GET = withApi(async (request: Request) => {
  * Create a new tag.
  * Permission: tags.create
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("tags.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("tags.create");
 
-  const body = await request.json();
-  const input = createTagSchema.parse(body);
+    const body = await request.json();
+    const input = createTagSchema.parse(body);
 
-  const service = new TagService(context.organization._id, context.user._id);
+    const service = new TagService(context.organization._id, context.user._id);
 
-  try {
-    const tag = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      name: input.name,
-      color: input.color,
-    });
+    try {
+      const tag = await service.create({
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        name: input.name,
+        color: input.color,
+      });
 
-    return ok(tag, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof TagError && error.code === "CONFLICT") {
-      throw new AppError("CONFLICT", { message: error.message });
+      return ok(tag);
+    } catch (error) {
+      // The service raises SLUG_CONFLICT for a name that is already in use
+      // within the organization; the catalogue has no narrower duplicate-name
+      // code, and this is a uniqueness refusal rather than a malformed body.
+      if (error instanceof TagError && error.code === "SLUG_CONFLICT") {
+        throw new AppError("SLUG_CONFLICT", { message: error.message });
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { z } from "zod";
 import {
   CompanyError,
@@ -42,7 +42,7 @@ const createCompanySchema = z.object({
   status: z.enum(COMPANY_STATUSES).default("PROSPECT"),
   tags: z.array(z.string()).default([]),
   notes: z.string().max(2000).optional().nullable(),
-  customFields: z.record(z.unknown()).default({}),
+  customFields: z.record(z.string(), z.unknown()).default({}),
   size: z.number().int().positive().optional().nullable(),
   annualRevenue: z.number().nonnegative().optional().nullable(),
   parentId: z.string().optional().nullable(),
@@ -79,14 +79,10 @@ export const GET = withApi(async (request: Request) => {
 
   const filters = {
     status: query.status,
-    ownerId: query.ownerId
-      ? new context.organization.constructor(query.ownerId)
-      : undefined,
-    tagIds: query.tag.map((id) => new context.organization.constructor(id)),
+    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
+    tagIds: query.tag.map((id) => new Types.ObjectId(id)),
     q: query.q,
-    parentId: query.parentId
-      ? new context.organization.constructor(query.parentId)
-      : undefined,
+    parentId: query.parentId ? new Types.ObjectId(query.parentId) : undefined,
   };
 
   const result = await service.list(filters, {
@@ -110,51 +106,59 @@ export const GET = withApi(async (request: Request) => {
  * Create a new company.
  * Permission: companies.create
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("companies.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("companies.create");
 
-  const body = await request.json();
-  const input = createCompanySchema.parse(body);
+    const body = await request.json();
+    const input = createCompanySchema.parse(body);
 
-  const service = new CompanyService(
-    context.organization._id,
-    context.user._id,
-  );
+    const service = new CompanyService(
+      context.organization._id,
+      context.user._id,
+    );
 
-  try {
-    const company = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      name: input.name,
-      legalName: input.legalName,
-      industry: input.industry,
-      website: input.website,
-      email: input.email,
-      phone: input.phone,
-      billingAddress: input.billingAddress,
-      shippingAddress: input.shippingAddress,
-      ownerId: new context.organization.constructor(input.ownerId),
-      status: input.status,
-      tags: input.tags.map((id) => new context.organization.constructor(id)),
-      notes: input.notes,
-      customFields: input.customFields,
-      size: input.size,
-      annualRevenue: input.annualRevenue,
-      parentId: input.parentId
-        ? new context.organization.constructor(input.parentId)
-        : undefined,
-      domain: input.domain,
-    });
+    try {
+      const company = await service.create({
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        name: input.name,
+        // The service stores the absence of a value as null; the input type says
+        // "not supplied" as undefined, so an absent field is translated rather
+        // than passed through.
+        legalName: input.legalName ?? undefined,
+        industry: input.industry ?? undefined,
+        website: input.website ?? undefined,
+        email: input.email ?? undefined,
+        phone: input.phone ?? undefined,
+        billingAddress: input.billingAddress,
+        shippingAddress: input.shippingAddress,
+        ownerId: new Types.ObjectId(input.ownerId),
+        status: input.status,
+        tags: input.tags.map((id) => new Types.ObjectId(id)),
+        notes: input.notes ?? undefined,
+        customFields: input.customFields,
+        size: input.size ?? undefined,
+        annualRevenue: input.annualRevenue ?? undefined,
+        parentId: input.parentId
+          ? new Types.ObjectId(input.parentId)
+          : undefined,
+        domain: input.domain ?? undefined,
+      });
 
-    return ok(company, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof CompanyError && error.code === "CONFLICT") {
-      throw new AppError("CONFLICT", { message: error.message });
+      return ok(company);
+    } catch (error) {
+      // A domain is the company's unique identifier, so the refusal is the same
+      // kind of refusal as a name that is taken.
+      if (error instanceof CompanyError && error.code === "CONFLICT") {
+        throw new AppError("SLUG_CONFLICT", { message: error.message });
+      }
+      if (error instanceof CompanyError && error.code === "VALIDATION_FAILED") {
+        throw new AppError("VALIDATION_FAILED", { message: error.message });
+      }
+      throw error;
     }
-    if (error instanceof CompanyError && error.code === "VALIDATION_FAILED") {
-      throw new AppError("VALIDATION_FAILED", { message: error.message });
-    }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

@@ -8,7 +8,10 @@ import {
 } from "@/modules/tasks";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
-import { fail, ok } from "@/shared/responses/envelope";
+import { AppError } from "@/shared/errors/app-error";
+import { ok } from "@/shared/responses/envelope";
+import { objectIdParam } from "../../../_lib/path-param";
+import { fieldDetails } from "../../../_lib/zod-details";
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),
@@ -32,55 +35,33 @@ const updateTaskSchema = z.object({
       }),
     )
     .optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const GET = withApi(async (request, { requestId }) => {
+export const GET = withApi(async (request) => {
   const guards = guardsFor(request);
   const { organization } = await guards.requirePermission("tasks.read");
 
-  const id = request.nextUrl.pathname.split("/").pop();
-  if (!id || !Types.ObjectId.isValid(id)) {
-    return fail(
-      { code: "VALIDATION_FAILED", message: "Invalid task ID" },
-      requestId,
-    );
-  }
+  const id = objectIdParam(request);
 
-  const task = await findTaskById(organization._id, new Types.ObjectId(id));
+  const task = await findTaskById(organization._id, id);
   if (!task) {
-    return fail(
-      { code: "RECORD_NOT_FOUND", message: "Task not found" },
-      requestId,
-    );
+    throw new AppError("RECORD_NOT_FOUND", { message: "Task not found" });
   }
 
   return ok(task);
 });
 
-export const PATCH = withApi(async (request, { requestId }) => {
+export const PATCH = withApi(async (request) => {
   const guards = guardsFor(request);
   const { organization, user } = await guards.requirePermission("tasks.update");
 
-  const id = request.nextUrl.pathname.split("/").pop();
-  if (!id || !Types.ObjectId.isValid(id)) {
-    return fail(
-      { code: "VALIDATION_FAILED", message: "Invalid task ID" },
-      requestId,
-    );
-  }
+  const id = objectIdParam(request);
 
   const body = await request.json();
   const parsed = updateTaskSchema.safeParse(body);
   if (!parsed.success) {
-    return fail(
-      {
-        code: "VALIDATION_FAILED",
-        message: "Invalid request body",
-        details: parsed.error.flatten().fieldErrors,
-      },
-      requestId,
-    );
+    throw AppError.validation(fieldDetails(parsed.error));
   }
 
   const data = parsed.data;
@@ -113,43 +94,23 @@ export const PATCH = withApi(async (request, { requestId }) => {
     metadata: data.metadata ?? {},
   };
 
-  const task = await updateTask(
-    organization._id,
-    new Types.ObjectId(id),
-    input,
-  );
+  const task = await updateTask(organization._id, id, input);
   if (!task) {
-    return fail(
-      { code: "RECORD_NOT_FOUND", message: "Task not found" },
-      requestId,
-    );
+    throw new AppError("RECORD_NOT_FOUND", { message: "Task not found" });
   }
 
   return ok(task);
 });
 
-export const DELETE = withApi(async (request, { requestId }) => {
+export const DELETE = withApi(async (request) => {
   const guards = guardsFor(request);
   const { organization, user } = await guards.requirePermission("tasks.delete");
 
-  const id = request.nextUrl.pathname.split("/").pop();
-  if (!id || !Types.ObjectId.isValid(id)) {
-    return fail(
-      { code: "VALIDATION_FAILED", message: "Invalid task ID" },
-      requestId,
-    );
-  }
+  const id = objectIdParam(request);
 
-  const deleted = await deleteTask(
-    organization._id,
-    new Types.ObjectId(id),
-    user._id,
-  );
+  const deleted = await deleteTask(organization._id, id, user._id);
   if (!deleted) {
-    return fail(
-      { code: "RECORD_NOT_FOUND", message: "Task not found" },
-      requestId,
-    );
+    throw new AppError("RECORD_NOT_FOUND", { message: "Task not found" });
   }
 
   return ok({ success: true });

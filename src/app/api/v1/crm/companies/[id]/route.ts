@@ -1,7 +1,8 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { z } from "zod";
 import {
   CompanyError,
+  CompanyRepository,
   CompanyService,
   type UpdateCompanyInput,
 } from "@/modules/crm";
@@ -9,6 +10,7 @@ import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../_lib/path-param";
 
 const COMPANY_STATUSES = [
   "PROSPECT",
@@ -44,7 +46,7 @@ const updateCompanySchema = z
     status: z.enum(COMPANY_STATUSES).optional(),
     tags: z.array(z.string()).optional(),
     notes: z.string().max(2000).optional().nullable(),
-    customFields: z.record(z.unknown()).optional(),
+    customFields: z.record(z.string(), z.unknown()).optional(),
     size: z.number().int().positive().optional().nullable(),
     annualRevenue: z.number().nonnegative().optional().nullable(),
     parentId: z.string().optional().nullable(),
@@ -60,135 +62,141 @@ const updateCompanySchema = z
  * Get a company by ID.
  * Permission: companies.read
  */
-export const GET = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("companies.read");
+export const GET = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("companies.read");
 
-    const { id } = await params;
-    const service = new CompanyService(
-      context.organization._id,
-      context.user._id,
-    );
+  const id = pathParam(request);
+  const service = new CompanyService(
+    context.organization._id,
+    context.user._id,
+  );
 
-    const company = await service.getById(id);
-    if (!company) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Company not found." });
-    }
+  const company = await service.getById(id);
+  if (!company) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Company not found." });
+  }
 
-    return ok(company);
-  },
-);
+  return ok(company);
+});
 
 /**
  * PATCH /api/v1/crm/companies/:id
  * Update a company.
  * Permission: companies.update
  */
-export const PATCH = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("companies.update");
+export const PATCH = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("companies.update");
 
-    const { id } = await params;
-    const body = await request.json();
-    const input = updateCompanySchema.parse(body);
+  const id = pathParam(request);
+  const body = await request.json();
+  const input = updateCompanySchema.parse(body);
 
-    const service = new CompanyService(
-      context.organization._id,
-      context.user._id,
-    );
+  const service = new CompanyService(
+    context.organization._id,
+    context.user._id,
+  );
 
-    try {
-      const updateInput: UpdateCompanyInput = { ...input };
-      if (input.ownerId)
-        updateInput.ownerId = new context.organization.constructor(
-          input.ownerId,
-        );
-      if (input.tags)
-        updateInput.tags = input.tags.map(
-          (t) => new context.organization.constructor(t),
-        );
-      if (input.parentId !== undefined) {
-        updateInput.parentId = input.parentId
-          ? new context.organization.constructor(input.parentId)
-          : null;
-      }
+  try {
+    // The parsed fields are strings and the service wants ids, so each id field
+    // is translated where it was supplied and left absent where it was not —
+    // an update distinguishes "clear this" from "leave this alone", so `null`
+    // has to survive the conversion and `undefined` must not become one.
+    const { ownerId, tags, parentId, ...rest } = input;
+    const updateInput: UpdateCompanyInput = {
+      ...rest,
+      ...(ownerId ? { ownerId: new Types.ObjectId(ownerId) } : {}),
+      ...(tags ? { tags: tags.map((tagId) => new Types.ObjectId(tagId)) } : {}),
+      ...(parentId !== undefined
+        ? { parentId: parentId ? new Types.ObjectId(parentId) : null }
+        : {}),
+    };
 
-      const company = await service.update(id, updateInput, context.user._id);
-      return ok(company);
-    } catch (error) {
-      if (error instanceof CompanyError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", {
-          message: "Company not found.",
-        });
-      }
-      if (error instanceof CompanyError && error.code === "CONFLICT") {
-        throw new AppError("CONFLICT", { message: error.message });
-      }
-      if (error instanceof CompanyError && error.code === "VALIDATION_FAILED") {
-        throw new AppError("VALIDATION_FAILED", { message: error.message });
-      }
-      throw error;
+    const company = await service.update(id, updateInput, context.user._id);
+    return ok(company);
+  } catch (error) {
+    if (error instanceof CompanyError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", {
+        message: "Company not found.",
+      });
     }
-  },
-);
+    // A domain is the company's unique identifier, so the refusal is the same
+    // kind of refusal as a name that is taken.
+    if (error instanceof CompanyError && error.code === "CONFLICT") {
+      throw new AppError("SLUG_CONFLICT", { message: error.message });
+    }
+    if (error instanceof CompanyError && error.code === "VALIDATION_FAILED") {
+      throw new AppError("VALIDATION_FAILED", { message: error.message });
+    }
+    throw error;
+  }
+});
 
 /**
  * DELETE /api/v1/crm/companies/:id
  * Soft delete a company.
  * Permission: companies.delete
  */
-export const DELETE = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("companies.delete");
+export const DELETE = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("companies.delete");
 
-    const { id } = await params;
-    const service = new CompanyService(
-      context.organization._id,
-      context.user._id,
-    );
+  const id = pathParam(request);
+  const service = new CompanyService(
+    context.organization._id,
+    context.user._id,
+  );
 
-    try {
-      await service.delete(id, context.user._id);
-      return new Response(null, { status: 204 });
-    } catch (error) {
-      if (error instanceof CompanyError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", {
-          message: "Company not found.",
-        });
-      }
-      if (error instanceof CompanyError && error.code === "CONFLICT") {
-        throw new AppError("CONFLICT", { message: error.message });
-      }
-      throw error;
+  try {
+    await service.delete(id, context.user._id);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof CompanyError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", {
+        message: "Company not found.",
+      });
     }
-  },
-);
+    // Contacts or child companies still point at this one. It is a 409 rather
+    // than a 422 because the record is fine and the caller's plan for it is not;
+    // `SLUG_CONFLICT` is the catalogue's general-purpose 409 and carries this
+    // project's message, which is the part that says what to do about it.
+    if (error instanceof CompanyError && error.code === "CONFLICT") {
+      throw new AppError("SLUG_CONFLICT", { message: error.message });
+    }
+    throw error;
+  }
+});
 
 /**
  * POST /api/v1/crm/companies/:id/restore
  * Restore a soft-deleted company.
  * Permission: companies.update
  */
-export const POST = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("companies.update");
+export const POST = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("companies.update");
 
-    const { id } = await params;
-    const service = new CompanyService(
-      context.organization._id,
-      context.user._id,
-    );
+  const id = pathParam(request);
 
-    const restored = await (service as any).repo.restoreById(id);
-    if (restored.matchedCount === 0) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Company not found." });
-    }
+  // The repository rather than the service: `restoreById` reaches rows the
+  // tenant scope hides, which is the whole point of a restore, and the service
+  // deliberately does not expose it. `restoreById` is scoped to the same
+  // organization, so a foreign id matches nothing and is a 404 rather than a
+  // write.
+  const repo = new CompanyRepository(
+    context.organization._id,
+    context.user._id,
+  );
+  const restored = await repo.restoreById(id);
+  if (restored.matchedCount === 0) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Company not found." });
+  }
 
-    const company = await service.getById(id);
-    return ok(company);
-  },
-);
+  const service = new CompanyService(
+    context.organization._id,
+    context.user._id,
+  );
+  const company = await service.getById(id);
+  return ok(company);
+});

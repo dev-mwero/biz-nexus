@@ -121,11 +121,90 @@ export function AlertDialogFooter({
 }
 
 /**
+ * The dismissing button.
+ *
+ * It is a `Button` rendered *as* the close trigger rather than a button with a
+ * click handler, so closing the dialog is the same gesture for a mouse, for
+ * <kbd>Enter</kbd>, and for the initial focus that lands here.
+ */
+export function AlertDialogCancel({
+  className,
+  children,
+  ...props
+}: {
+  className?: string;
+  children?: ReactNode;
+} & React.ComponentPropsWithoutRef<typeof Button>) {
+  return (
+    <AlertDialogClose
+      render={
+        <Button variant="secondary" className={className} {...props}>
+          {children}
+        </Button>
+      }
+    />
+  );
+}
+
+/**
+ * The committing button.
+ *
+ * Closes the dialog as part of committing, because a confirm that leaves the
+ * dialog open behind a result the user can already see is a dialog they have to
+ * dismiss twice. Default focus never lands here — see `AlertDialogActions`.
+ *
+ * `onConfirm` and `confirmLoading` are accepted alongside the plain button props
+ * so that the two ways of composing this dialog cannot drift: a caller who
+ * supplies `onConfirm` gets the same loading treatment as one who supplies
+ * `confirmLoading` on the fixed pair, rather than having to reimplement the
+ * in-flight button to get it. `onConfirm` may be async; the dialog is closed by
+ * the trigger regardless, and the handler owns reporting failure.
+ */
+export function AlertDialogAction({
+  className,
+  children,
+  variant,
+  destructive = false,
+  onConfirm,
+  confirmLoading = false,
+  onClick,
+  ...props
+}: {
+  children?: ReactNode;
+  destructive?: boolean;
+  onConfirm?: () => void;
+  confirmLoading?: boolean;
+} & React.ComponentPropsWithoutRef<typeof Button>) {
+  return (
+    <AlertDialogClose
+      render={
+        <Button
+          variant={variant ?? (destructive ? "danger" : "primary")}
+          className={className}
+          loading={confirmLoading}
+          onClick={onClick ?? onConfirm}
+          {...props}
+        >
+          {children}
+        </Button>
+      }
+    />
+  );
+}
+
+/**
  * The standard confirm/cancel pair, with cancel as the default focus.
  *
  * Focus lands on cancel because the safe option should be the one a reflexive
  * Enter hits. Making the destructive action the default would mean the fastest
  * possible path to data loss.
+ *
+ * Both forms are supported. Pass labels for the fixed pair, or pass children to
+ * compose the buttons yourself when the confirm needs its own affordance — a
+ * second field, a checkbox, an in-flight state the button alone cannot express.
+ * The composition form takes `Cancel` and `Confirm` as statics so a caller
+ * assembling their own footer does not have to import two more names for
+ * something that is conceptually one thing.
  */
 export function AlertDialogActions({
   confirmLabel = "Confirm",
@@ -133,6 +212,7 @@ export function AlertDialogActions({
   destructive = false,
   onConfirm,
   confirmLoading = false,
+  children,
   ...props
 }: {
   confirmLabel?: string;
@@ -143,16 +223,21 @@ export function AlertDialogActions({
 } & Omit<React.ComponentPropsWithoutRef<"div">, "onConfirm">) {
   return (
     <AlertDialogFooter {...props}>
-      <AlertDialogClose
-        render={<Button variant="secondary">{cancelLabel}</Button>}
-      />
-      <Button
-        variant={destructive ? "danger" : "primary"}
-        onClick={onConfirm}
-        loading={confirmLoading}
-      >
-        {confirmLabel}
-      </Button>
+      {children ?? (
+        <>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction
+            destructive={destructive}
+            onConfirm={onConfirm}
+            confirmLoading={confirmLoading}
+          >
+            {confirmLabel}
+          </AlertDialogAction>
+        </>
+      )}
     </AlertDialogFooter>
   );
 }
+
+AlertDialogActions.Cancel = AlertDialogCancel;
+AlertDialogActions.Confirm = AlertDialogAction;

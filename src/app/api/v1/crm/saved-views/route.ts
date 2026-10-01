@@ -20,7 +20,7 @@ const SAVED_VIEW_ENTITY_TYPES = [
 const createSavedViewSchema = z.object({
   entityType: z.enum(SAVED_VIEW_ENTITY_TYPES),
   name: z.string().min(1).max(60),
-  filters: z.record(z.unknown()).default({}),
+  filters: z.record(z.string(), z.unknown()).default({}),
   sort: z.string().default(""),
   columns: z
     .array(
@@ -89,31 +89,36 @@ export const GET = withApi(async (request: Request) => {
  * Create a new saved view.
  * Permission: {entity}.create (validated via savedViews.create)
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("savedViews.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("savedViews.create");
 
-  const body = await request.json();
-  const input = createSavedViewSchema.parse(body);
+    const body = await request.json();
+    const input = createSavedViewSchema.parse(body);
 
-  const service = new SavedViewService(
-    context.organization._id,
-    context.user._id,
-  );
+    const service = new SavedViewService(
+      context.organization._id,
+      context.user._id,
+    );
 
-  try {
-    const savedView = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      userId: context.user._id,
-      ...input,
-    });
+    try {
+      const savedView = await service.create({
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        userId: context.user._id,
+        ...input,
+      });
 
-    return ok(savedView, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof SavedViewError && error.code === "CONFLICT") {
-      throw new AppError("CONFLICT", { message: error.message });
+      return ok(savedView);
+    } catch (error) {
+      // The service raises SLUG_CONFLICT when the caller already owns a view at
+      // this name and scope; the catalogue has no narrower duplicate-name code.
+      if (error instanceof SavedViewError && error.code === "SLUG_CONFLICT") {
+        throw new AppError("SLUG_CONFLICT", { message: error.message });
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

@@ -1,7 +1,6 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import {
-  type ActivityType,
   organizationFeed,
   type RecordActivityInput,
   recordActivity,
@@ -9,8 +8,10 @@ import {
 } from "@/modules/activities";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
+import { AppError } from "@/shared/errors/app-error";
 import { listQuery } from "@/shared/query/list-query";
-import { fail, ok } from "@/shared/responses/envelope";
+import { ok } from "@/shared/responses/envelope";
+import { fieldDetails } from "../../_lib/zod-details";
 
 const activityFiltersSchema = z.object({
   entityType: z.string().optional(),
@@ -42,7 +43,10 @@ const activityFiltersSchema = z.object({
   before: z.union([z.iso.datetime({ offset: true }), z.iso.date()]).optional(),
 });
 
-const { parse, meta } = listQuery<z.infer<typeof activityFiltersSchema>>({
+// The generic is inferred from `filters`, so it must not be written out: the
+// parameter is the schema's raw *shape*, and `z.infer` is the parsed *output*.
+// Naming the output there is what makes the shape constraint fail to hold.
+const { parse, meta } = listQuery({
   filters: activityFiltersSchema,
   sortable: ["occurredAt"],
   defaultSort: "-occurredAt",
@@ -66,42 +70,48 @@ export const GET = withApi(async (request) => {
   const guards = guardsFor(request);
   const { organization } = await guards.requirePermission("activities.read");
 
-  const query = parse(request.nextUrl.searchParams);
+  const query = parse(new URL(request.url).searchParams);
   const filters = query.filters;
 
-  let activities;
-  if (filters.entityType && filters.entityId) {
-    // Timeline for a specific entity
-    activities = await timelineForEntity({
-      organizationId: organization._id,
-      entityId: new Types.ObjectId(filters.entityId),
-      limit: query.limit,
-      before: filters.before ? new Date(filters.before) : undefined,
-    });
-  } else {
-    // Organization-wide feed
-    activities = await organizationFeed({
-      organizationId: organization._id,
-      limit: query.limit,
-      before: filters.before ? new Date(filters.before) : undefined,
-    });
-  }
+  const before = filters.before ? new Date(filters.before) : undefined;
+  const entityId = filters.entityId
+    ? new Types.ObjectId(filters.entityId)
+    : undefined;
+
+  const activities =
+    filters.entityType && entityId
+      ? await timelineForEntity({
+          organizationId: organization._id,
+          entityId,
+          limit: query.limit,
+          before,
+        })
+      : await organizationFeed({
+          organizationId: organization._id,
+          limit: query.limit,
+          before,
+        });
 
   // Apply additional filters in-memory for the entity timeline
   // (In production, these would be pushed to the query level)
   let filtered = activities;
   if (filters.type) {
-    filtered = filtered.filter((a) => a.type === filters.type);
+    const type = filters.type;
+    filtered = filtered.filter((a) => a.type === type);
   }
-  if (filters.actorId) {
-    filtered = filtered.filter((a) =>
-      a.actorId?.equals(new Types.ObjectId(filters.actorId!)),
-    );
+
+  const actorId = filters.actorId
+    ? new Types.ObjectId(filters.actorId)
+    : undefined;
+  if (actorId) {
+    filtered = filtered.filter((a) => a.actorId?.equals(actorId));
   }
-  if (filters.ownerId) {
-    filtered = filtered.filter((a) =>
-      a.ownerId.equals(new Types.ObjectId(filters.ownerId!)),
-    );
+
+  const ownerId = filters.ownerId
+    ? new Types.ObjectId(filters.ownerId)
+    : undefined;
+  if (ownerId) {
+    filtered = filtered.filter((a) => a.ownerId.equals(ownerId));
   }
 
   // For paginated response, we return the filtered results
@@ -110,7 +120,7 @@ export const GET = withApi(async (request) => {
 });
 
 export const POST = withApi(
-  async (request, { requestId }) => {
+  async (request) => {
     const guards = guardsFor(request);
     const { organization, user } =
       await guards.requirePermission("activities.create");
@@ -118,14 +128,7 @@ export const POST = withApi(
     const body = await request.json();
     const parsed = createActivitySchema.safeParse(body);
     if (!parsed.success) {
-      return fail(
-        {
-          code: "VALIDATION_FAILED",
-          message: "Invalid request body",
-          details: parsed.error.flatten().fieldErrors,
-        },
-        requestId,
-      );
+      throw AppError.validation(fieldDetails(parsed.error));
     }
 
     const data = parsed.data;
@@ -155,7 +158,7 @@ export const POST = withApi(
     };
 
     const activity = await recordActivity(input);
-    return ok(activity, undefined, { status: 201 });
+    return ok(activity);
   },
   { status: 201 },
 );

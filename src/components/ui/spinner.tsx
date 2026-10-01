@@ -15,12 +15,24 @@ import { cn } from "@/shared/lib/cn";
  * leaving the announcement to the container. A spinner nested inside an
  * element that already exposes `aria-busy` must be silent, or the user hears
  * "loading" twice.
+ *
+ * `size` exists rather than leaving every call site to write `className="size-6"`
+ * because the border has to grow with the box. A 2px border on a 24px circle is
+ * a ring, not a spinner; scaling the box without the border turns it into one.
  */
+const SPINNER_SIZES = {
+  sm: "size-3 border-[1.5px]",
+  md: "size-4 border-2",
+  lg: "size-6 border-2",
+} as const;
+
 export function Spinner({
   className,
+  size = "md",
   label,
 }: {
   className?: string;
+  size?: keyof typeof SPINNER_SIZES;
   /** Omit to make the spinner decorative. Supply to announce it. */
   label?: string;
 }) {
@@ -30,7 +42,8 @@ export function Spinner({
         ? { role: "status" as const, "aria-label": label }
         : { "aria-hidden": true as const })}
       className={cn(
-        "inline-block size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent",
+        "inline-block shrink-0 animate-spin rounded-full border-current border-t-transparent",
+        SPINNER_SIZES[size],
         className,
       )}
     />

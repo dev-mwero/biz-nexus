@@ -1,9 +1,16 @@
+import { Types } from "mongoose";
 import { z } from "zod";
-import { LeadError, LeadService, type UpdateLeadInput } from "@/modules/crm";
+import {
+  LeadError,
+  LeadRepository,
+  LeadService,
+  type UpdateLeadInput,
+} from "@/modules/crm";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../_lib/path-param";
 
 const LEAD_STATUSES = [
   "NEW",
@@ -25,7 +32,7 @@ const updateLeadSchema = z
     ownerId: z.string().optional(),
     tags: z.array(z.string()).optional(),
     notes: z.string().max(2000).optional().nullable(),
-    customFields: z.record(z.unknown()).optional(),
+    customFields: z.record(z.string(), z.unknown()).optional(),
   })
   .refine(
     (data) => Object.keys(data).length > 0,
@@ -37,124 +44,119 @@ const updateLeadSchema = z
  * Get a lead by ID.
  * Permission: leads.read
  */
-export const GET = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("leads.read");
+export const GET = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("leads.read");
 
-    const { id } = await params;
-    const service = new LeadService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new LeadService(context.organization._id, context.user._id);
 
-    const lead = await service.getById(id);
-    if (!lead) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-    }
+  const lead = await service.getById(id);
+  if (!lead) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
+  }
 
-    return ok(lead);
-  },
-);
+  return ok(lead);
+});
 
 /**
  * PATCH /api/v1/crm/leads/:id
  * Update a lead.
  * Permission: leads.update
  */
-export const PATCH = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("leads.update");
+export const PATCH = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("leads.update");
 
-    const { id } = await params;
-    const body = await request.json();
-    const input = updateLeadSchema.parse(body);
+  const id = pathParam(request);
+  const body = await request.json();
+  const input = updateLeadSchema.parse(body);
 
-    const service = new LeadService(context.organization._id, context.user._id);
+  const service = new LeadService(context.organization._id, context.user._id);
 
-    try {
-      const updateInput: UpdateLeadInput = { ...input };
-      if (input.contactId !== undefined) {
-        updateInput.contactId = input.contactId
-          ? new context.organization.constructor(input.contactId)
-          : null;
-      }
-      if (input.companyId !== undefined) {
-        updateInput.companyId = input.companyId
-          ? new context.organization.constructor(input.companyId)
-          : null;
-      }
-      if (input.ownerId)
-        updateInput.ownerId = new context.organization.constructor(
-          input.ownerId,
-        );
-      if (input.tags !== undefined) {
-        updateInput.tags = input.tags.map(
-          (tagId) => new context.organization.constructor(tagId),
-        );
-      }
+  try {
+    // Only the id-bearing fields need translating, and each is translated only
+    // when it was supplied: an update distinguishes "clear this" from "leave
+    // this alone", so `null` must survive and a missing key must stay missing.
+    const { contactId, companyId, ownerId, tags, ...rest } = input;
+    const updateInput: UpdateLeadInput = {
+      ...rest,
+      ...(contactId !== undefined
+        ? { contactId: contactId ? new Types.ObjectId(contactId) : null }
+        : {}),
+      ...(companyId !== undefined
+        ? { companyId: companyId ? new Types.ObjectId(companyId) : null }
+        : {}),
+      ...(ownerId ? { ownerId: new Types.ObjectId(ownerId) } : {}),
+      ...(tags !== undefined
+        ? { tags: tags.map((tagId) => new Types.ObjectId(tagId)) }
+        : {}),
+    };
 
-      const lead = await service.update(id, updateInput, context.user._id);
-      return ok(lead);
-    } catch (error) {
-      if (error instanceof LeadError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-      }
-      if (error instanceof LeadError && error.code === "VALIDATION_FAILED") {
-        throw new AppError("VALIDATION_FAILED", { message: error.message });
-      }
-      if (error instanceof LeadError && error.code === "INVALID_STATE") {
-        throw new AppError("INVALID_STATE", { message: error.message });
-      }
-      throw error;
+    const lead = await service.update(id, updateInput, context.user._id);
+    return ok(lead);
+  } catch (error) {
+    if (error instanceof LeadError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
     }
-  },
-);
+    if (error instanceof LeadError && error.code === "VALIDATION_FAILED") {
+      throw new AppError("VALIDATION_FAILED", { message: error.message });
+    }
+    // A converted or soft-deleted lead cannot be updated. The catalogue has no
+    // dedicated "wrong state" code, and this refusal describes a body that
+    // could never succeed against this record, which is what 422 means.
+    if (error instanceof LeadError && error.code === "INVALID_STATE") {
+      throw new AppError("VALIDATION_FAILED", { message: error.message });
+    }
+    throw error;
+  }
+});
 
 /**
  * DELETE /api/v1/crm/leads/:id
  * Soft delete a lead.
  * Permission: leads.delete
  */
-export const DELETE = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("leads.delete");
+export const DELETE = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("leads.delete");
 
-    const { id } = await params;
-    const service = new LeadService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new LeadService(context.organization._id, context.user._id);
 
-    try {
-      await service.delete(id, context.user._id);
-      return new Response(null, { status: 204 });
-    } catch (error) {
-      if (error instanceof LeadError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-      }
-      throw error;
+  try {
+    await service.delete(id, context.user._id);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof LeadError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
     }
-  },
-);
+    throw error;
+  }
+});
 
 /**
  * POST /api/v1/crm/leads/:id/restore
  * Restore a soft-deleted lead.
  * Permission: leads.update
  */
-export const POST = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("leads.update");
+export const POST = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("leads.update");
 
-    const { id } = await params;
-    const service = new LeadService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new LeadService(context.organization._id, context.user._id);
 
-    // Access the repository directly for restore
-    const repo = (service as { repo: typeof service.repo }).repo;
-    const restored = await repo.restoreById(id);
-    if (restored.matchedCount === 0) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-    }
+  // The repository rather than the service: `restoreById` reaches rows the
+  // tenant scope hides, which is the whole point of a restore, and the service
+  // deliberately does not expose it. It is scoped to the same organization, so
+  // a foreign id matches nothing and is a 404 rather than a write.
+  const repo = new LeadRepository(context.organization._id, context.user._id);
+  const restored = await repo.restoreById(id);
+  if (restored.matchedCount === 0) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
+  }
 
-    const lead = await service.getById(id);
-    return ok(lead);
-  },
-);
+  const lead = await service.getById(id);
+  return ok(lead);
+});

@@ -8,6 +8,7 @@ import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../_lib/path-param";
 
 const FIELD_TYPES = [
   "TEXT",
@@ -46,103 +47,100 @@ const updateFieldDefinitionSchema = z
  * Get a field definition by ID.
  * Permission: fieldDefinitions.read
  */
-export const GET = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("fieldDefinitions.read");
+export const GET = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("fieldDefinitions.read");
 
-    const { id } = await params;
-    const service = new FieldDefinitionService(
-      context.organization._id,
-      context.user._id,
-    );
+  const id = pathParam(request);
+  const service = new FieldDefinitionService(
+    context.organization._id,
+    context.user._id,
+  );
 
-    const fieldDef = await service.getById(id);
-    if (!fieldDef) {
-      throw new AppError("RECORD_NOT_FOUND", {
-        message: "Field definition not found.",
-      });
-    }
+  const fieldDef = await service.getById(id);
+  if (!fieldDef) {
+    throw new AppError("RECORD_NOT_FOUND", {
+      message: "Field definition not found.",
+    });
+  }
 
-    return ok(fieldDef);
-  },
-);
+  return ok(fieldDef);
+});
 
 /**
  * PATCH /api/v1/crm/custom-fields/:id
  * Update a field definition.
  * Permission: fieldDefinitions.update
  */
-export const PATCH = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("fieldDefinitions.update");
+export const PATCH = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("fieldDefinitions.update");
 
-    const { id } = await params;
-    const body = await request.json();
-    const input = updateFieldDefinitionSchema.parse(body);
+  const id = pathParam(request);
+  const body = await request.json();
+  const input = updateFieldDefinitionSchema.parse(body);
 
-    const service = new FieldDefinitionService(
-      context.organization._id,
+  const service = new FieldDefinitionService(
+    context.organization._id,
+    context.user._id,
+  );
+
+  try {
+    // The schema narrows to exactly the fields the service accepts, so this is a
+    // narrowing of an already-checked shape rather than a way of silencing the
+    // compiler.
+    const fieldDef = await service.update(
+      id,
+      input as UpdateFieldDefinitionInput,
       context.user._id,
     );
-
-    try {
-      const fieldDef = await service.update(
-        id,
-        input as UpdateFieldDefinitionInput,
-        context.user._id,
-      );
-      return ok(fieldDef);
-    } catch (error) {
-      if (
-        error instanceof FieldDefinitionError &&
-        error.code === "RECORD_NOT_FOUND"
-      ) {
-        throw new AppError("RECORD_NOT_FOUND", {
-          message: "Field definition not found.",
-        });
-      }
-      if (
-        error instanceof FieldDefinitionError &&
-        error.code === "VALIDATION_FAILED"
-      ) {
-        throw new AppError("VALIDATION_FAILED", { message: error.message });
-      }
-      throw error;
+    return ok(fieldDef);
+  } catch (error) {
+    if (
+      error instanceof FieldDefinitionError &&
+      error.code === "RECORD_NOT_FOUND"
+    ) {
+      throw new AppError("RECORD_NOT_FOUND", {
+        message: "Field definition not found.",
+      });
     }
-  },
-);
+    if (
+      error instanceof FieldDefinitionError &&
+      error.code === "VALIDATION_FAILED"
+    ) {
+      throw new AppError("VALIDATION_FAILED", { message: error.message });
+    }
+    throw error;
+  }
+});
 
 /**
  * DELETE /api/v1/crm/custom-fields/:id
  * Delete a field definition.
  * Permission: fieldDefinitions.delete
  */
-export const DELETE = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("fieldDefinitions.delete");
+export const DELETE = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("fieldDefinitions.delete");
 
-    const { id } = await params;
-    const service = new FieldDefinitionService(
-      context.organization._id,
-      context.user._id,
-    );
+  const id = pathParam(request);
+  const service = new FieldDefinitionService(
+    context.organization._id,
+    context.user._id,
+  );
 
-    try {
-      await service.delete(id, context.user._id);
-      return new Response(null, { status: 204 });
-    } catch (error) {
-      if (
-        error instanceof FieldDefinitionError &&
-        error.code === "RECORD_NOT_FOUND"
-      ) {
-        throw new AppError("RECORD_NOT_FOUND", {
-          message: "Field definition not found.",
-        });
-      }
-      throw error;
+  try {
+    await service.delete(id, context.user._id);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (
+      error instanceof FieldDefinitionError &&
+      error.code === "RECORD_NOT_FOUND"
+    ) {
+      throw new AppError("RECORD_NOT_FOUND", {
+        message: "Field definition not found.",
+      });
     }
-  },
-);
+    throw error;
+  }
+});

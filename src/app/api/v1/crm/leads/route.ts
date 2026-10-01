@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
 import { withApi } from "@/shared/api/with-api";
@@ -33,7 +34,7 @@ const createLeadSchema = z.object({
   ownerId: z.string().min(1),
   tags: z.array(z.string()).default([]),
   notes: z.string().max(2000).optional().nullable(),
-  customFields: z.record(z.unknown()).default({}),
+  customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
 const listQuerySchema = z.object({
@@ -67,9 +68,7 @@ export const GET = withApi(async (request: Request) => {
   const filters = {
     status: query.status,
     source: query.source,
-    ownerId: query.ownerId
-      ? new context.organization.constructor(query.ownerId)
-      : undefined,
+    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
     scoreMin: query.scoreMin,
     scoreMax: query.scoreMax,
     q: query.q,
@@ -98,41 +97,46 @@ export const GET = withApi(async (request: Request) => {
  * Create a new lead.
  * Permission: leads.create
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("leads.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("leads.create");
 
-  const body = await request.json();
-  const input = createLeadSchema.parse(body);
+    const body = await request.json();
+    const input = createLeadSchema.parse(body);
 
-  const service = new LeadService(context.organization._id, context.user._id);
+    const service = new LeadService(context.organization._id, context.user._id);
 
-  try {
-    const lead = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      title: input.title,
-      contactId: input.contactId
-        ? new context.organization.constructor(input.contactId)
-        : undefined,
-      contactSnapshot: input.contactSnapshot,
-      companyId: input.companyId
-        ? new context.organization.constructor(input.companyId)
-        : undefined,
-      source: input.source,
-      status: input.status,
-      score: input.score,
-      ownerId: new context.organization.constructor(input.ownerId),
-      tags: input.tags.map((id) => new context.organization.constructor(id)),
-      notes: input.notes,
-      customFields: input.customFields,
-    });
+    try {
+      const lead = await service.create({
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        title: input.title,
+        contactId: input.contactId
+          ? new Types.ObjectId(input.contactId)
+          : undefined,
+        contactSnapshot: input.contactSnapshot,
+        companyId: input.companyId
+          ? new Types.ObjectId(input.companyId)
+          : undefined,
+        source: input.source,
+        status: input.status,
+        score: input.score,
+        ownerId: new Types.ObjectId(input.ownerId),
+        tags: input.tags.map((id) => new Types.ObjectId(id)),
+        // Create treats an absent optional field as "not supplied"; an explicit
+        // null in the body is the same absence.
+        notes: input.notes ?? undefined,
+        customFields: input.customFields,
+      });
 
-    return ok(lead, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof LeadError && error.code === "VALIDATION_FAILED") {
-      throw new AppError("VALIDATION_FAILED", { message: error.message });
+      return ok(lead);
+    } catch (error) {
+      if (error instanceof LeadError && error.code === "VALIDATION_FAILED") {
+        throw new AppError("VALIDATION_FAILED", { message: error.message });
+      }
+      throw error;
     }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

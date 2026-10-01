@@ -79,36 +79,45 @@ export const GET = withApi(async (request: Request) => {
  * Create a new field definition.
  * Permission: fieldDefinitions.create
  */
-export const POST = withApi(async (request: Request) => {
-  const guards = guardsFor(request);
-  const context = await guards.requirePermission("fieldDefinitions.create");
+export const POST = withApi(
+  async (request: Request) => {
+    const guards = guardsFor(request);
+    const context = await guards.requirePermission("fieldDefinitions.create");
 
-  const body = await request.json();
-  const input = createFieldDefinitionSchema.parse(body);
+    const body = await request.json();
+    const input = createFieldDefinitionSchema.parse(body);
 
-  const service = new FieldDefinitionService(
-    context.organization._id,
-    context.user._id,
-  );
+    const service = new FieldDefinitionService(
+      context.organization._id,
+      context.user._id,
+    );
 
-  try {
-    const fieldDef = await service.create({
-      organizationId: context.organization._id,
-      actorId: context.user._id,
-      ...input,
-    });
+    try {
+      const fieldDef = await service.create({
+        organizationId: context.organization._id,
+        actorId: context.user._id,
+        ...input,
+      });
 
-    return ok(fieldDef, undefined, { status: 201 });
-  } catch (error) {
-    if (error instanceof FieldDefinitionError && error.code === "CONFLICT") {
-      throw new AppError("CONFLICT", { message: error.message });
+      return ok(fieldDef);
+    } catch (error) {
+      // The service raises SLUG_CONFLICT for a field whose key is already taken
+      // by another field on the same entity; the catalogue has no narrower code
+      // for a duplicate field key.
+      if (
+        error instanceof FieldDefinitionError &&
+        error.code === "SLUG_CONFLICT"
+      ) {
+        throw new AppError("SLUG_CONFLICT", { message: error.message });
+      }
+      if (
+        error instanceof FieldDefinitionError &&
+        error.code === "VALIDATION_FAILED"
+      ) {
+        throw new AppError("VALIDATION_FAILED", { message: error.message });
+      }
+      throw error;
     }
-    if (
-      error instanceof FieldDefinitionError &&
-      error.code === "VALIDATION_FAILED"
-    ) {
-      throw new AppError("VALIDATION_FAILED", { message: error.message });
-    }
-    throw error;
-  }
-});
+  },
+  { status: 201 },
+);

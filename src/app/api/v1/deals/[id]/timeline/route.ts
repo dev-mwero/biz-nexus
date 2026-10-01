@@ -2,13 +2,7 @@ import { timelineForEntity } from "@/modules/activities/activity.service";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { ok, pageMeta } from "@/shared/responses/envelope";
-
-function extractDealId(request: Request): string {
-  const path = new URL(request.url).pathname;
-  const parts = path.split("/");
-  // .../deals/:id/timeline -> parts[parts.length - 2] is the id
-  return parts[parts.length - 2];
-}
+import { objectIdParam } from "../../../../_lib/path-param";
 
 /**
  * GET /api/v1/deals/:id/timeline
@@ -19,15 +13,9 @@ export const GET = withApi(async (request, context) => {
   const guards = guardsFor(request);
   const ctx = await guards.requirePermission("deals.read");
 
-  const dealId = extractDealId(request);
-  if (!dealId) {
-    return new Response(
-      JSON.stringify({
-        error: { code: "BAD_REQUEST", message: "Deal ID is required." },
-      }),
-      { status: 400 },
-    );
-  }
+  // `.../deals/:id/timeline` — the id is the second segment from the end, and a
+  // malformed one is a 422 naming the field rather than a driver exception.
+  const dealId = objectIdParam(request, 2);
 
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
@@ -53,7 +41,6 @@ export const GET = withApi(async (request, context) => {
       page,
       pageSize,
       total: data.length + (hasMore ? 1 : 0), // Approximate for pagination UI
-      totalPages: hasMore ? page + 1 : page,
     }),
   );
 });

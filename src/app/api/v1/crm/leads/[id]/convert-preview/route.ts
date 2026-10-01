@@ -4,6 +4,7 @@ import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../../_lib/path-param";
 
 const convertPreviewSchema = z.object({
   createContact: z.boolean().default(true),
@@ -18,7 +19,7 @@ const convertPreviewSchema = z.object({
       expectedCloseDate: z.string().datetime().optional(),
     })
     .optional(),
-  customFields: z.record(z.unknown()).default({}),
+  customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
 /**
@@ -26,50 +27,48 @@ const convertPreviewSchema = z.object({
  * Preview what would be created on lead conversion.
  * Permission: leads.read
  */
-export const GET = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    const context = await guards.requirePermission("leads.read");
+export const GET = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  const context = await guards.requirePermission("leads.read");
 
-    const { id } = await params;
-    const service = new LeadService(context.organization._id, context.user._id);
+  const id = pathParam(request);
+  const service = new LeadService(context.organization._id, context.user._id);
 
-    const lead = await service.getById(id);
-    if (!lead) {
-      throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
-    }
+  const lead = await service.getById(id);
+  if (!lead) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Lead not found." });
+  }
 
-    if (lead.status === "CONVERTED") {
-      return ok({
-        alreadyConverted: true,
-        convertedContactId: lead.convertedContactId,
-        convertedCompanyId: lead.convertedCompanyId,
-        convertedDealId: lead.convertedDealId,
-      });
-    }
+  if (lead.status === "CONVERTED") {
+    return ok({
+      alreadyConverted: true,
+      convertedContactId: lead.convertedContactId,
+      convertedCompanyId: lead.convertedCompanyId,
+      convertedDealId: lead.convertedDealId,
+    });
+  }
 
-    // Build preview of what would be created
-    const preview: Record<string, unknown> = {
-      contact: lead.contactSnapshot
-        ? {
-            firstName: lead.contactSnapshot.firstName,
-            lastName: lead.contactSnapshot.lastName,
-            email: lead.contactSnapshot.email,
-            phone: lead.contactSnapshot.phone,
-            companyName: lead.contactSnapshot.companyName,
-          }
-        : null,
-      company: lead.contactSnapshot.companyName
-        ? {
-            name: lead.contactSnapshot.companyName,
-            domain: lead.contactSnapshot.email
-              ? lead.contactSnapshot.email.split("@")[1]?.toLowerCase()
-              : null,
-          }
-        : null,
-      deal: null,
-    };
+  // Build preview of what would be created
+  const preview: Record<string, unknown> = {
+    contact: lead.contactSnapshot
+      ? {
+          firstName: lead.contactSnapshot.firstName,
+          lastName: lead.contactSnapshot.lastName,
+          email: lead.contactSnapshot.email,
+          phone: lead.contactSnapshot.phone,
+          companyName: lead.contactSnapshot.companyName,
+        }
+      : null,
+    company: lead.contactSnapshot.companyName
+      ? {
+          name: lead.contactSnapshot.companyName,
+          domain: lead.contactSnapshot.email
+            ? lead.contactSnapshot.email.split("@")[1]?.toLowerCase()
+            : null,
+        }
+      : null,
+    deal: null,
+  };
 
-    return ok(preview);
-  },
-);
+  return ok(preview);
+});

@@ -45,25 +45,25 @@ export const GET = withApi(async (request, context) => {
   const ownerId = url.searchParams.get("ownerId");
   if (ownerId) filter.ownerId = ownerId;
 
+  // Range operators accumulate, so each bound is kept in its own local rather
+  // than read back out of the loosely-typed filter it is being written into.
   const valueMin = url.searchParams.get("valueMin");
-  if (valueMin) filter.value = { ...filter.value, $gte: parseFloat(valueMin) };
-
   const valueMax = url.searchParams.get("valueMax");
-  if (valueMax) filter.value = { ...filter.value, $lte: parseFloat(valueMax) };
+  if (valueMin || valueMax) {
+    const value: Record<string, number> = {};
+    if (valueMin) value.$gte = parseFloat(valueMin);
+    if (valueMax) value.$lte = parseFloat(valueMax);
+    filter.value = value;
+  }
 
   const closingFrom = url.searchParams.get("closingFrom");
-  if (closingFrom)
-    filter.expectedCloseDate = {
-      ...filter.expectedCloseDate,
-      $gte: new Date(closingFrom),
-    };
-
   const closingTo = url.searchParams.get("closingTo");
-  if (closingTo)
-    filter.expectedCloseDate = {
-      ...filter.expectedCloseDate,
-      $lte: new Date(closingTo),
-    };
+  if (closingFrom || closingTo) {
+    const expectedCloseDate: Record<string, Date> = {};
+    if (closingFrom) expectedCloseDate.$gte = new Date(closingFrom);
+    if (closingTo) expectedCloseDate.$lte = new Date(closingTo);
+    filter.expectedCloseDate = expectedCloseDate;
+  }
 
   const tags = url.searchParams.getAll("tag");
   if (tags.length > 0) filter.tags = { $in: tags };
@@ -107,77 +107,86 @@ export const GET = withApi(async (request, context) => {
  * POST /api/v1/deals
  * Create a new deal.
  */
-export const POST = withApi(async (request, context) => {
-  const guards = guardsFor(request);
-  const ctx = await guards.requirePermission("deals.create");
+export const POST = withApi(
+  async (request, context) => {
+    const guards = guardsFor(request);
+    const ctx = await guards.requirePermission("deals.create");
 
-  const body = await readJson<{
-    name: string;
-    companyId?: string | null;
-    contactId?: string | null;
-    pipelineId: string;
-    stageId: string;
-    ownerId?: string;
-    value?: number;
-    currency?: string;
-    probability?: number;
-    expectedCloseDate?: string | null;
-    description?: string | null;
-    tags?: string[];
-    customFields?: Record<string, unknown>;
-  }>(request);
+    const body = await readJson<{
+      name: string;
+      companyId?: string | null;
+      contactId?: string | null;
+      pipelineId: string;
+      stageId: string;
+      ownerId?: string;
+      value?: number;
+      currency?: string;
+      probability?: number;
+      expectedCloseDate?: string | null;
+      description?: string | null;
+      tags?: string[];
+      customFields?: Record<string, unknown>;
+    }>(request);
 
-  if (!body.name?.trim()) {
-    return new Response(
-      JSON.stringify({
-        error: { code: "VALIDATION_FAILED", message: "Deal name is required." },
-      }),
-      { status: 422 },
+    if (!body.name?.trim()) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Deal name is required.",
+          },
+        }),
+        { status: 422 },
+      );
+    }
+
+    if (!body.pipelineId) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Pipeline is required.",
+          },
+        }),
+        { status: 422 },
+      );
+    }
+
+    if (!body.stageId) {
+      return new Response(
+        JSON.stringify({
+          error: { code: "VALIDATION_FAILED", message: "Stage is required." },
+        }),
+        { status: 422 },
+      );
+    }
+
+    const repo = new DealRepository(ctx.organization._id, ctx.user._id);
+    const pipelineRepo = new PipelineRepository(
+      ctx.organization._id,
+      ctx.user._id,
     );
-  }
+    const service = new DealService(repo, pipelineRepo, ctx.user._id);
 
-  if (!body.pipelineId) {
-    return new Response(
-      JSON.stringify({
-        error: { code: "VALIDATION_FAILED", message: "Pipeline is required." },
-      }),
-      { status: 422 },
-    );
-  }
+    const deal = await service.create({
+      name: body.name.trim(),
+      companyId: body.companyId,
+      contactId: body.contactId,
+      pipelineId: body.pipelineId,
+      stageId: body.stageId,
+      ownerId: body.ownerId ?? ctx.user._id,
+      value: body.value ?? 0,
+      currency: body.currency ?? "USD",
+      probability: body.probability ?? 0,
+      expectedCloseDate: body.expectedCloseDate
+        ? new Date(body.expectedCloseDate)
+        : null,
+      description: body.description?.trim() ?? null,
+      tags: body.tags,
+      customFields: body.customFields,
+    });
 
-  if (!body.stageId) {
-    return new Response(
-      JSON.stringify({
-        error: { code: "VALIDATION_FAILED", message: "Stage is required." },
-      }),
-      { status: 422 },
-    );
-  }
-
-  const repo = new DealRepository(ctx.organization._id, ctx.user._id);
-  const pipelineRepo = new PipelineRepository(
-    ctx.organization._id,
-    ctx.user._id,
-  );
-  const service = new DealService(repo, pipelineRepo, ctx.user._id);
-
-  const deal = await service.create({
-    name: body.name.trim(),
-    companyId: body.companyId,
-    contactId: body.contactId,
-    pipelineId: body.pipelineId,
-    stageId: body.stageId,
-    ownerId: body.ownerId ?? ctx.user._id,
-    value: body.value ?? 0,
-    currency: body.currency ?? "USD",
-    probability: body.probability ?? 0,
-    expectedCloseDate: body.expectedCloseDate
-      ? new Date(body.expectedCloseDate)
-      : null,
-    description: body.description?.trim() ?? null,
-    tags: body.tags,
-    customFields: body.customFields,
-  });
-
-  return ok(deal, { status: 201 });
-});
+    return ok(deal);
+  },
+  { status: 201 },
+);

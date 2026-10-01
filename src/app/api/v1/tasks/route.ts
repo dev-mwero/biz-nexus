@@ -1,20 +1,17 @@
 import { Types } from "mongoose";
 import { z } from "zod";
-import { isPermission } from "@/modules/rbac/permissions";
 import {
   type CreateTaskInput,
   createTask,
-  deleteTask,
-  findTaskById,
   listTasks,
   type TaskListFilters,
-  type UpdateTaskInput,
-  updateTask,
 } from "@/modules/tasks";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
+import { AppError } from "@/shared/errors/app-error";
 import { listQuery } from "@/shared/query/list-query";
-import { fail, ok } from "@/shared/responses/envelope";
+import { ok } from "@/shared/responses/envelope";
+import { fieldDetails } from "../../_lib/zod-details";
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(255),
@@ -38,7 +35,7 @@ const createTaskSchema = z.object({
       }),
     )
     .default([]),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -63,7 +60,7 @@ const updateTaskSchema = z.object({
       }),
     )
     .optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const taskFiltersSchema = z.object({
@@ -97,7 +94,9 @@ const taskFiltersSchema = z.object({
   search: z.string().optional(),
 });
 
-const { parse, meta } = listQuery<z.infer<typeof taskFiltersSchema>>({
+// The generic is inferred from `filters`: the parameter is the schema's raw
+// *shape*, and naming the parsed *output* there is what breaks the constraint.
+const { parse, meta } = listQuery({
   filters: taskFiltersSchema,
   sortable: ["createdAt", "updatedAt", "dueAt", "priority", "status", "title"],
   defaultSort: "-createdAt",
@@ -107,20 +106,27 @@ const { parse, meta } = listQuery<z.infer<typeof taskFiltersSchema>>({
 
 export const GET = withApi(async (request) => {
   const guards = guardsFor(request);
-  const { organization, membership } =
-    await guards.requirePermission("tasks.read");
+  const { organization } = await guards.requirePermission("tasks.read");
 
-  const query = parse(request.nextUrl.searchParams);
+  const query = parse(new URL(request.url).searchParams);
+  const parsed = query.filters;
+
+  // The query layer validates; this is where the strings it accepted become the
+  // ids and dates the repository filters on. Each key is read once into a local
+  // so the conversion and the narrowing are the same statement.
   const filters: TaskListFilters = {
-    ...query.filters,
-    ...(query.filters.assigneeId
-      ? { assigneeId: new Types.ObjectId(query.filters.assigneeId) }
+    status: parsed.status,
+    priority: parsed.priority,
+    relatedEntityType: parsed.relatedEntityType,
+    search: parsed.search,
+    ...(parsed.assigneeId
+      ? { assigneeId: new Types.ObjectId(parsed.assigneeId) }
       : {}),
-    ...(query.filters.relatedEntityId
-      ? { relatedEntityId: new Types.ObjectId(query.filters.relatedEntityId) }
+    ...(parsed.relatedEntityId
+      ? { relatedEntityId: new Types.ObjectId(parsed.relatedEntityId) }
       : {}),
-    ...(query.filters.dueBefore ? { dueBefore: query.filters.dueBefore } : {}),
-    ...(query.filters.dueAfter ? { dueAfter: query.filters.dueAfter } : {}),
+    ...(parsed.dueBefore ? { dueBefore: new Date(parsed.dueBefore) } : {}),
+    ...(parsed.dueAfter ? { dueAfter: new Date(parsed.dueAfter) } : {}),
   };
 
   const { tasks, total } = await listTasks(organization._id, filters, {
@@ -141,11 +147,7 @@ export const POST = withApi(
     const body = await request.json();
     const parsed = createTaskSchema.safeParse(body);
     if (!parsed.success) {
-      return fail({
-        code: "VALIDATION_FAILED",
-        message: "Invalid request body",
-        details: parsed.error.flatten().fieldErrors,
-      });
+      throw AppError.validation(fieldDetails(parsed.error));
     }
 
     const data = parsed.data;
@@ -166,7 +168,7 @@ export const POST = withApi(
     };
 
     const task = await createTask(input);
-    return ok(task, undefined, { status: 201 });
+    return ok(task);
   },
   { status: 201 },
 );

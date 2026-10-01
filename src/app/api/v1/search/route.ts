@@ -81,6 +81,49 @@ interface SearchResult {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * The projected fields each search reads.
+ *
+ * These name exactly what the `.select(...)` above them asks for. `score` is
+ * deliberately not among them: it is produced by the text index and arrives as a
+ * projection alongside the document, so it is added to each row type at the
+ * `.lean()` call rather than being declared as a stored field here.
+ */
+interface ContactSearchRow {
+  _id: Types.ObjectId;
+  firstName: string;
+  lastName: string;
+  primaryEmail?: string | null;
+  companyId?: Types.ObjectId | null;
+  status?: string | null;
+}
+
+interface CompanySearchRow {
+  _id: Types.ObjectId;
+  name: string;
+  email?: string | null;
+  industry?: string | null;
+  status?: string | null;
+}
+
+interface DealSearchRow {
+  _id: Types.ObjectId;
+  name: string;
+  value: number;
+  status: string;
+  stageId?: Types.ObjectId | null;
+  pipelineId?: Types.ObjectId | null;
+}
+
+interface TaskSearchRow {
+  _id: Types.ObjectId;
+  title: string;
+  status: string;
+  priority: string;
+  dueAt?: Date | null;
+  assigneeId?: Types.ObjectId | null;
+}
+
 async function searchContacts(
   organizationId: Types.ObjectId,
   query: string,
@@ -94,14 +137,16 @@ async function searchContacts(
     .sort({ score: { $meta: "textScore" } })
     .limit(limit)
     .select("firstName lastName primaryEmail companyId status")
-    .lean();
+    // `score` is projected by MongoDB's text index rather than stored on the
+    // document, so it is not on the model type and has to be named here.
+    .lean<Array<ContactSearchRow & { score: number }>>();
 
   return results.map((c) => ({
     id: c._id.toString(),
     title: `${c.firstName} ${c.lastName}`,
     subtitle: c.primaryEmail ?? "No email",
     entityType: "contact" as const,
-    score: c.score as number,
+    score: c.score,
     url: `/app/contacts/${c._id}`,
     metadata: { status: c.status, companyId: c.companyId?.toString() },
   }));
@@ -119,14 +164,14 @@ async function searchCompanies(
     .sort({ score: { $meta: "textScore" } })
     .limit(limit)
     .select("name email industry status")
-    .lean();
+    .lean<Array<CompanySearchRow & { score: number }>>();
 
   return results.map((c) => ({
     id: c._id.toString(),
     title: c.name,
     subtitle: c.email ?? c.industry ?? "No details",
     entityType: "company" as const,
-    score: c.score as number,
+    score: c.score,
     url: `/app/companies/${c._id}`,
     metadata: { status: c.status, industry: c.industry },
   }));
@@ -144,14 +189,14 @@ async function searchDeals(
     .sort({ score: { $meta: "textScore" } })
     .limit(limit)
     .select("name value status stageId pipelineId")
-    .lean();
+    .lean<Array<DealSearchRow & { score: number }>>();
 
   return results.map((d) => ({
     id: d._id.toString(),
     title: d.name,
     subtitle: `${d.status} • ${d.value.toLocaleString()}`,
     entityType: "deal" as const,
-    score: d.score as number,
+    score: d.score,
     url: `/app/deals/${d._id}`,
     metadata: { value: d.value, status: d.status },
   }));
@@ -169,14 +214,14 @@ async function searchTasks(
     .sort({ score: { $meta: "textScore" } })
     .limit(limit)
     .select("title status priority dueAt assigneeId")
-    .lean();
+    .lean<Array<TaskSearchRow & { score: number }>>();
 
   return results.map((t) => ({
     id: t._id.toString(),
     title: t.title,
     subtitle: `${t.status} • ${t.priority}${t.dueAt ? ` • Due ${t.dueAt.toLocaleDateString()}` : ""}`,
     entityType: "task" as const,
-    score: t.score as number,
+    score: t.score,
     url: `/app/tasks/${t._id}`,
     metadata: { status: t.status, priority: t.priority, dueAt: t.dueAt },
   }));

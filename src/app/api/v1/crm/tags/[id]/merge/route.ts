@@ -1,9 +1,11 @@
+import { Types } from "mongoose";
 import { z } from "zod";
 import { type MergeTagsInput, TagError, TagService } from "@/modules/crm";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
+import { pathParam } from "../../../../../_lib/path-param";
 
 const mergeTagsSchema = z
   .object({
@@ -21,47 +23,49 @@ const mergeTagsSchema = z
  * Permission: tags.update (or tags.delete?)
  * Note: The spec says tags.delete for the merge operation
  */
-export const POST = withApi(
-  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const guards = guardsFor(request);
-    // Merge requires update on target and delete on source
-    const context = await guards.requirePermission("tags.update");
+export const POST = withApi(async (request: Request) => {
+  const guards = guardsFor(request);
+  // Merge requires update on target and delete on source
+  const context = await guards.requirePermission("tags.update");
 
-    const { id } = await params;
-    const body = await request.json();
-    const input = mergeTagsSchema.parse(body);
+  const id = pathParam(request);
+  const body = await request.json();
+  const input = mergeTagsSchema.parse(body);
 
-    // The :id in the path is the source tag being merged
-    if (input.sourceTagId !== id) {
-      throw new AppError("VALIDATION_FAILED", {
-        message: "Source tag ID in body must match the path parameter.",
-        details: [
-          { path: "sourceTagId", message: "Must match the tag being merged." },
-        ],
+  // The :id in the path is the source tag being merged
+  if (input.sourceTagId !== id) {
+    throw new AppError("VALIDATION_FAILED", {
+      message: "Source tag ID in body must match the path parameter.",
+      details: [
+        { path: "sourceTagId", message: "Must match the tag being merged." },
+      ],
+    });
+  }
+
+  const service = new TagService(context.organization._id, context.user._id);
+
+  try {
+    // The service reassigns documents keyed by tag, so it takes ids rather than
+    // the strings the body carries.
+    const mergeInput: MergeTagsInput = {
+      organizationId: context.organization._id,
+      actorId: context.user._id,
+      sourceTagId: new Types.ObjectId(input.sourceTagId),
+      targetTagId: new Types.ObjectId(input.targetTagId),
+    };
+
+    const result = await service.merge(mergeInput);
+
+    return ok(result);
+  } catch (error) {
+    if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
+      throw new AppError("RECORD_NOT_FOUND", {
+        message: "One or both tags not found.",
       });
     }
-
-    const service = new TagService(context.organization._id, context.user._id);
-
-    try {
-      const result = await service.merge({
-        organizationId: context.organization._id,
-        actorId: context.user._id,
-        sourceTagId: input.sourceTagId,
-        targetTagId: input.targetTagId,
-      });
-
-      return ok(result);
-    } catch (error) {
-      if (error instanceof TagError && error.code === "RECORD_NOT_FOUND") {
-        throw new AppError("RECORD_NOT_FOUND", {
-          message: "One or both tags not found.",
-        });
-      }
-      if (error instanceof TagError && error.code === "VALIDATION_FAILED") {
-        throw new AppError("VALIDATION_FAILED", { message: error.message });
-      }
-      throw error;
+    if (error instanceof TagError && error.code === "VALIDATION_FAILED") {
+      throw new AppError("VALIDATION_FAILED", { message: error.message });
     }
-  },
-);
+    throw error;
+  }
+});
