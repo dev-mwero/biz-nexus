@@ -326,7 +326,7 @@ export function NotificationBell() {
 
         <DropdownMenuItem
           className="text-center text-info hover:bg-info-surface dark:hover:bg-info-surface"
-          onSelect={() => (window.location.href = "/app/notifications")}
+          onSelect={() => (window.location.href = "/notifications")}
         >
           View all notifications
         </DropdownMenuItem>

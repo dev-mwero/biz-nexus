@@ -47,7 +47,7 @@ export default function AppForbidden({ message }: ForbiddenProps) {
               <RefreshCw className="size-4 mr-2" aria-hidden="true" />
               Go back
             </Button>
-            <Link href="/app/dashboard">
+            <Link href="/dashboard">
               <Button variant="secondary" className="w-full sm:w-auto">
                 <Home className="size-4 mr-2" aria-hidden="true" />
                 Dashboard

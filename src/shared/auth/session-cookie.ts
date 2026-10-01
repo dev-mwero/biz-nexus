@@ -56,15 +56,17 @@ export const DEFAULT_AUTHENTICATED_PATH = "/app";
  * the control, and it guards every route regardless of what is listed here.
  */
 export const PROTECTED_PREFIXES = [
+  // `/app` is a legacy alias that redirects to the dashboard; kept so the proxy
+  // still fronts it. The rest mirror the real page tree, which nests contacts,
+  // companies, leads and saved views under `/crm` rather than at the root.
   "/app",
   "/dashboard",
-  "/contacts",
-  "/companies",
-  "/leads",
+  "/crm",
   "/deals",
   "/pipelines",
   "/tasks",
   "/activities",
+  "/search",
   "/notifications",
   "/settings",
   "/saved-views",

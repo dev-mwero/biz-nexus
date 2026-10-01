@@ -21,14 +21,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/cn";
 
 const navigation = [
-  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Contacts", href: "/app/contacts", icon: User },
-  { name: "Companies", href: "/app/companies", icon: Building2 },
-  { name: "Leads", href: "/app/leads", icon: Target },
-  { name: "Deals", href: "/app/deals", icon: Kanban },
-  { name: "Tasks", href: "/app/tasks", icon: CheckSquare },
-  { name: "Activities", href: "/app/activities", icon: Clock },
-  { name: "Settings", href: "/app/settings", icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Contacts", href: "/crm/contacts", icon: User },
+  { name: "Companies", href: "/crm/companies", icon: Building2 },
+  { name: "Leads", href: "/crm/leads", icon: Target },
+  { name: "Deals", href: "/deals", icon: Kanban },
+  { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Activities", href: "/activities", icon: Clock },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar({
@@ -62,7 +62,7 @@ export function Sidebar({
           {/* Sidebar header */}
           <div className="flex h-16 items-center justify-between border-b border-line px-4 lg:px-5">
             <Link
-              href="/app/dashboard"
+              href="/dashboard"
               className="flex items-center gap-2"
               aria-label="BizNexus Home"
             >

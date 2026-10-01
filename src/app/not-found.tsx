@@ -24,13 +24,13 @@ export default function NotFound() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href="/app/dashboard">
+          <Link href="/dashboard">
             <Button variant="primary" className="w-full sm:w-auto">
               <Home className="size-4 mr-2" aria-hidden="true" />
               Go to Dashboard
             </Button>
           </Link>
-          <Link href="/app/search">
+          <Link href="/search">
             <Button variant="secondary" className="w-full sm:w-auto">
               <Search className="size-4 mr-2" aria-hidden="true" />
               Search

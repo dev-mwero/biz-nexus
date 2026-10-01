@@ -75,20 +75,18 @@ export function Header({ onMenuClick }: HeaderProps) {
             <ol className="flex items-center gap-1.5">
               <li>
                 <a
-                  href="/app/dashboard"
+                  href="/dashboard"
                   className={cn(
                     "text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-50",
-                    pathname === "/app/dashboard" &&
+                    pathname === "/dashboard" &&
                       "text-ink-900 dark:text-ink-50 font-medium",
                   )}
-                  aria-current={
-                    pathname === "/app/dashboard" ? "page" : undefined
-                  }
+                  aria-current={pathname === "/dashboard" ? "page" : undefined}
                 >
                   Dashboard
                 </a>
               </li>
-              {pathname !== "/app/dashboard" && (
+              {pathname !== "/dashboard" && (
                 <>
                   <li aria-hidden="true">
                     <ChevronDown className="size-3 text-ink-400 dark:text-ink-500" />
@@ -212,7 +210,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => router.push("/app/settings")}>
+              <DropdownMenuItem onSelect={() => router.push("/settings")}>
                 <Settings className="size-4 mr-2" aria-hidden="true" />
                 Settings
               </DropdownMenuItem>

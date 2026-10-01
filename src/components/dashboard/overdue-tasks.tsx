@@ -145,7 +145,7 @@ export function OverdueTasks({
             {tasks.length > 5 && (
               <li className="text-center pt-2">
                 <a
-                  href="/app/tasks?filter=overdue"
+                  href="/tasks?filter=overdue"
                   className="text-sm text-info hover:underline font-medium"
                 >
                   View all {tasks.length} overdue tasks

@@ -147,7 +147,7 @@ async function searchContacts(
     subtitle: c.primaryEmail ?? "No email",
     entityType: "contact" as const,
     score: c.score,
-    url: `/app/contacts/${c._id}`,
+    url: `/crm/contacts/${c._id}`,
     metadata: { status: c.status, companyId: c.companyId?.toString() },
   }));
 }
@@ -172,7 +172,7 @@ async function searchCompanies(
     subtitle: c.email ?? c.industry ?? "No details",
     entityType: "company" as const,
     score: c.score,
-    url: `/app/companies/${c._id}`,
+    url: `/crm/companies/${c._id}`,
     metadata: { status: c.status, industry: c.industry },
   }));
 }
@@ -197,7 +197,7 @@ async function searchDeals(
     subtitle: `${d.status} • ${d.value.toLocaleString()}`,
     entityType: "deal" as const,
     score: d.score,
-    url: `/app/deals/${d._id}`,
+    url: `/deals/${d._id}`,
     metadata: { value: d.value, status: d.status },
   }));
 }
@@ -222,7 +222,7 @@ async function searchTasks(
     subtitle: `${t.status} • ${t.priority}${t.dueAt ? ` • Due ${t.dueAt.toLocaleDateString()}` : ""}`,
     entityType: "task" as const,
     score: t.score,
-    url: `/app/tasks/${t._id}`,
+    url: `/tasks/${t._id}`,
     metadata: { status: t.status, priority: t.priority, dueAt: t.dueAt },
   }));
 }

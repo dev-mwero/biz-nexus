@@ -30,7 +30,7 @@ const COMMANDS: CommandItem[] = [
     description: "Create a new contact",
     shortcut: "C",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/contacts/new"),
+    action: () => (window.location.href = "/crm/contacts/new"),
     keywords: ["new", "create", "contact", "person", "add"],
   },
   {
@@ -39,7 +39,7 @@ const COMMANDS: CommandItem[] = [
     description: "Create a new company",
     shortcut: "O",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/companies/new"),
+    action: () => (window.location.href = "/crm/companies/new"),
     keywords: ["new", "create", "company", "organization", "account", "add"],
   },
   {
@@ -48,7 +48,7 @@ const COMMANDS: CommandItem[] = [
     description: "Create a new lead",
     shortcut: "L",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/leads/new"),
+    action: () => (window.location.href = "/crm/leads/new"),
     keywords: ["new", "create", "lead", "prospect", "add"],
   },
   {
@@ -57,7 +57,7 @@ const COMMANDS: CommandItem[] = [
     description: "Create a new deal",
     shortcut: "D",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/deals/new"),
+    action: () => (window.location.href = "/deals/new"),
     keywords: ["new", "create", "deal", "opportunity", "add"],
   },
   {
@@ -66,7 +66,7 @@ const COMMANDS: CommandItem[] = [
     description: "Create a new task",
     shortcut: "T",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/tasks/new"),
+    action: () => (window.location.href = "/tasks/new"),
     keywords: ["new", "create", "task", "todo", "add"],
   },
   {
@@ -75,7 +75,7 @@ const COMMANDS: CommandItem[] = [
     description: "Navigate to dashboard",
     shortcut: "H",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/dashboard"),
+    action: () => (window.location.href = "/dashboard"),
     keywords: ["dashboard", "home", "overview", "go"],
   },
   {
@@ -84,7 +84,7 @@ const COMMANDS: CommandItem[] = [
     description: "Open settings",
     shortcut: ",",
     icon: <Search className="size-4" />,
-    action: () => (window.location.href = "/app/settings"),
+    action: () => (window.location.href = "/settings"),
     keywords: ["settings", "preferences", "configuration", "options"],
   },
 ];

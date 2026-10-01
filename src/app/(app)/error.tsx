@@ -56,7 +56,7 @@ export default function AppError({ error, reset }: ErrorProps) {
             <RefreshCw className="size-4 mr-2" aria-hidden="true" />
             Try again
           </Button>
-          <Link href="/app/dashboard">
+          <Link href="/dashboard">
             <Button variant="secondary" className="w-full sm:w-auto">
               <Home className="size-4 mr-2" aria-hidden="true" />
               Go to Dashboard
