@@ -31,6 +31,25 @@ declare module "@/shared/events/registry" {
       toStage: DealStageRef;
       occurredAt: Date;
     };
+    "deal.won": {
+      organizationId: Types.ObjectId;
+      actorId: Types.ObjectId;
+      dealId: Types.ObjectId;
+      dealName: string;
+      value: number;
+      currency: string;
+      closedAt: Date;
+      occurredAt: Date;
+    };
+    "deal.lost": {
+      organizationId: Types.ObjectId;
+      actorId: Types.ObjectId;
+      dealId: Types.ObjectId;
+      dealName: string;
+      lostReason: string | null;
+      closedAt: Date;
+      occurredAt: Date;
+    };
   }
 }
 
