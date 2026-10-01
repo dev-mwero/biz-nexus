@@ -160,7 +160,13 @@ export default function DealsKanbanPage() {
           <div className="flex items-center gap-2">
             <Select
               value={selectedPipelineId || ""}
-              onValueChange={handlePipelineChange}
+              onValueChange={(v) => {
+                // Base UI reports a cleared select as `null`; the board always
+                // renders one pipeline, so a cleared select is a no-op rather
+                // than an empty board.
+                if (v === null) return;
+                handlePipelineChange(v);
+              }}
               disabled={pipelinesLoading}
             >
               <SelectTrigger className="w-[280px]">

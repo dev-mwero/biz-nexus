@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Badge,
+  type BadgeProps,
   Button,
   Card,
   CardContent,
@@ -43,16 +44,16 @@ const LEAD_STATUSES = [
   "LOST",
 ] as const;
 
-const statusBadgeConfig: Record<
-  string,
-  { variant: "default" | "success" | "warning" | "danger" | "outline" }
-> = {
-  NEW: { variant: "outline" },
-  CONTACTED: { variant: "default" },
-  QUALIFIED: { variant: "success" },
-  UNQUALIFIED: { variant: "danger" },
-  CONVERTED: { variant: "success" },
-  LOST: { variant: "danger" },
+/** `Badge` names a `tone`, not a variant; this keeps the two in step. */
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+const statusBadgeConfig: Record<string, { tone: BadgeTone }> = {
+  NEW: { tone: "outline" },
+  CONTACTED: { tone: "neutral" },
+  QUALIFIED: { tone: "positive" },
+  UNQUALIFIED: { tone: "critical" },
+  CONVERTED: { tone: "positive" },
+  LOST: { tone: "critical" },
 };
 
 interface Lead {
@@ -162,9 +163,7 @@ export default function LeadDetailPage() {
               <h1 className="text-2xl font-semibold text-ink-900">
                 {lead.title}
               </h1>
-              <Badge
-                variant={statusBadgeConfig[lead.status]?.variant || "outline"}
-              >
+              <Badge tone={statusBadgeConfig[lead.status]?.tone || "outline"}>
                 {lead.status}
               </Badge>
             </div>
@@ -175,11 +174,13 @@ export default function LeadDetailPage() {
         </div>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton variant="ghost" size="sm" aria-label="More actions">
-              <Target className="h-4 w-4" />
-            </IconButton>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            render={
+              <IconButton variant="ghost" size="sm" aria-label="More actions">
+                <Target className="h-4 w-4" />
+              </IconButton>
+            }
+          />
           <DropdownMenuContent align="end">
             <Link href={`/crm/leads/${leadId}/edit`}>
               <DropdownMenuItem>
@@ -338,7 +339,7 @@ export default function LeadDetailPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {lead.tags.map((tagId) => (
-                    <Badge key={tagId} variant="outline">
+                    <Badge key={tagId} tone="outline">
                       {tagId}
                     </Badge>
                   ))}

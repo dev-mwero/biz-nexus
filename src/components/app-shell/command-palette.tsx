@@ -96,7 +96,7 @@ export function CommandPalette() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Filter commands based on query
   const filteredCommands = COMMANDS.filter((cmd) => {
@@ -108,6 +108,20 @@ export function CommandPalette() {
       cmd.keywords.some((k) => k.includes(q))
     );
   });
+
+  const open = useCallback(() => {
+    setIsOpen(true);
+    setQuery("");
+    setSelectedIndex(0);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
+  const close = useCallback(() => {
+    setIsOpen(false);
+    setQuery("");
+    setSelectedIndex(0);
+    setSearchResults([]);
+  }, []);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
@@ -143,22 +157,8 @@ export function CommandPalette() {
           break;
       }
     },
-    [filteredCommands, searchResults, selectedIndex],
+    [filteredCommands, searchResults, selectedIndex, close],
   );
-
-  const open = useCallback(() => {
-    setIsOpen(true);
-    setQuery("");
-    setSelectedIndex(0);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
-
-  const close = useCallback(() => {
-    setIsOpen(false);
-    setQuery("");
-    setSelectedIndex(0);
-    setSearchResults([]);
-  }, []);
 
   // Global keyboard shortcut: Cmd+K / Ctrl+K
   useEffect(() => {
@@ -175,7 +175,7 @@ export function CommandPalette() {
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [isOpen]);
+  }, [isOpen, open, close]);
 
   // Debounced search
   useEffect(() => {
@@ -294,11 +294,13 @@ export function CommandPalette() {
           <div
             id="command-palette-results"
             className="max-h-[500px] overflow-y-auto"
+            // biome-ignore lint/a11y/useSemanticElements: a rich listbox has no HTML equivalent
             role="listbox"
             aria-label="Commands and search results"
           >
             {/* Commands */}
             {filteredCommands.length > 0 && (
+              // biome-ignore lint/a11y/useSemanticElements: a listbox group is not a form-control group
               <div role="group" aria-label="Commands">
                 <div
                   className="px-4 py-2 text-xs font-semibold tracking-[0.06em] uppercase text-ink-500 dark:text-ink-400 border-b border-line"
@@ -310,6 +312,7 @@ export function CommandPalette() {
                   <button
                     key={cmd.id}
                     id={`command-${cmd.id}`}
+                    type="button"
                     role="option"
                     onClick={() => {
                       cmd.action();
@@ -343,10 +346,7 @@ export function CommandPalette() {
                       )}
                     </div>
                     {cmd.shortcut && (
-                      <kbd
-                        className="px-2 py-0.5 text-xs font-mono text-ink-400 dark:text-ink-500 bg-surface-sunken dark:bg-surface-raised rounded"
-                        aria-hidden="true"
-                      >
+                      <kbd className="px-2 py-0.5 text-xs font-mono text-ink-400 dark:text-ink-500 bg-surface-sunken dark:bg-surface-raised rounded">
                         {cmd.shortcut}
                       </kbd>
                     )}
@@ -363,6 +363,7 @@ export function CommandPalette() {
 
             {/* Search Results */}
             {searchResults.length > 0 && (
+              // biome-ignore lint/a11y/useSemanticElements: a listbox group is not a form-control group
               <div role="group" aria-label="Search results">
                 <div
                   className="px-4 py-2 text-xs font-semibold tracking-[0.06em] uppercase text-ink-500 dark:text-ink-400 border-b border-line flex items-center gap-2"
@@ -383,6 +384,7 @@ export function CommandPalette() {
                     <button
                       key={result.id}
                       id={`result-${result.id}`}
+                      type="button"
                       role="option"
                       onClick={() => {
                         window.location.href = result.url;
@@ -435,12 +437,9 @@ export function CommandPalette() {
             {filteredCommands.length === 0 &&
               searchResults.length === 0 &&
               !searchLoading && (
-                <div
-                  className="px-4 py-8 text-center text-ink-500 dark:text-ink-400"
-                  role="status"
-                >
+                <output className="px-4 py-8 block text-center text-ink-500 dark:text-ink-400">
                   No results found
-                </div>
+                </output>
               )}
           </div>
         </div>

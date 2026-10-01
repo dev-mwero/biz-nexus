@@ -3,7 +3,7 @@
 import { ArrowLeft, Mail, Phone, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Button,
@@ -24,16 +24,33 @@ import {
 
 const CONTACT_STATUSES = ["LEAD", "PROSPECT", "CUSTOMER", "INACTIVE"] as const;
 
+/**
+ * Email/phone rows as held in form state. `rowKey` is client-only identity for
+ * React: a row has no id until it is saved, and every field on it is editable,
+ * so neither the array index nor the row's own content can key it. It is
+ * stripped from the request payload.
+ */
 interface EmailInput {
+  rowKey: string;
   label: string;
   value: string;
   isPrimary: boolean;
 }
 
 interface PhoneInput {
+  rowKey: string;
   label: string;
   value: string;
   isPrimary: boolean;
+}
+
+/** Payload shape: form bookkeeping (`rowKey`) is not part of the request. */
+function toEmailPayload({ label, value, isPrimary }: EmailInput) {
+  return { label, value, isPrimary };
+}
+
+function toPhonePayload({ label, value, isPrimary }: PhoneInput) {
+  return { label, value, isPrimary };
 }
 
 export default function NewContactPage() {
@@ -63,11 +80,13 @@ export default function NewContactPage() {
     notes: "",
     customFields: {},
   });
+  const rowCounter = useRef(0);
+  const nextRowKey = () => `row-${rowCounter.current++}`;
   const [emails, setEmails] = useState<EmailInput[]>([
-    { label: "Work", value: "", isPrimary: true },
+    { rowKey: "row-0", label: "Work", value: "", isPrimary: true },
   ]);
   const [phones, setPhones] = useState<PhoneInput[]>([
-    { label: "Mobile", value: "", isPrimary: true },
+    { rowKey: "row-0", label: "Mobile", value: "", isPrimary: true },
   ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,8 +110,8 @@ export default function NewContactPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          emails: validEmails,
-          phones: validPhones,
+          emails: validEmails.map(toEmailPayload),
+          phones: validPhones.map(toPhonePayload),
           companyId: formData.companyId || null,
           ownerId: formData.ownerId,
           tags: formData.tags,
@@ -118,7 +137,10 @@ export default function NewContactPage() {
   };
 
   const addEmail = () => {
-    setEmails([...emails, { label: "Work", value: "", isPrimary: false }]);
+    setEmails([
+      ...emails,
+      { rowKey: nextRowKey(), label: "Work", value: "", isPrimary: false },
+    ]);
   };
 
   const removeEmail = (index: number) => {
@@ -150,7 +172,10 @@ export default function NewContactPage() {
   };
 
   const addPhone = () => {
-    setPhones([...phones, { label: "Mobile", value: "", isPrimary: false }]);
+    setPhones([
+      ...phones,
+      { rowKey: nextRowKey(), label: "Mobile", value: "", isPrimary: false },
+    ]);
   };
 
   const removePhone = (index: number) => {
@@ -357,7 +382,7 @@ export default function NewContactPage() {
           <CardContent className="space-y-3">
             {emails.map((email, index) => (
               <div
-                key={`email-${index}`}
+                key={email.rowKey}
                 className="flex flex-col sm:flex-row gap-3 items-start"
               >
                 <div className="flex-1 space-y-1.5">
@@ -440,7 +465,7 @@ export default function NewContactPage() {
           <CardContent className="space-y-3">
             {phones.map((phone, index) => (
               <div
-                key={`phone-${index}`}
+                key={phone.rowKey}
                 className="flex flex-col sm:flex-row gap-3 items-start"
               >
                 <div className="flex-1 space-y-1.5">

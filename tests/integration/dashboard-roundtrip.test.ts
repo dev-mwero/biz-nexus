@@ -21,18 +21,45 @@ beforeEach(async () => {
   orgId = new mongoose.Types.ObjectId();
   userId = new mongoose.Types.ObjectId();
 
-  // Create default pipeline with stages
+  // Create default pipeline with stages.
+  //
+  // `key` and `order` are both required by the stage schema, and the schema
+  // rejects a pipeline whose stages share a key or an order. `order` also
+  // drives the position assertions below, so it is not incidental.
   const stages = [
-    { _id: new mongoose.Types.ObjectId(), name: "Lead", isDefault: true },
-    { _id: new mongoose.Types.ObjectId(), name: "Qualified", isDefault: false },
-    { _id: new mongoose.Types.ObjectId(), name: "Proposal", isDefault: false },
+    { _id: new mongoose.Types.ObjectId(), key: "LEAD", name: "Lead", order: 0 },
     {
       _id: new mongoose.Types.ObjectId(),
-      name: "Negotiation",
-      isDefault: false,
+      key: "QUALIFIED",
+      name: "Qualified",
+      order: 1,
     },
-    { _id: new mongoose.Types.ObjectId(), name: "Won", isWon: true },
-    { _id: new mongoose.Types.ObjectId(), name: "Lost", isLost: true },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      key: "PROPOSAL",
+      name: "Proposal",
+      order: 2,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      key: "NEGOTIATION",
+      name: "Negotiation",
+      order: 3,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      key: "WON",
+      name: "Won",
+      order: 4,
+      isWon: true,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      key: "LOST",
+      name: "Lost",
+      order: 5,
+      isLost: true,
+    },
   ];
   stageIds = stages.map((s) => s._id);
 
@@ -67,6 +94,7 @@ describe("Dashboard Round-trip", () => {
         status: "WON",
         stageId: stageIds[4],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 86400000),
         createdBy: userId,
         updatedBy: userId,
@@ -78,6 +106,7 @@ describe("Dashboard Round-trip", () => {
         status: "WON",
         stageId: stageIds[4],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 172800000),
         createdBy: userId,
         updatedBy: userId,
@@ -90,6 +119,7 @@ describe("Dashboard Round-trip", () => {
         status: "LOST",
         stageId: stageIds[5],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 259200000),
         createdBy: userId,
         updatedBy: userId,
@@ -102,6 +132,7 @@ describe("Dashboard Round-trip", () => {
         status: "OPEN",
         stageId: stageIds[1],
         pipelineId,
+        ownerId: userId,
         createdBy: userId,
         updatedBy: userId,
       },
@@ -112,6 +143,7 @@ describe("Dashboard Round-trip", () => {
         status: "OPEN",
         stageId: stageIds[2],
         pipelineId,
+        ownerId: userId,
         createdBy: userId,
         updatedBy: userId,
       },
@@ -122,6 +154,7 @@ describe("Dashboard Round-trip", () => {
         status: "OPEN",
         stageId: stageIds[1],
         pipelineId,
+        ownerId: userId,
         createdBy: userId,
         updatedBy: userId,
       },
@@ -167,7 +200,7 @@ describe("Dashboard Round-trip", () => {
         type: "NOTE",
         occurredAt: new Date(now.getTime() - 3600000),
         metadata: {},
-        createdBy: userId,
+        ownerId: userId,
       },
       {
         organizationId: orgId,
@@ -175,7 +208,7 @@ describe("Dashboard Round-trip", () => {
         type: "CALL",
         occurredAt: new Date(now.getTime() - 7200000),
         metadata: {},
-        createdBy: userId,
+        ownerId: userId,
       },
       {
         organizationId: orgId,
@@ -183,7 +216,7 @@ describe("Dashboard Round-trip", () => {
         type: "MEETING",
         occurredAt: new Date(now.getTime() - 10800000),
         metadata: {},
-        createdBy: userId,
+        ownerId: userId,
       },
     ]);
 
@@ -228,7 +261,7 @@ describe("Dashboard Round-trip", () => {
             { $group: { _id: null, totalValue: { $sum: "$value" } } },
           ],
           overdueTasks: [
-            { $match: { organizationId } },
+            { $match: { organizationId: orgId } },
             {
               $match: {
                 status: { $in: ["TODO", "IN_PROGRESS"] },
@@ -240,7 +273,7 @@ describe("Dashboard Round-trip", () => {
           recentActivity: [
             {
               $match: {
-                organizationId,
+                organizationId: orgId,
                 occurredAt: {
                   $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
                 },
@@ -307,7 +340,7 @@ describe("Dashboard Round-trip", () => {
             { $group: { _id: null, totalValue: { $sum: "$value" } } },
           ],
           overdueTasks: [
-            { $match: { organizationId } },
+            { $match: { organizationId: orgId } },
             {
               $match: {
                 status: { $in: ["TODO", "IN_PROGRESS"] },
@@ -319,7 +352,7 @@ describe("Dashboard Round-trip", () => {
           recentActivity: [
             {
               $match: {
-                organizationId,
+                organizationId: orgId,
                 occurredAt: {
                   $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
                 },
@@ -359,6 +392,7 @@ describe("Dashboard Round-trip", () => {
         status: "WON",
         stageId: stageIds[4],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 86400000),
         createdBy: userId,
         updatedBy: userId,
@@ -370,6 +404,7 @@ describe("Dashboard Round-trip", () => {
         status: "WON",
         stageId: stageIds[4],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 172800000),
         createdBy: userId,
         updatedBy: userId,
@@ -381,6 +416,7 @@ describe("Dashboard Round-trip", () => {
         status: "LOST",
         stageId: stageIds[5],
         pipelineId,
+        ownerId: userId,
         closedAt: new Date(startOfMonth.getTime() + 259200000),
         createdBy: userId,
         updatedBy: userId,

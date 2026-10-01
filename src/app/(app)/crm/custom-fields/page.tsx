@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { Database, Edit2, Trash2, Type } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import {
   Button,
   Select,
@@ -97,7 +98,12 @@ export default function CustomFieldsPage() {
     <div className="flex flex-col h-full gap-4">
       {/* Entity Type Selector */}
       <div className="flex items-center gap-4">
-        <Select value={entityType} onValueChange={setEntityType}>
+        <Select
+          value={entityType}
+          // A cleared select is `null`; the list has to scope to one entity
+          // type, so a cleared select falls back to the default.
+          onValueChange={(v) => setEntityType(v ?? "CONTACT")}
+        >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Entity Type" />
           </SelectTrigger>

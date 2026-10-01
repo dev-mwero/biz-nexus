@@ -4,8 +4,23 @@ import { afterAll, beforeAll, describe, test } from "vitest";
 import { connectToDatabase } from "@/db/connection";
 import { CompanyModel } from "@/modules/crm/company.model";
 import { ContactModel } from "@/modules/crm/contact.model";
-import { DealModel } from "@/modules/crm/deal.model";
-import { TaskModel } from "@/modules/crm/task.model";
+import { DealModel } from "@/modules/deals/deal.model";
+import { TaskModel } from "@/modules/tasks/task.model";
+
+/**
+ * The subset of each entity the search rows carry. The `score` projected from
+ * the text index is not a stored field, so it has to be added to the lean
+ * result type rather than read off the document.
+ */
+type ScoredRow = { _id: unknown; score: number };
+
+/** Make a query result observable so the JIT cannot elide the round trip. */
+function consume(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.length + (value[0] ? JSON.stringify(value[0]).length : 0);
+  }
+  return value === undefined ? 0 : 1;
+}
 
 let mongoServer: MongoMemoryServer;
 let orgId: Types.ObjectId;
@@ -245,10 +260,8 @@ describe("Search Service Benchmark", () => {
     "future",
   ];
 
-  test(
-    "ContactModel $text search - single query",
-    { bench: true },
-    async () => {
+  test("ContactModel $text search - single query", async ({ bench }) => {
+    await bench("contact $text single query", async () => {
       const query =
         searchQueries[Math.floor(Math.random() * searchQueries.length)];
       const results = await ContactModel.find(
@@ -257,78 +270,86 @@ describe("Search Service Benchmark", () => {
       )
         .sort({ score: { $meta: "textScore" } })
         .limit(20)
-        .lean();
-    },
-  );
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
+  });
 
-  test(
-    "ContactModel $text search - exact name match",
-    { bench: true },
-    async () => {
+  test("ContactModel $text search - exact name match", async ({ bench }) => {
+    await bench("contact $text exact name", async () => {
       const results = await ContactModel.find(
         { organizationId: orgId, $text: { $search: '"John Smith"' } },
         { score: { $meta: "textScore" } },
       )
         .sort({ score: { $meta: "textScore" } })
         .limit(20)
-        .lean();
-    },
-  );
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
+  });
 
-  test(
-    "ContactModel $text search - email domain",
-    { bench: true },
-    async () => {
+  test("ContactModel $text search - email domain", async ({ bench }) => {
+    await bench("contact $text email domain", async () => {
       const results = await ContactModel.find(
         { organizationId: orgId, $text: { $search: "acmecorp" } },
         { score: { $meta: "textScore" } },
       )
         .sort({ score: { $meta: "textScore" } })
         .limit(20)
-        .lean();
-    },
-  );
-
-  test("CompanyModel $text search", { bench: true }, async () => {
-    const query =
-      searchQueries[Math.floor(Math.random() * searchQueries.length)];
-    const results = await CompanyModel.find(
-      { organizationId: orgId, $text: { $search: query } },
-      { score: { $meta: "textScore" } },
-    )
-      .sort({ score: { $meta: "textScore" } })
-      .limit(20)
-      .lean();
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
   });
 
-  test("DealModel $text search", { bench: true }, async () => {
-    const query =
-      searchQueries[Math.floor(Math.random() * searchQueries.length)];
-    const results = await DealModel.find(
-      { organizationId: orgId, $text: { $search: query } },
-      { score: { $meta: "textScore" } },
-    )
-      .sort({ score: { $meta: "textScore" } })
-      .limit(20)
-      .lean();
+  test("CompanyModel $text search", async ({ bench }) => {
+    await bench("company $text search", async () => {
+      const query =
+        searchQueries[Math.floor(Math.random() * searchQueries.length)];
+      const results = await CompanyModel.find(
+        { organizationId: orgId, $text: { $search: query } },
+        { score: { $meta: "textScore" } },
+      )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(20)
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
   });
 
-  test("TaskModel $text search", { bench: true }, async () => {
-    const query =
-      searchQueries[Math.floor(Math.random() * searchQueries.length)];
-    const results = await TaskModel.find(
-      { organizationId: orgId, $text: { $search: query } },
-      { score: { $meta: "textScore" } },
-    )
-      .sort({ score: { $meta: "textScore" } })
-      .limit(20)
-      .lean();
+  test("DealModel $text search", async ({ bench }) => {
+    await bench("deal $text search", async () => {
+      const query =
+        searchQueries[Math.floor(Math.random() * searchQueries.length)];
+      const results = await DealModel.find(
+        { organizationId: orgId, $text: { $search: query } },
+        { score: { $meta: "textScore" } },
+      )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(20)
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
   });
 
-  test(
-    "Multi-collection search (simulated unified search)",
-    { bench: true },
-    async () => {
+  test("TaskModel $text search", async ({ bench }) => {
+    await bench("task $text search", async () => {
+      const query =
+        searchQueries[Math.floor(Math.random() * searchQueries.length)];
+      const results = await TaskModel.find(
+        { organizationId: orgId, $text: { $search: query } },
+        { score: { $meta: "textScore" } },
+      )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(20)
+        .lean<Array<ScoredRow>>();
+      return consume(results);
+    }).run();
+  });
+
+  test("Multi-collection search (simulated unified search)", async ({
+    bench,
+  }) => {
+    await bench("unified search across 4 collections", async () => {
       const query =
         searchQueries[Math.floor(Math.random() * searchQueries.length)];
 
@@ -340,52 +361,36 @@ describe("Search Service Benchmark", () => {
         )
           .sort({ score: { $meta: "textScore" } })
           .limit(20)
-          .lean(),
+          .lean<Array<ScoredRow>>(),
         CompanyModel.find(
           { organizationId: orgId, $text: { $search: query } },
           { score: { $meta: "textScore" } },
         )
           .sort({ score: { $meta: "textScore" } })
           .limit(20)
-          .lean(),
+          .lean<Array<ScoredRow>>(),
         DealModel.find(
           { organizationId: orgId, $text: { $search: query } },
           { score: { $meta: "textScore" } },
         )
           .sort({ score: { $meta: "textScore" } })
           .limit(20)
-          .lean(),
+          .lean<Array<ScoredRow>>(),
         TaskModel.find(
           { organizationId: orgId, $text: { $search: query } },
           { score: { $meta: "textScore" } },
         )
           .sort({ score: { $meta: "textScore" } })
           .limit(20)
-          .lean(),
+          .lean<Array<ScoredRow>>(),
       ]);
 
       // Merge and deduplicate by score (as in search-ranking logic)
       const allResults = [
-        ...contacts.map((c) => ({
-          ...c,
-          entityType: "contact" as const,
-          score: (c as any).score,
-        })),
-        ...companies.map((c) => ({
-          ...c,
-          entityType: "company" as const,
-          score: (c as any).score,
-        })),
-        ...deals.map((d) => ({
-          ...d,
-          entityType: "deal" as const,
-          score: (d as any).score,
-        })),
-        ...tasks.map((t) => ({
-          ...t,
-          entityType: "task" as const,
-          score: (t as any).score,
-        })),
+        ...contacts.map((c) => ({ ...c, entityType: "contact" as const })),
+        ...companies.map((c) => ({ ...c, entityType: "company" as const })),
+        ...deals.map((d) => ({ ...d, entityType: "deal" as const })),
+        ...tasks.map((t) => ({ ...t, entityType: "task" as const })),
       ];
 
       allResults.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -399,14 +404,12 @@ describe("Search Service Benchmark", () => {
       });
 
       // Limit to 50 total
-      return deduplicated.slice(0, 50);
-    },
-  );
+      return consume(deduplicated.slice(0, 50));
+    }).run();
+  });
 
-  test(
-    "Contact list with filters (no text search)",
-    { bench: true },
-    async () => {
+  test("Contact list with filters (no text search)", async ({ bench }) => {
+    await bench("filtered contact list", async () => {
       // Test filtered list performance (similar to CRM list API)
       const results = await ContactModel.find({
         organizationId: orgId,
@@ -415,13 +418,12 @@ describe("Search Service Benchmark", () => {
         .sort({ lastName: 1, firstName: 1 })
         .limit(20)
         .lean();
-    },
-  );
+      return consume(results);
+    }).run();
+  });
 
-  test(
-    "Contact list with regex search (fallback)",
-    { bench: true },
-    async () => {
+  test("Contact list with regex search (fallback)", async ({ bench }) => {
+    await bench("regex contact list fallback", async () => {
       // Test regex-based search for short queries
       const query = "jo"; // Short query - text search may not work well
       const results = await ContactModel.find({
@@ -435,6 +437,7 @@ describe("Search Service Benchmark", () => {
         .sort({ lastName: 1, firstName: 1 })
         .limit(20)
         .lean();
-    },
-  );
+      return consume(results);
+    }).run();
+  });
 });

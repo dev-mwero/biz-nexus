@@ -2,7 +2,7 @@
 
 import { Calendar, Link2, User, X } from "lucide-react";
 import { Types } from "mongoose";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
   Checkbox,
@@ -29,6 +29,18 @@ import {
   type TaskStatus,
 } from "@/modules/tasks/task.model";
 import { cn } from "@/shared/lib/cn";
+
+/**
+ * A related-entity row as held in form state. `rowKey` is client-only identity
+ * for React: the row has no server id, and keying on `entityType`/`entityId`
+ * would remount (and blur) the inputs on every keystroke, because those are
+ * exactly the fields being edited.
+ */
+interface RelatedEntity {
+  rowKey: string;
+  entityType: string;
+  entityId: string;
+}
 
 interface TaskFormProps {
   organizationId: string;
@@ -61,9 +73,18 @@ export function TaskForm({
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
   const [dueAt, setDueAt] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
-  const [related, setRelated] = useState<
-    Array<{ entityType: string; entityId: string }>
-  >([]);
+  const [related, setRelated] = useState<RelatedEntity[]>([]);
+  const relatedRowCounter = useRef(0);
+  // Stable identity across renders: the counter is a ref, so this never
+  // changes and callers can depend on it without re-running.
+  const toRelatedEntity = useCallback(
+    (rel: { entityType: string; entityId: string }): RelatedEntity => ({
+      rowKey: `related-${relatedRowCounter.current++}`,
+      entityType: rel.entityType,
+      entityId: rel.entityId,
+    }),
+    [],
+  );
   const [newRelatedType, setNewRelatedType] = useState("");
   const [newRelatedId, setNewRelatedId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -79,7 +100,7 @@ export function TaskForm({
         task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : "",
       );
       setAssigneeId(task.assigneeId || "");
-      setRelated(task.related || []);
+      setRelated(task.related.map((rel) => toRelatedEntity(rel)));
     } else {
       setTitle("");
       setDescription("");
@@ -90,7 +111,7 @@ export function TaskForm({
       setRelated([]);
     }
     setError(null);
-  }, [task]);
+  }, [task, toRelatedEntity]);
 
   useEffect(() => {
     if (controlledOpen !== undefined) setOpen(controlledOpen);
@@ -119,7 +140,11 @@ export function TaskForm({
           priority,
           dueAt: dueAt ? new Date(dueAt).toISOString() : null,
           assigneeId: assigneeId || null,
-          related,
+          // `rowKey` is form bookkeeping and is not part of the payload.
+          related: related.map(({ entityType: entity, entityId: id }) => ({
+            entityType: entity,
+            entityId: id,
+          })),
         }),
       });
 
@@ -146,7 +171,10 @@ export function TaskForm({
     ) {
       setRelated((prev) => [
         ...prev,
-        { entityType: newRelatedType, entityId: newRelatedId },
+        toRelatedEntity({
+          entityType: newRelatedType,
+          entityId: newRelatedId,
+        }),
       ]);
       setNewRelatedType("");
       setNewRelatedId("");
@@ -250,7 +278,7 @@ export function TaskForm({
         <FieldLabel>Related entities</FieldLabel>
         <div className="space-y-2">
           {related.map((rel, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={rel.rowKey} className="flex items-center gap-2">
               <Input
                 value={rel.entityType}
                 onChange={(e) => {
@@ -307,7 +335,7 @@ export function TaskForm({
             />
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={addRelated}
               disabled={submitting}
             >

@@ -452,7 +452,16 @@ describe("LeadService - Extended Tests", () => {
       expect(contact?.primaryEmail).toBe("atomic@example.com");
 
       // Verify company exists
-      const company = await CompanyModel.findById(result.companyId);
+      // `companyId` is nullable on the result because the caller asked for
+      // `createCompany: false` in other cases. Asserted here rather than
+      // assumed, so a convert that silently skipped the company fails on the
+      // line that says so instead of on an unrelated `toString` further down.
+      const convertedCompanyId = result.companyId;
+      expect(convertedCompanyId).not.toBeNull();
+      if (convertedCompanyId === null) {
+        throw new Error("convert() did not report a company it just created");
+      }
+      const company = await CompanyModel.findById(convertedCompanyId);
       expect(company).not.toBeNull();
       expect(company?.name).toBe("Atomic Corp");
       expect(company?.domain).toBe("example.com");
@@ -464,7 +473,7 @@ describe("LeadService - Extended Tests", () => {
         result.contactId.toString(),
       );
       expect(convertedLead?.convertedCompanyId?.toString()).toBe(
-        result.companyId.toString(),
+        convertedCompanyId.toString(),
       );
     });
 

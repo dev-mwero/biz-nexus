@@ -191,11 +191,24 @@ describe("Dashboard Aggregation Benchmark", () => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  test(
-    "dashboard $facet aggregation - full pipeline",
-    { bench: true },
-    async () => {
-      // This is the exact aggregation from the dashboard route
+  /**
+   * Consume an aggregation result inside the measured function.
+   *
+   * Tinybench hands the same result to the engine repeatedly, and V8 will
+   * eliminate a query whose output is never observed. Every benchmark below
+   * therefore pushes the result through a plain sum of its lengths, which is
+   * cheap next to a round trip but still makes the work observable.
+   */
+  function consume(value: unknown): number {
+    if (Array.isArray(value)) {
+      return value.length + (value[0] ? JSON.stringify(value[0]).length : 0);
+    }
+    return value === undefined ? 0 : 1;
+  }
+
+  test("dashboard $facet aggregation - full pipeline", async ({ bench }) => {
+    // This is the exact aggregation from the dashboard route
+    await bench("full $facet pipeline", async () => {
       const [result] = await DealModel.aggregate([
         { $match: { organizationId: orgId } },
         {
@@ -296,100 +309,113 @@ describe("Dashboard Aggregation Benchmark", () => {
       if (!result.pipelineSummary || !result.wonThisMonth) {
         throw new Error("Invalid aggregation result");
       }
-    },
-  );
-
-  test("dashboard pipeline summary only", { bench: true }, async () => {
-    const [result] = await DealModel.aggregate([
-      {
-        $match: {
-          organizationId: orgId,
-          status: "OPEN",
-          stageId: { $in: stageIds },
-        },
-      },
-      {
-        $group: {
-          _id: "$stageId",
-          count: { $sum: 1 },
-          totalValue: { $sum: "$value" },
-        },
-      },
-      { $project: { stageId: "$_id", count: 1, totalValue: 1, _id: 0 } },
-    ]);
+      return consume(result);
+    }).run();
   });
 
-  test("dashboard metric cards only", { bench: true }, async () => {
-    const [result] = await DealModel.aggregate([
-      { $match: { organizationId: orgId } },
-      {
-        $facet: {
-          wonThisMonth: [
-            {
-              $match: {
-                status: "WON",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[4],
-              },
-            },
-            { $count: "total" },
-          ],
-          lostThisMonth: [
-            {
-              $match: {
-                status: "LOST",
-                closedAt: { $gte: startOfMonth },
-                stageId: stageIds[5],
-              },
-            },
-            { $count: "total" },
-          ],
-          pipelineValue: [
-            { $match: { status: "OPEN" } },
-            { $group: { _id: null, totalValue: { $sum: "$value" } } },
-          ],
-          winRate: [
-            {
-              $match: {
-                status: { $in: ["WON", "LOST"] },
-                closedAt: { $gte: startOfMonth },
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: 1 },
-                won: { $sum: { $cond: [{ $eq: ["$status", "WON"] }, 1, 0] } },
-              },
-            },
-          ],
+  test("dashboard pipeline summary only", async ({ bench }) => {
+    await bench("pipeline summary", async () => {
+      const [result] = await DealModel.aggregate([
+        {
+          $match: {
+            organizationId: orgId,
+            status: "OPEN",
+            stageId: { $in: stageIds },
+          },
         },
-      },
-    ]);
+        {
+          $group: {
+            _id: "$stageId",
+            count: { $sum: 1 },
+            totalValue: { $sum: "$value" },
+          },
+        },
+        { $project: { stageId: "$_id", count: 1, totalValue: 1, _id: 0 } },
+      ]);
+      return consume(result);
+    }).run();
   });
 
-  test("dashboard overdue tasks count", { bench: true }, async () => {
-    const [result] = await TaskModel.aggregate([
-      { $match: { organizationId: orgId } },
-      {
-        $match: {
-          status: { $in: ["TODO", "IN_PROGRESS"] },
-          dueAt: { $lt: now },
+  test("dashboard metric cards only", async ({ bench }) => {
+    await bench("metric cards $facet", async () => {
+      const [result] = await DealModel.aggregate([
+        { $match: { organizationId: orgId } },
+        {
+          $facet: {
+            wonThisMonth: [
+              {
+                $match: {
+                  status: "WON",
+                  closedAt: { $gte: startOfMonth },
+                  stageId: stageIds[4],
+                },
+              },
+              { $count: "total" },
+            ],
+            lostThisMonth: [
+              {
+                $match: {
+                  status: "LOST",
+                  closedAt: { $gte: startOfMonth },
+                  stageId: stageIds[5],
+                },
+              },
+              { $count: "total" },
+            ],
+            pipelineValue: [
+              { $match: { status: "OPEN" } },
+              { $group: { _id: null, totalValue: { $sum: "$value" } } },
+            ],
+            winRate: [
+              {
+                $match: {
+                  status: { $in: ["WON", "LOST"] },
+                  closedAt: { $gte: startOfMonth },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: 1 },
+                  won: { $sum: { $cond: [{ $eq: ["$status", "WON"] }, 1, 0] } },
+                },
+              },
+            ],
+          },
         },
-      },
-      { $count: "total" },
-    ]);
+      ]);
+      return consume(result);
+    }).run();
   });
 
-  test("dashboard recent activity (10 items)", { bench: true }, async () => {
+  test("dashboard overdue tasks count", async ({ bench }) => {
+    await bench("overdue tasks count", async () => {
+      const [result] = await TaskModel.aggregate([
+        { $match: { organizationId: orgId } },
+        {
+          $match: {
+            status: { $in: ["TODO", "IN_PROGRESS"] },
+            dueAt: { $lt: now },
+          },
+        },
+        { $count: "total" },
+      ]);
+      return consume(result);
+    }).run();
+  });
+
+  test("dashboard recent activity (10 items)", async ({ bench }) => {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const result = await ActivityModel.find({
-      organizationId: orgId,
-      occurredAt: { $gte: thirtyDaysAgo },
-    })
-      .sort({ occurredAt: -1 })
-      .limit(10)
-      .select("title occurredAt type metadata")
-      .lean();
+    await bench("recent activity limit 10", async () => {
+      const result = await ActivityModel.find({
+        organizationId: orgId,
+        occurredAt: { $gte: thirtyDaysAgo },
+      })
+        .sort({ occurredAt: -1 })
+        .limit(10)
+        .select("title occurredAt type metadata")
+        .lean();
+      return consume(result);
+    }).run();
   });
 });

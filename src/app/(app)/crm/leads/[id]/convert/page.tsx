@@ -9,6 +9,7 @@ import {
   Loader2,
   Mail,
   Phone,
+  Tag as TagIcon,
   Target,
   User,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import {
   AlertDialogTitle,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardHeader,
@@ -257,13 +259,16 @@ export default function ConvertLeadPage() {
           .
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <Link href={`/crm/leads/${leadId}`}>
-            <Button variant="secondary">View Lead</Button>
-          </Link>
+          <ButtonLink href={`/crm/leads/${leadId}`} variant="secondary">
+            View Lead
+          </ButtonLink>
           {lead.convertedContactId && (
-            <Link href={`/crm/contacts/${lead.convertedContactId}`}>
-              <Button variant="outline">View Contact</Button>
-            </Link>
+            <ButtonLink
+              href={`/crm/contacts/${lead.convertedContactId}`}
+              variant="secondary"
+            >
+              View Contact
+            </ButtonLink>
           )}
         </div>
       </div>
@@ -466,14 +471,23 @@ export default function ConvertLeadPage() {
                 <Select
                   value={formData.pipelineId}
                   onValueChange={(v) => {
-                    setFormData({ ...formData, pipelineId: v, stageId: "" });
-                    const pipeline = pipelines.find((p) => p._id === v);
-                    if (pipeline?.stages?.[0]) {
+                    // Base UI reports a cleared select as `null`; clearing the
+                    // pipeline invalidates the stage, so both are reset and the
+                    // user is asked to pick again.
+                    if (v === null) {
                       setFormData((prev) => ({
                         ...prev,
-                        stageId: pipeline.stages[0]._id,
+                        pipelineId: "",
+                        stageId: "",
                       }));
+                      return;
                     }
+                    const pipeline = pipelines.find((p) => p._id === v);
+                    setFormData((prev) => ({
+                      ...prev,
+                      pipelineId: v,
+                      stageId: pipeline?.stages?.[0]?._id ?? "",
+                    }));
                   }}
                   required
                 >
@@ -495,7 +509,7 @@ export default function ConvertLeadPage() {
                 <Select
                   value={formData.stageId}
                   onValueChange={(v) =>
-                    setFormData({ ...formData, stageId: v })
+                    setFormData((prev) => ({ ...prev, stageId: v ?? "" }))
                   }
                   required
                 >
@@ -566,7 +580,7 @@ export default function ConvertLeadPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {lead.tags.map((tagId) => (
-                <Badge key={tagId} variant="outline">
+                <Badge key={tagId} tone="outline">
                   {tagId}
                 </Badge>
               ))}

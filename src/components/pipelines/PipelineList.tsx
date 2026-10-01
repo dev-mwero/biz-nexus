@@ -24,6 +24,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  IconButton,
   Input,
   Label,
   Textarea,
@@ -121,12 +122,14 @@ export function PipelineList({
     <div className="space-y-4">
       {/* Create Pipeline Dialog */}
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogTrigger asChild>
-          <Button className="w-full justify-start gap-2">
-            <Plus className="h-4 w-4" />
-            New Pipeline
-          </Button>
-        </DialogTrigger>
+        <DialogTrigger
+          render={
+            <Button className="w-full justify-start gap-2">
+              <Plus className="h-4 w-4" />
+              New Pipeline
+            </Button>
+          }
+        />
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Pipeline</DialogTitle>
@@ -283,7 +286,7 @@ function PipelineCard({
 
   const handleSaveStages = () => {
     onReorderStages(localStages);
-    setEditingId(null);
+    onEditCancel();
   };
 
   return (
@@ -324,7 +327,7 @@ function PipelineCard({
                     {pipeline.name}
                   </CardTitle>
                   {pipeline.isDefault && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge tone="neutral" className="text-xs">
                       Default
                     </Badge>
                   )}
@@ -336,11 +339,17 @@ function PipelineCard({
                 )}
               </div>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  render={
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Actions for ${pipeline.name}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </IconButton>
+                  }
+                />
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={onEditClick}>
                     <Edit2 className="h-4 w-4 mr-2" />
@@ -359,7 +368,7 @@ function PipelineCard({
 
       <CardContent className="pt-0">
         {/* Stages */}
-        <div className="space-y-2">
+        <ul className="space-y-2">
           {stages.map((stage, index) => (
             <StageRow
               key={stage.id}
@@ -372,7 +381,7 @@ function PipelineCard({
               onDragEnd={handleDragEnd}
             />
           ))}
-        </div>
+        </ul>
 
         {pipeline.stages.length === 0 && (
           <p className="text-center text-muted-foreground py-4 text-sm">
@@ -432,7 +441,7 @@ function StageRow({
     colorClasses[stage.color as keyof typeof colorClasses] ?? colorClasses.blue;
 
   return (
-    <div
+    <li
       className={cn(
         "flex items-center gap-3 p-2 rounded-lg border transition-all",
         isDragging && "opacity-50 rotate-1 shadow-lg",
@@ -455,12 +464,12 @@ function StageRow({
             {stage.name}
           </span>
           {stage.isWon && (
-            <Badge variant="outline" className="text-xs">
+            <Badge tone="positive" className="text-xs">
               Won
             </Badge>
           )}
           {stage.isLost && (
-            <Badge variant="destructive" className="text-xs">
+            <Badge tone="critical" className="text-xs">
               Lost
             </Badge>
           )}
@@ -471,6 +480,6 @@ function StageRow({
         </div>
       </div>
       <span className="text-muted-foreground text-sm">{index + 1}</span>
-    </div>
+    </li>
   );
 }

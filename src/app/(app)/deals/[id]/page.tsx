@@ -53,6 +53,15 @@ import {
 import { cn } from "@/shared/lib/cn";
 import { formatRelativeTime } from "@/shared/lib/format";
 
+/** Placeholder rows shown while the activity timeline loads. */
+const ACTIVITY_SKELETON_ROWS = [
+  "row-1",
+  "row-2",
+  "row-3",
+  "row-4",
+  "row-5",
+] as const;
+
 const DEAL_STATUSES = ["OPEN", "WON", "LOST"] as const;
 type DealStatus = (typeof DEAL_STATUSES)[number];
 
@@ -101,6 +110,30 @@ interface ActivityItem {
   type: string;
   occurredAt: string;
   metadata?: Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * `metadata` is free-form JSON written by the activity service, so the
+ * stage-change payload is read out of it rather than asserted. A payload that
+ * does not carry both stage names is treated as absent rather than rendered
+ * as `undefined`.
+ */
+function readStageChange(
+  metadata: Record<string, unknown> | undefined,
+): { from: string; to: string } | null {
+  const from = isRecord(metadata?.fromStage)
+    ? metadata.fromStage.stageName
+    : undefined;
+  const to = isRecord(metadata?.toStage)
+    ? metadata.toStage.stageName
+    : undefined;
+  return typeof from === "string" && typeof to === "string"
+    ? { from, to }
+    : null;
 }
 
 const ACTIVITY_ICONS: Record<
@@ -321,7 +354,7 @@ export default function DealDetailPage() {
                 Mark Won
               </Button>
               <Button
-                variant="destructive"
+                variant="danger"
                 onClick={() => setShowLoseDialog(true)}
                 disabled={losing}
               >
@@ -573,8 +606,8 @@ export default function DealDetailPage() {
               <ScrollArea className="max-h-[600px]">
                 {activitiesLoading ? (
                   <div className="space-y-3">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className="flex items-start gap-3">
+                    {ACTIVITY_SKELETON_ROWS.map((slot) => (
+                      <div key={slot} className="flex items-start gap-3">
                         <Skeleton className="h-8 w-8 rounded-lg flex-shrink-0" />
                         <div className="flex-1 space-y-1">
                           <Skeleton className="h-4 w-3/4" />
@@ -597,6 +630,7 @@ export default function DealDetailPage() {
                       const typeLabel = activity.type
                         .replace(/_/g, " ")
                         .toLowerCase();
+                      const stageChange = readStageChange(activity.metadata);
 
                       return (
                         <div
@@ -624,19 +658,18 @@ export default function DealDetailPage() {
                                 {formatRelativeTime(activity.occurredAt)}
                               </time>
                             </div>
-                            {activity.metadata?.fromStage &&
-                              activity.metadata?.toStage && (
-                                <div className="text-xs text-ink-500">
-                                  From:{" "}
-                                  <span className="font-medium">
-                                    {activity.metadata.fromStage.stageName}
-                                  </span>{" "}
-                                  → To:{" "}
-                                  <span className="font-medium">
-                                    {activity.metadata.toStage.stageName}
-                                  </span>
-                                </div>
-                              )}
+                            {stageChange && (
+                              <div className="text-xs text-ink-500">
+                                From:{" "}
+                                <span className="font-medium">
+                                  {stageChange.from}
+                                </span>{" "}
+                                → To:{" "}
+                                <span className="font-medium">
+                                  {stageChange.to}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

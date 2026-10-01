@@ -141,10 +141,10 @@ export default function ContactsPage() {
   };
 
   const statusBadgeConfig = {
-    LEAD: { variant: "outline" as const },
-    PROSPECT: { variant: "warning" as const },
-    CUSTOMER: { variant: "success" as const },
-    INACTIVE: { variant: "danger" as const },
+    LEAD: { tone: "outline" as const },
+    PROSPECT: { tone: "attention" as const },
+    CUSTOMER: { tone: "positive" as const },
+    INACTIVE: { tone: "critical" as const },
   };
 
   const rowActions = (row: any) => (

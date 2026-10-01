@@ -26,6 +26,15 @@ interface SearchResult {
   metadata?: Record<string, unknown>;
 }
 
+/** Placeholder cards shown while a search is in flight. */
+const SEARCH_SKELETON_ROWS = [
+  "row-1",
+  "row-2",
+  "row-3",
+  "row-4",
+  "row-5",
+] as const;
+
 const ENTITY_ICONS: Record<
   SearchResult["entityType"],
   React.ComponentType<{ className?: string }>
@@ -49,7 +58,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Focus input on mount
   useEffect(() => {
@@ -183,14 +192,13 @@ export default function SearchPage() {
       </div>
 
       {loading && (
-        <div
-          className="space-y-3"
-          role="status"
+        <output
+          className="space-y-3 block"
           aria-live="polite"
           aria-label="Loading search results"
         >
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Card key={i} variant="outlined">
+          {SEARCH_SKELETON_ROWS.map((slot) => (
+            <Card key={slot} variant="outlined">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <Skeleton className="h-10 w-10 rounded-lg flex-shrink-0" />
@@ -202,7 +210,7 @@ export default function SearchPage() {
               </CardContent>
             </Card>
           ))}
-        </div>
+        </output>
       )}
 
       {error && (
@@ -226,7 +234,7 @@ export default function SearchPage() {
       )}
 
       {!loading && !error && results.length > 0 && (
-        <div className="space-y-3" role="region" aria-label="Search results">
+        <section className="space-y-3" aria-label="Search results">
           {results.map((result) => {
             const Icon = ENTITY_ICONS[result.entityType];
             return (
@@ -272,7 +280,7 @@ export default function SearchPage() {
               </Card>
             );
           })}
-        </div>
+        </section>
       )}
     </div>
   );

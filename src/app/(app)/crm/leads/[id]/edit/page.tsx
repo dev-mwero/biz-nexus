@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Building2, Mail, Phone } from "lucide-react";
+import { AlertCircle, ArrowLeft, Building2, Mail, Phone } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

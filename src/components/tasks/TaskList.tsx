@@ -3,12 +3,8 @@
 import {
   Calendar,
   Check,
-  ChevronDown,
   Edit,
   Filter,
-  Flag,
-  Kanban,
-  List,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -17,19 +13,14 @@ import {
   Trash2,
   User,
 } from "lucide-react";
-import { Types } from "mongoose";
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
   Button,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
   DropdownMenu,
   DropdownMenuContent,
@@ -43,10 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
   Skeleton,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
 } from "@/components/ui";
 import {
   TASK_PRIORITIES,
@@ -86,6 +73,15 @@ interface TaskListProps {
   onTaskClick?: (task: TaskItem) => void;
   onTaskComplete?: (taskId: string) => void;
 }
+
+/** Placeholder rows shown while the list loads. */
+const LIST_SKELETON_ROWS = [
+  "row-1",
+  "row-2",
+  "row-3",
+  "row-4",
+  "row-5",
+] as const;
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   TODO: "bg-gray-100 text-gray-800",
@@ -152,11 +148,17 @@ function TaskCard({
                 {task.title}
               </h4>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="p-1 rounded hover:bg-muted transition-colors">
-                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Actions for ${task.title}`}
+                      className="p-1 rounded hover:bg-muted transition-colors"
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  }
+                />
                 <DropdownMenuContent align="end">
                   {onEdit && (
                     <DropdownMenuItem onClick={() => onEdit(task)}>
@@ -194,13 +196,10 @@ function TaskCard({
               </p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="secondary" className={STATUS_COLORS[task.status]}>
+              <Badge tone="neutral" className={STATUS_COLORS[task.status]}>
                 {task.status.replace("_", " ")}
               </Badge>
-              <Badge
-                variant="secondary"
-                className={PRIORITY_COLORS[task.priority]}
-              >
+              <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
                 {task.priority}
               </Badge>
               {task.dueAt && (
@@ -299,7 +298,7 @@ export function TaskList({
     } finally {
       setLoading(false);
     }
-  }, [filters, organizationId]);
+  }, [filters]);
 
   useEffect(() => {
     fetchTasks();
@@ -350,8 +349,8 @@ export function TaskList({
   if (loading) {
     return (
       <div className="space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <TaskSkeleton key={i} />
+        {LIST_SKELETON_ROWS.map((row) => (
+          <TaskSkeleton key={row} />
         ))}
       </div>
     );
@@ -401,8 +400,10 @@ export function TaskList({
         </div>
         <Select
           value={filters.status}
+          // A cleared select reports `null`; the filter records that as "no
+          // status filter", matching the "All statuses" row.
           onValueChange={(v) =>
-            setFilters((f) => ({ ...f, status: v, page: 1 }))
+            setFilters((f) => ({ ...f, status: v ?? "", page: 1 }))
           }
         >
           <SelectTrigger className="w-[160px]">
@@ -417,17 +418,22 @@ export function TaskList({
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+        <Button
+          variant="secondary"
+          onClick={() => setShowFilters(!showFilters)}
+        >
           <Filter className="w-4 h-4 mr-2" />
           Filters
         </Button>
         <Dialog open={false}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              New task
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger
+            render={
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                New task
+              </Button>
+            }
+          />
           <DialogContent className="max-w-2xl">
             <TaskForm organizationId={organizationId} onSuccess={fetchTasks} />
           </DialogContent>
@@ -499,7 +505,7 @@ export function TaskList({
       {total > tasks.length && (
         <div className="flex justify-center mt-4">
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
           >
             Load more ({tasks.length}/{total})

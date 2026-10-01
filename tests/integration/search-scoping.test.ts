@@ -2,10 +2,14 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import type { Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase } from "@/db/connection";
-import { CompanyModel } from "@/modules/crm/companies/company.model";
-import { ContactModel } from "@/modules/crm/contacts/contact.model";
-import { DealModel } from "@/modules/crm/deals/deal.model";
-import { TaskModel } from "@/modules/crm/tasks/task.model";
+import { CompanyModel } from "@/modules/crm/company.model";
+import { ContactModel } from "@/modules/crm/contact.model";
+
+/** The subset of a contact/company the merged result rows need. */
+type ContactSearchRow = { firstName: string; lastName: string };
+type CompanySearchRow = { name: string };
+import { DealModel } from "@/modules/deals/deal.model";
+import { TaskModel } from "@/modules/tasks/task.model";
 
 let mongoServer: MongoMemoryServer;
 let orgId: Types.ObjectId;
@@ -43,15 +47,17 @@ describe("Search Scoping to Organization", () => {
         organizationId: orgId,
         firstName: "John",
         lastName: "Doe",
+        ownerId: userId,
         primaryEmail: "john@example.com",
-        status: "ACTIVE",
+        status: "LEAD",
       },
       {
         organizationId: otherOrgId,
         firstName: "Jane",
         lastName: "Doe",
+        ownerId: userId,
         primaryEmail: "jane@example.com",
-        status: "ACTIVE",
+        status: "LEAD",
       },
     ]);
 
@@ -69,16 +75,18 @@ describe("Search Scoping to Organization", () => {
       {
         organizationId: orgId,
         name: "Acme Corp",
+        ownerId: userId,
         email: "acme@example.com",
         industry: "Tech",
-        status: "ACTIVE",
+        status: "PROSPECT",
       },
       {
         organizationId: otherOrgId,
         name: "Beta Inc",
+        ownerId: userId,
         email: "beta@example.com",
         industry: "Tech",
-        status: "ACTIVE",
+        status: "PROSPECT",
       },
     ]);
 
@@ -103,6 +111,7 @@ describe("Search Scoping to Organization", () => {
         status: "OPEN",
         stageId,
         pipelineId,
+        ownerId: userId,
       },
       {
         organizationId: otherOrgId,
@@ -111,6 +120,7 @@ describe("Search Scoping to Organization", () => {
         status: "OPEN",
         stageId,
         pipelineId,
+        ownerId: userId,
       },
     ]);
 
@@ -156,42 +166,46 @@ describe("Search Scoping to Organization", () => {
         organizationId: orgId,
         firstName: "Alice",
         lastName: "Johnson",
+        ownerId: userId,
         primaryEmail: "alice@example.com",
-        status: "ACTIVE",
+        status: "LEAD",
       },
     ]);
     await CompanyModel.create([
       {
         organizationId: orgId,
         name: "Johnson & Co",
+        ownerId: userId,
         email: "johnson@example.com",
         industry: "Consulting",
-        status: "ACTIVE",
+        status: "PROSPECT",
       },
     ]);
 
-    // Search across all collections
+    // Search across all collections. `score` comes from the text index via a
+    // projection rather than being a stored field, so it has to be added to
+    // the lean result type the same way the search route does it.
     const [contacts, companies] = await Promise.all([
       ContactModel.find(
         { organizationId: orgId, $text: { $search: "johnson" } },
         { score: { $meta: "textScore" } },
-      ).lean(),
+      ).lean<Array<ContactSearchRow & { score: number }>>(),
       CompanyModel.find(
         { organizationId: orgId, $text: { $search: "johnson" } },
         { score: { $meta: "textScore" } },
-      ).lean(),
+      ).lean<Array<CompanySearchRow & { score: number }>>(),
     ]);
 
     const allResults = [
       ...contacts.map((c) => ({
         ...c,
         entityType: "contact" as const,
-        score: (c as any).score,
+        score: c.score,
       })),
       ...companies.map((c) => ({
         ...c,
         entityType: "company" as const,
-        score: (c as any).score,
+        score: c.score,
       })),
     ];
 
@@ -207,8 +221,9 @@ describe("Search Scoping to Organization", () => {
       organizationId: orgId,
       firstName: `Contact${i}`,
       lastName: "Searchable",
+      ownerId: userId,
       primaryEmail: `contact${i}@example.com`,
-      status: "ACTIVE",
+      status: "LEAD" as const,
     }));
     await ContactModel.insertMany(contacts);
 

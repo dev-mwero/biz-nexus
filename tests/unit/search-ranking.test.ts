@@ -2,13 +2,14 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import type { Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase } from "@/db/connection";
-import { CompanyModel } from "@/modules/crm/companies/company.model";
-import { ContactModel } from "@/modules/crm/contacts/contact.model";
-import { DealModel } from "@/modules/crm/deals/deal.model";
-import { TaskModel } from "@/modules/crm/tasks/task.model";
+import { CompanyModel } from "@/modules/crm/company.model";
+import { ContactModel } from "@/modules/crm/contact.model";
+import { DealModel } from "@/modules/deals/deal.model";
+import { TaskModel } from "@/modules/tasks/task.model";
 
 let mongoServer: MongoMemoryServer;
 let orgId: Types.ObjectId;
+let userId: Types.ObjectId;
 
 beforeEach(async () => {
   mongoServer = await MongoMemoryServer.create();
@@ -17,6 +18,7 @@ beforeEach(async () => {
 
   // Create test organization ID
   orgId = new (await import("mongoose")).Types.ObjectId();
+  userId = new (await import("mongoose")).Types.ObjectId();
 
   // Create text indexes
   await ContactModel.createIndexes();
@@ -37,19 +39,21 @@ describe("Search Ranking and Scoping", () => {
     // Create contact in current org
     await ContactModel.create({
       organizationId: orgId,
+      ownerId: userId,
       firstName: "John",
       lastName: "Doe",
       primaryEmail: "john@example.com",
-      status: "ACTIVE",
+      status: "LEAD",
     });
 
     // Create contact in other org
     await ContactModel.create({
       organizationId: otherOrgId,
+      ownerId: userId,
       firstName: "Jane",
       lastName: "Smith",
       primaryEmail: "jane@example.com",
-      status: "ACTIVE",
+      status: "LEAD",
     });
 
     // Search in current org should only find John
@@ -63,27 +67,28 @@ describe("Search Ranking and Scoping", () => {
   });
 
   it("should rank exact name matches higher", async () => {
+    // MongoDB text search tokenizes on whole words and applies the English
+    // stemmer: it has no prefix expansion, so "john" matches neither "Johnny"
+    // nor "Jonathan". Both documents below are built from the literal token
+    // "john", and the ranking under test is the one the index really
+    // defines — term frequency within the document. One contact repeats the
+    // token across two indexed fields, the other carries it once.
     await ContactModel.create([
       {
         organizationId: orgId,
+        ownerId: userId,
+        firstName: "John",
+        lastName: "John",
+        primaryEmail: "john.doe@example.com",
+        status: "LEAD",
+      },
+      {
+        organizationId: orgId,
+        ownerId: userId,
         firstName: "John",
         lastName: "Doe",
-        primaryEmail: "john@example.com",
-        status: "ACTIVE",
-      },
-      {
-        organizationId: orgId,
-        firstName: "Johnny",
-        lastName: "Walker",
-        primaryEmail: "johnny@example.com",
-        status: "ACTIVE",
-      },
-      {
-        organizationId: orgId,
-        firstName: "Jonathan",
-        lastName: "Smith",
-        primaryEmail: "jonathan@example.com",
-        status: "ACTIVE",
+        primaryEmail: "j.doe@example.com",
+        status: "LEAD",
       },
     ]);
 
@@ -92,28 +97,31 @@ describe("Search Ranking and Scoping", () => {
       { score: { $meta: "textScore" } },
     )
       .sort({ score: { $meta: "textScore" } })
-      .lean();
+      .lean<Array<{ firstName: string; lastName: string; score: number }>>();
 
-    expect(results.length).toBe(3);
-    // Exact match "John" should rank higher than "Johnny" and "Jonathan"
-    expect(results[0].firstName).toBe("John");
+    expect(results.length).toBe(2);
+    // The document repeating the term scores higher and sorts first.
+    expect(results[0].lastName).toBe("John");
+    expect(results[0].score).toBeGreaterThan(results[1].score);
   });
 
   it("should search across multiple fields (name, email)", async () => {
     await ContactModel.create([
       {
         organizationId: orgId,
+        ownerId: userId,
         firstName: "Alice",
         lastName: "Johnson",
         primaryEmail: "alice@example.com",
-        status: "ACTIVE",
+        status: "LEAD",
       },
       {
         organizationId: orgId,
+        ownerId: userId,
         firstName: "Bob",
         lastName: "Smith",
         primaryEmail: "bob.johnson@example.com",
-        status: "ACTIVE",
+        status: "LEAD",
       },
     ]);
 
@@ -128,10 +136,11 @@ describe("Search Ranking and Scoping", () => {
   it("should return max 20 results per collection", async () => {
     const contacts = Array.from({ length: 25 }, (_, i) => ({
       organizationId: orgId,
+      ownerId: userId,
       firstName: `Contact${i}`,
       lastName: `Test`,
       primaryEmail: `contact${i}@example.com`,
-      status: "ACTIVE",
+      status: "LEAD" as const,
     }));
     await ContactModel.insertMany(contacts);
 
@@ -149,10 +158,11 @@ describe("Search Ranking and Scoping", () => {
   it("should handle special regex characters in query", async () => {
     await ContactModel.create({
       organizationId: orgId,
+      ownerId: userId,
       firstName: "Test.User",
       lastName: "Test",
       primaryEmail: "test.user@example.com",
-      status: "ACTIVE",
+      status: "LEAD",
     });
 
     // Query with special chars should not crash

@@ -507,8 +507,17 @@ describe("CRM Services", () => {
       });
 
       await service.delete(view._id, actorId, userId);
-      const deleted = await SavedViewModel.findById(view._id);
-      expect(deleted?.deletedAt).not.toBeNull();
+
+      // Assert the observable effect of a delete rather than reading a
+      // `deletedAt` field back off the model. `SavedView` does not declare
+      // `deletedAt` (and so does not get the soft-delete mixin), which means
+      // `repo.softDeleteById()` writes a field strict mode drops — the row is
+      // never actually marked deleted and `scope()` never filters it out.
+      // Reading the field back hid that: `undefined` is not `null`, so the
+      // old assertion passed while nothing was deleted.
+      expect(await SavedViewModel.findById(view._id)).not.toBeNull();
+      await expect(service.listByUser(userId, "CONTACT")).resolves.toHaveLength(0);
+      await expect(service.getById(view._id)).resolves.toBeNull();
     });
 
     it("lists views by user", async () => {

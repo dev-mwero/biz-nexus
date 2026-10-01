@@ -6,6 +6,7 @@ import {
   Building2,
   Calendar,
   ChevronDown,
+  ChevronUp,
   Edit2,
   Globe,
   Mail,
@@ -28,6 +29,7 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardHeader,
@@ -97,7 +99,7 @@ const statusBadgeTone: Record<
 > = {
   PROSPECT: "outline",
   CUSTOMER: "positive",
-  PARTNER: "default",
+  PARTNER: "neutral",
   SUPPLIER: "attention",
   INACTIVE: "critical",
 };
@@ -373,7 +375,7 @@ export default function CompanyDetailPage() {
                   </div>
                 </div>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setShowHierarchy(!showHierarchy)}
                 >
@@ -508,12 +510,14 @@ export default function CompanyDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Contacts</CardTitle>
-              <Button asChild variant="secondary" size="sm">
-                <Link href={`/crm/contacts/new?companyId=${companyId}`}>
-                  <Building2 className="h-4 w-4 mr-1" />
-                  Add Contact
-                </Link>
-              </Button>
+              <ButtonLink
+                href={`/crm/contacts/new?companyId=${companyId}`}
+                variant="secondary"
+                size="sm"
+              >
+                <Building2 className="h-4 w-4 mr-1" />
+                Add Contact
+              </ButtonLink>
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
@@ -521,11 +525,14 @@ export default function CompanyDetailPage() {
                 <p className="text-ink-500">
                   Contacts for this company are listed on the contacts page.
                 </p>
-                <Button asChild variant="secondary" className="mt-4" size="sm">
-                  <Link href={`/crm/contacts?companyId=${companyId}`}>
-                    View All Contacts
-                  </Link>
-                </Button>
+                <ButtonLink
+                  href={`/crm/contacts?companyId=${companyId}`}
+                  variant="secondary"
+                  className="mt-4"
+                  size="sm"
+                >
+                  View All Contacts
+                </ButtonLink>
               </div>
             </CardContent>
           </Card>

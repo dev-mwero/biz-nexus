@@ -69,6 +69,15 @@ interface ActivityItem {
   createdAt: string;
 }
 
+/** Placeholder rows shown while the timeline loads. */
+const TIMELINE_SKELETON_ROWS = [
+  "row-1",
+  "row-2",
+  "row-3",
+  "row-4",
+  "row-5",
+] as const;
+
 const ACTIVITY_ICONS: Record<
   ActivityType,
   React.ComponentType<{ className?: string }>
@@ -134,6 +143,7 @@ function ActivityItemComponent({
               {isOwner && onDelete && (
                 <div className="relative">
                   <button
+                    type="button"
                     onClick={() => setShowMenu(!showMenu)}
                     className="p-1 rounded hover:bg-muted transition-colors"
                     aria-label="More options"
@@ -143,6 +153,7 @@ function ActivityItemComponent({
                   {showMenu && (
                     <div className="absolute right-0 top-full mt-1 z-10">
                       <button
+                        type="button"
                         onClick={() => {
                           onDelete(activity._id);
                           setShowMenu(false);
@@ -345,8 +356,8 @@ export function ActivityTimeline({
   if (loading) {
     return (
       <div className="space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <ActivitySkeleton key={i} />
+        {TIMELINE_SKELETON_ROWS.map((row) => (
+          <ActivitySkeleton key={row} />
         ))}
       </div>
     );

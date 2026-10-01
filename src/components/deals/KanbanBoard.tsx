@@ -118,6 +118,15 @@ const STAGE_COLORS = {
   rose: "bg-rose-100 border-rose-200",
 };
 
+/** Placeholder cards shown while a column loads. */
+const DEAL_SKELETON_ROWS = [
+  "card-1",
+  "card-2",
+  "card-3",
+  "card-4",
+  "card-5",
+] as const;
+
 const BADGE_COLORS = {
   slate: "bg-slate-100 text-slate-700 border-slate-200",
   gray: "bg-gray-100 text-gray-700 border-gray-200",
@@ -240,7 +249,16 @@ export function KanbanBoard({
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-4 p-4 bg-card border rounded-lg">
         <div className="flex-1 max-w-xs">
-          <Select value={selectedPipelineId} onValueChange={onPipelineChange}>
+          <Select
+            value={selectedPipelineId}
+            onValueChange={(value) => {
+              // Base UI reports a cleared selection as `null`. The board always
+              // has a pipeline, so a cleared selection is not a state the parent
+              // can act on — dropping it leaves the current pipeline in place.
+              if (value === null) return;
+              onPipelineChange(value);
+            }}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select pipeline" />
             </SelectTrigger>
@@ -269,7 +287,9 @@ export function KanbanBoard({
           </div>
           <Select
             value={filters.ownerId}
-            onValueChange={(v) => setFilters({ ...filters, ownerId: v })}
+            // A cleared select is `null`, which this filter records as "no owner
+            // filter" — the same state as the "All Owners" row.
+            onValueChange={(v) => setFilters({ ...filters, ownerId: v ?? "" })}
           >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Owner" />
@@ -281,7 +301,7 @@ export function KanbanBoard({
           </Select>
           <Select
             value={filters.status}
-            onValueChange={(v) => setFilters({ ...filters, status: v })}
+            onValueChange={(v) => setFilters({ ...filters, status: v ?? "" })}
           >
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Status" />
@@ -385,7 +405,8 @@ function KanbanColumn({
   const totalValue = deals.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div
+    <section
+      aria-label={`${stage.name} stage`}
       className={cn(
         "flex flex-col h-full min-w-[300px] max-w-[300px] rounded-lg border",
         stageColorClass,
@@ -397,18 +418,18 @@ function KanbanColumn({
       <div className="flex items-center justify-between p-3 border-b bg-background/50 rounded-t-lg">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Badge
-            variant="outline"
+            tone="outline"
             className={cn("flex-shrink-0", badgeColorClass)}
           >
             {stage.name}
           </Badge>
           {stage.isWon && (
-            <Badge variant="success" className="text-xs">
+            <Badge tone="positive" className="text-xs">
               Won
             </Badge>
           )}
           {stage.isLost && (
-            <Badge variant="destructive" className="text-xs">
+            <Badge tone="critical" className="text-xs">
               Lost
             </Badge>
           )}
@@ -421,13 +442,13 @@ function KanbanColumn({
       </div>
 
       {/* Deals List */}
-      <div
-        className="flex-1 overflow-y-auto p-2 space-y-2"
-        role="list"
-        aria-label={`${stage.name} deals`}
-      >
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => <DealCardSkeleton key={i} />)
+          <ul aria-label={`${stage.name} deals`}>
+            {DEAL_SKELETON_ROWS.map((row) => (
+              <DealCardSkeleton key={row} />
+            ))}
+          </ul>
         ) : deals.length === 0 ? (
           <div className="text-center text-muted-foreground py-8 text-sm">
             <p>No deals in this stage</p>
@@ -442,9 +463,11 @@ function KanbanColumn({
             </Button>
           </div>
         ) : (
-          deals.map((deal, index) => (
-            <DealCard key={deal.id} deal={deal} index={index} />
-          ))
+          <ul aria-label={`${stage.name} deals`} className="space-y-2">
+            {deals.map((deal, index) => (
+              <DealCard key={deal.id} deal={deal} index={index} />
+            ))}
+          </ul>
         )}
 
         {/* Add Deal Form */}
@@ -492,7 +515,7 @@ function KanbanColumn({
           </Button>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -525,15 +548,13 @@ function DealCard({ deal, index }: DealCardProps) {
     deal.status === "OPEN";
 
   return (
-    <div
+    <li
       className="bg-background border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("application/json", JSON.stringify(deal));
         e.dataTransfer.effectAllowed = "move";
       }}
-      role="listitem"
-      tabIndex={0}
     >
       <div className="font-medium text-sm truncate">{deal.name}</div>
 
@@ -567,28 +588,28 @@ function DealCard({ deal, index }: DealCardProps) {
       {deal.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {deal.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-xs">
+            <Badge key={tag} tone="neutral" className="text-xs">
               {tag}
             </Badge>
           ))}
           {deal.tags.length > 3 && (
-            <Badge variant="outline" className="text-xs">
+            <Badge tone="outline" className="text-xs">
               +{deal.tags.length - 3}
             </Badge>
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
 function DealCardSkeleton() {
   return (
-    <div className="bg-background border rounded-lg p-3 space-y-3">
+    <li className="bg-background border rounded-lg p-3 space-y-3">
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-6 w-1/2" />
       <Skeleton className="h-3 w-full" />
       <Skeleton className="h-3 w-2/3" />
-    </div>
+    </li>
   );
 }

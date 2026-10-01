@@ -57,8 +57,6 @@ export function Sidebar({
           "fixed top-0 left-0 z-50 h-screen bg-surface border-r border-line transition-transform duration-200 ease-out lg:relative lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
-        aria-label="Main navigation"
-        role="navigation"
       >
         <div className="flex h-full flex-col">
           {/* Sidebar header */}
@@ -94,7 +92,7 @@ export function Sidebar({
             className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-1"
             aria-label="Main navigation"
           >
-            <ul className="space-y-1" role="list">
+            <ul className="space-y-1">
               {navigation.map((item) => {
                 const isActive =
                   pathname === item.href ||

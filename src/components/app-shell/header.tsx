@@ -52,10 +52,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const activeOrgId = session?.activeOrganizationId;
 
   return (
-    <header
-      role="banner"
-      className="sticky top-0 z-30 h-16 bg-surface/95 backdrop-blur-sm border-b border-line"
-    >
+    <header className="sticky top-0 z-30 h-16 bg-surface/95 backdrop-blur-sm border-b border-line">
       <div className="flex h-full items-center justify-between px-4 lg:px-6">
         {/* Left: Menu trigger + Breadcrumbs */}
         <div className="flex items-center gap-4">
@@ -74,7 +71,6 @@ export function Header({ onMenuClick }: HeaderProps) {
           <nav
             className="hidden sm:flex items-center gap-1.5 text-sm"
             aria-label="Breadcrumb"
-            role="navigation"
           >
             <ol className="flex items-center gap-1.5">
               <li>
@@ -113,22 +109,24 @@ export function Header({ onMenuClick }: HeaderProps) {
           {/* Organization Switcher */}
           {organizations.length > 1 && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 px-3 h-9"
-                  aria-label={`Current organization: ${getActiveOrgName()}`}
-                  aria-haspopup="menu"
-                  aria-expanded="false"
-                >
-                  <Building2 className="size-4" aria-hidden="true" />
-                  <span className="truncate max-w-[140px] font-medium">
-                    {getActiveOrgName()}
-                  </span>
-                  <ChevronDown className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 px-3 h-9"
+                    aria-label={`Current organization: ${getActiveOrgName()}`}
+                    aria-haspopup="menu"
+                    aria-expanded={false}
+                  >
+                    <Building2 className="size-4" aria-hidden="true" />
+                    <span className="truncate max-w-[140px] font-medium">
+                      {getActiveOrgName()}
+                    </span>
+                    <ChevronDown className="size-4" aria-hidden="true" />
+                  </Button>
+                }
+              />
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Switch Organization</DropdownMenuLabel>
                 {organizations.map((org) => (
@@ -161,30 +159,32 @@ export function Header({ onMenuClick }: HeaderProps) {
 
           {/* User Menu */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative h-9 w-9 rounded-full"
-                aria-label={`User menu for ${session?.user?.name ?? "user"}`}
-                aria-haspopup="menu"
-                aria-expanded="false"
-              >
-                <div className="size-9 rounded-full bg-info-surface flex items-center justify-center overflow-hidden">
-                  {session?.user?.avatarUrl ? (
-                    <img
-                      src={session.user.avatarUrl}
-                      alt=""
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <span className="font-display font-medium text-info">
-                      {session?.user?.name?.charAt(0).toUpperCase() ?? "?"}
-                    </span>
-                  )}
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-9 w-9 rounded-full"
+                  aria-label={`User menu for ${session?.user?.name ?? "user"}`}
+                  aria-haspopup="menu"
+                  aria-expanded={false}
+                >
+                  <div className="size-9 rounded-full bg-info-surface flex items-center justify-center overflow-hidden">
+                    {session?.user?.avatarUrl ? (
+                      <img
+                        src={session.user.avatarUrl}
+                        alt=""
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <span className="font-display font-medium text-info">
+                        {session?.user?.name?.charAt(0).toUpperCase() ?? "?"}
+                      </span>
+                    )}
+                  </div>
+                </Button>
+              }
+            />
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel className="px-2">
                 <div className="flex items-center gap-2">

@@ -220,7 +220,9 @@ describe("Company API Integration", () => {
       const tag = await TagModel.create({
         organizationId: org.organization._id,
         name: "VIP",
-        color: "gold",
+        // From TAG_COLORS. The filter under test is by tag id, so the colour is
+        // incidental — it only has to satisfy the enum.
+        color: "amber",
       });
 
       await createCompany(org.organization._id, org.user._id, {

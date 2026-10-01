@@ -221,25 +221,27 @@ export function NotificationBell() {
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={
-            unreadCount > 0
-              ? `${unreadCount} unread notifications`
-              : "Notifications"
-          }
-          aria-expanded={isOpen}
-        >
-          <Bell className="size-5" aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-critical text-[10px] font-medium text-white">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={
+              unreadCount > 0
+                ? `${unreadCount} unread notifications`
+                : "Notifications"
+            }
+            aria-expanded={isOpen}
+          >
+            <Bell className="size-5" aria-hidden="true" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-critical text-[10px] font-medium text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </Button>
+        }
+      />
 
       {/* Live region for screen readers */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -286,7 +288,10 @@ export function NotificationBell() {
                 onSelect={() =>
                   !notification.readAt && markRead(notification._id)
                 }
-                disabled={notification.readAt}
+                // Already-read notifications cannot be marked again; the
+                // timestamp is a string when read, so it has to be coerced to
+                // the boolean `disabled` expects.
+                disabled={Boolean(notification.readAt)}
               >
                 <div className="flex w-full items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">

@@ -1,7 +1,6 @@
 "use client";
 
 import { Calendar, Loader2, MessageSquare, Phone } from "lucide-react";
-import { Types } from "mongoose";
 import { useState } from "react";
 import {
   Button,
@@ -21,8 +20,52 @@ import {
   SelectValue,
   Textarea,
 } from "@/components/ui";
-import type { ActivityType } from "@/modules/activities/activity.model";
+import type {
+  ActivityDirection,
+  ActivityType,
+} from "@/modules/activities/activity.model";
 import { cn } from "@/shared/lib/cn";
+
+/**
+ * Mirrors `ACTIVITY_TYPES` / `ACTIVITY_DIRECTIONS` without importing them.
+ *
+ * This is a client component, and the module that defines those arrays also
+ * builds a mongoose schema, so a runtime import of them drags mongoose into
+ * the browser bundle. `satisfies` keeps the copies honest: if the model adds or
+ * renames a value, this stops compiling.
+ */
+const KNOWN_ACTIVITY_TYPES = [
+  "NOTE",
+  "TASK",
+  "CALL",
+  "MEETING",
+  "SYSTEM_EVENT",
+  "STAGE_CHANGE",
+  "EMAIL",
+  "SMS",
+  "WHATSAPP",
+] satisfies readonly ActivityType[];
+
+const KNOWN_ACTIVITY_DIRECTIONS = [
+  "INBOUND",
+  "OUTBOUND",
+] satisfies readonly ActivityDirection[];
+
+/**
+ * Base UI hands back `string | null`, and `null` means the select was cleared
+ * rather than that an invalid value was chosen. Both cases are no-ops: the
+ * composer only ever moves between values that the API accepts.
+ */
+function isActivityType(value: string | null): value is ActivityType {
+  return value !== null && KNOWN_ACTIVITY_TYPES.some((type) => type === value);
+}
+
+function isActivityDirection(value: string | null): value is ActivityDirection {
+  return (
+    value !== null &&
+    KNOWN_ACTIVITY_DIRECTIONS.some((direction) => direction === value)
+  );
+}
 
 interface ActivityComposerProps {
   /** The entity this activity is about */
@@ -187,13 +230,15 @@ export function ActivityComposer({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="w-full justify-start gap-2" variant="outline">
-          <Loader2 className="w-4 h-4" />
-          <span>Add activity</span>
-          <span className="text-muted-foreground">({type})</span>
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger
+        render={
+          <Button className="w-full justify-start gap-2" variant="secondary">
+            <Loader2 className="w-4 h-4" />
+            <span>Add activity</span>
+            <span className="text-muted-foreground">({type})</span>
+          </Button>
+        }
+      />
 
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -204,7 +249,9 @@ export function ActivityComposer({
             <FieldLabel>Type</FieldLabel>
             <Select
               value={type}
-              onValueChange={(v) => setType(v as ActivityType)}
+              onValueChange={(v) => {
+                if (isActivityType(v)) setType(v);
+              }}
               disabled={submitting}
             >
               <SelectTrigger>
@@ -253,7 +300,9 @@ export function ActivityComposer({
               <FieldLabel>Direction</FieldLabel>
               <Select
                 value={direction}
-                onValueChange={(v) => setDirection(v as "INBOUND" | "OUTBOUND")}
+                onValueChange={(v) => {
+                  if (isActivityDirection(v)) setDirection(v);
+                }}
                 disabled={submitting}
               >
                 <SelectTrigger>

@@ -4,16 +4,12 @@ import {
   Calendar,
   Check,
   Edit,
-  Flag,
-  GripVertical,
   Loader2,
   MoreHorizontal,
   Plus,
-  RotateCcw,
   Trash2,
   User,
 } from "lucide-react";
-import { Types } from "mongoose";
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
@@ -22,10 +18,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,14 +27,12 @@ import {
   Skeleton,
 } from "@/components/ui";
 import {
-  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskPriority,
   type TaskStatus,
 } from "@/modules/tasks/task.model";
 import { cn } from "@/shared/lib/cn";
 import { formatRelativeTime } from "@/shared/lib/format";
-import { TaskForm } from "./TaskForm";
 
 export interface TaskItem {
   _id: string;
@@ -89,6 +79,9 @@ const STATUS_CONFIG: Record<
   DONE: { label: "Done", color: "bg-green-100 text-green-800", icon: Check },
 };
 
+/** Placeholder rows shown while a column loads. */
+const BOARD_SKELETON_ROWS = ["row-1", "row-2", "row-3"] as const;
+
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
   LOW: "bg-gray-100 text-gray-800",
   MEDIUM: "bg-yellow-100 text-yellow-800",
@@ -130,7 +123,7 @@ function TaskCardBoard({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs mb-2">
-          <Badge variant="secondary" className={PRIORITY_COLORS[task.priority]}>
+          <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
             {task.priority}
           </Badge>
           {task.dueAt && (
@@ -152,11 +145,17 @@ function TaskCardBoard({
           )}
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1 rounded hover:bg-muted transition-colors w-full flex justify-end">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`Actions for ${task.title}`}
+                className="p-1 rounded hover:bg-muted transition-colors w-full flex justify-end"
+              >
+                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+              </button>
+            }
+          />
           <DropdownMenuContent align="end">
             {onEdit && (
               <DropdownMenuItem onClick={() => onEdit(task)}>
@@ -209,8 +208,8 @@ function ColumnSkeleton() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-20" />
+          {BOARD_SKELETON_ROWS.map((row) => (
+            <Skeleton key={row} className="h-20" />
           ))}
         </div>
       </CardContent>
@@ -369,7 +368,7 @@ export function TaskBoard({
                     <CardTitle className="text-sm font-medium">
                       {config.label}
                     </CardTitle>
-                    <Badge variant="secondary">{tasks.length}</Badge>
+                    <Badge tone="neutral">{tasks.length}</Badge>
                   </div>
                   <Button
                     variant="ghost"

@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import {
   AlertCircle,
+  Building2,
   Mail,
   Phone,
   Target,
@@ -121,11 +122,11 @@ export default function LeadsPage() {
   };
 
   const statusBadgeConfig = {
-    NEW: { variant: "outline" as const },
-    CONTACTED: { variant: "default" as const },
-    QUALIFIED: { variant: "success" as const },
-    UNQUALIFIED: { variant: "danger" as const },
-    CONVERTED: { variant: "success" as const },
+    NEW: { tone: "outline" as const },
+    CONTACTED: { tone: "neutral" as const },
+    QUALIFIED: { tone: "positive" as const },
+    UNQUALIFIED: { tone: "critical" as const },
+    CONVERTED: { tone: "positive" as const },
   };
 
   const rowActions = (row: any) => (

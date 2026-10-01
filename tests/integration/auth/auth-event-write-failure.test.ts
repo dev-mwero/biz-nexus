@@ -79,7 +79,13 @@ async function disarmRefusal(): Promise<void> {
 
 beforeAll(async () => {
   const mongoose = await connectToDatabase();
-  db = mongoose.connection.db;
+  const connected = mongoose.connection.db;
+  if (!connected) {
+    throw new Error(
+      "connectToDatabase() resolved without a `db`. `collMod` below addresses a collection by name, so a suite that cannot reach the handle cannot arm the validator it is about.",
+    );
+  }
+  db = connected;
   // The model has to exist before `collMod` can address its collection. Building
   // the index is the part that creates it, and Mongoose is otherwise lazy about
   // touching a collection a suite has not written to yet.

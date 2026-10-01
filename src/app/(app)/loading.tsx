@@ -1,6 +1,11 @@
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const METRIC_CARDS = ["metric-1", "metric-2", "metric-3", "metric-4"] as const;
+const TABLE_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5"] as const;
+const LIST_ROWS = ["row-1", "row-2", "row-3"] as const;
+const ACTIVITY_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5"] as const;
+
 /**
  * Loading UI for the (app) route group.
  * Shown while server components are streaming.
@@ -29,9 +34,9 @@ export default function AppLoading() {
 
           {/* Metric cards skeleton */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {METRIC_CARDS.map((slot) => (
               <div
-                key={i}
+                key={slot}
                 className="border border-line rounded-lg p-4 bg-surface"
               >
                 <Skeleton className="h-3 w-1/4" />
@@ -48,8 +53,11 @@ export default function AppLoading() {
               <div className="border border-line rounded-lg p-4 bg-surface">
                 <Skeleton className="h-5 w-32 mb-4" />
                 <div className="space-y-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between">
+                  {TABLE_ROWS.map((slot) => (
+                    <div
+                      key={slot}
+                      className="flex items-center justify-between"
+                    >
                       <div className="flex items-center gap-3">
                         <Skeleton className="h-2 w-8 rounded" />
                         <Skeleton className="h-4 w-24" />
@@ -70,9 +78,9 @@ export default function AppLoading() {
                   <Skeleton className="h-5 w-24" />
                 </div>
                 <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
+                  {LIST_ROWS.map((slot) => (
                     <div
-                      key={i}
+                      key={slot}
                       className="flex items-center gap-3 p-3 rounded-lg bg-surface-sunken dark:bg-surface-raised"
                     >
                       <Skeleton className="h-4 w-40" />
@@ -87,8 +95,8 @@ export default function AppLoading() {
             <div className="border border-line rounded-lg p-4 bg-surface lg:col-span-1">
               <Skeleton className="h-5 w-24 mb-4" />
               <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-start gap-3">
+                {ACTIVITY_ROWS.map((slot) => (
+                  <div key={slot} className="flex items-start gap-3">
                     <Skeleton className="h-8 w-8 rounded-lg flex-shrink-0" />
                     <div className="flex-1 space-y-1">
                       <Skeleton className="h-4 w-3/4" />

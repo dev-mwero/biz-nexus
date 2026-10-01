@@ -124,11 +124,11 @@ export default function CompaniesPage() {
   };
 
   const statusBadgeConfig = {
-    PROSPECT: { variant: "outline" as const },
-    CUSTOMER: { variant: "success" as const },
-    PARTNER: { variant: "default" as const },
-    SUPPLIER: { variant: "warning" as const },
-    INACTIVE: { variant: "danger" as const },
+    PROSPECT: { tone: "outline" as const },
+    CUSTOMER: { tone: "positive" as const },
+    PARTNER: { tone: "neutral" as const },
+    SUPPLIER: { tone: "attention" as const },
+    INACTIVE: { tone: "critical" as const },
   };
 
   const rowActions = (row: any) => (

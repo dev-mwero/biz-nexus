@@ -2,31 +2,20 @@
 
 import { formatDistanceToNow } from "date-fns";
 import {
-  Building2,
   ChevronDown,
   ChevronUp,
-  Edit,
-  Eye,
   Filter,
   Loader2,
-  Mail,
   MoreHorizontal,
-  Phone,
   Plus,
   Search,
-  Tag as TagIcon,
-  Trash2,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
+  type BadgeProps,
   Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  ButtonLink,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -58,6 +47,12 @@ interface Column<T> {
   width?: string;
 }
 
+/**
+ * Tone vocabulary of the badge primitive. `Badge` deliberately has no
+ * `variant` prop, so call sites name a tone instead of an ad-hoc style.
+ */
+type StatusTone = NonNullable<BadgeProps["tone"]>;
+
 interface ListPageProps<T> {
   title: string;
   description?: string;
@@ -76,10 +71,7 @@ interface ListPageProps<T> {
     label: string;
     options: { value: string; label: string }[];
   }[];
-  statusBadgeConfig?: Record<
-    string,
-    { variant: "default" | "success" | "warning" | "danger" | "outline" }
-  >;
+  statusBadgeConfig?: Record<string, { tone: StatusTone }>;
 }
 
 export function ListPage<T extends { _id: string; createdAt: string | Date }>({
@@ -95,10 +87,6 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
   filterOptions = [],
   statusBadgeConfig = {},
 }: ListPageProps<T>) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({
@@ -107,8 +95,13 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     total: 0,
     totalPages: 0,
   });
+  // Pagination is request state, not a filter: it is what the next fetch asks
+  // for. Keeping it out of `filters` stops it being written into the query
+  // string as if it were a record field.
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 20 });
   const [sort, setSort] = useState(defaultSort);
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFilters] =
+    useState<Record<string, string>>(defaultFilters);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -116,14 +109,14 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("q", debouncedSearch);
-    params.set("page", meta.page.toString());
-    params.set("pageSize", meta.pageSize.toString());
+    params.set("page", pagination.page.toString());
+    params.set("pageSize", pagination.pageSize.toString());
     params.set("sort", sort);
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
     return params;
-  }, [debouncedSearch, meta.page, meta.pageSize, sort, filters]);
+  }, [debouncedSearch, pagination.page, pagination.pageSize, sort, filters]);
 
   // Fetch data
   const loadData = useCallback(async () => {
@@ -140,17 +133,11 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     }
   }, [buildParams, fetchData]);
 
-  // Load on param changes
-  const paramKey = useMemo(() => buildParams().toString(), [buildParams]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const loadEffect = useCallback(() => {
+  // `loadData` is rebuilt whenever the query changes (search, filters, sort or
+  // pagination), so re-running the effect is what refetches.
+  useEffect(() => {
     loadData();
-  }, [paramKey, loadData]);
-
-  // We use a useEffect-like pattern with key
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const { 0: _ } = useState(loadEffect);
+  }, [loadData]);
 
   const handleSort = (key: string) => {
     if (sort === key) {
@@ -160,11 +147,17 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     } else {
       setSort(key);
     }
-    setFilters((f) => ({ ...f, page: 1 }));
+    setPagination((p) => ({ ...p, page: 1 }));
   };
 
-  const handleFilterChange = (key: string, value: string) => {
-    setFilters((f) => ({ ...f, [key]: value, page: 1 }));
+  /**
+   * Base UI reports a cleared select as `null`. "Cleared" means no filter for
+   * this key, which is what an empty option value already means, so `null` is
+   * normalised to `""` rather than being pushed into the query string.
+   */
+  const handleFilterChange = (key: string, value: string | null) => {
+    setFilters((f) => ({ ...f, [key]: value ?? "" }));
+    setPagination((p) => ({ ...p, page: 1 }));
   };
 
   const handleSearch = (value: string) => {
@@ -172,17 +165,13 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     // Debounce
     const timeout = setTimeout(() => {
       setDebouncedSearch(value);
-      setFilters((f) => ({ ...f, page: 1 }));
+      setPagination((p) => ({ ...p, page: 1 }));
     }, 300);
     return () => clearTimeout(timeout);
   };
 
   const handlePageChange = (page: number) => {
-    setFilters((f) => ({ ...f, page }));
-  };
-
-  const handlePageSizeChange = (pageSize: number) => {
-    setFilters((f) => ({ ...f, pageSize, page: 1 }));
+    setPagination((p) => ({ ...p, page }));
   };
 
   const getSortIcon = (key: string) => {
@@ -191,9 +180,11 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     return null;
   };
 
+  // Kept as the single renderer for `statusBadgeConfig`; a caller that maps
+  // statuses inline in a column renderer is what currently bypasses it.
   const renderStatusBadge = (status: string) => {
-    const config = statusBadgeConfig[status] || { variant: "outline" };
-    return <Badge variant={config.variant}>{status}</Badge>;
+    const config = statusBadgeConfig[status] || { tone: "outline" as const };
+    return <Badge tone={config.tone}>{status}</Badge>;
   };
 
   return (
@@ -209,12 +200,10 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
           )}
         </div>
         {createUrl && (
-          <Button asChild>
-            <a href={createUrl} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              New
-            </a>
-          </Button>
+          <ButtonLink href={createUrl} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            New
+          </ButtonLink>
         )}
       </div>
 
@@ -314,15 +303,17 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
                     {rowActions && (
                       <TableCell className="text-right">
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <IconButton
-                              variant="ghost"
-                              size="sm"
-                              aria-label="More actions"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </IconButton>
-                          </DropdownMenuTrigger>
+                          <DropdownMenuTrigger
+                            render={
+                              <IconButton
+                                variant="ghost"
+                                size="sm"
+                                aria-label="More actions"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </IconButton>
+                            }
+                          />
                           <DropdownMenuContent align="end">
                             {rowActions(row)}
                           </DropdownMenuContent>

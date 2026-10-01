@@ -39,30 +39,25 @@ describe("Pipelines integration: tenant isolation + service logic", () => {
     org1 = orgs[0]._id;
     org2 = orgs[1]._id;
 
-    // Create users
-    const users = (await UserModel.create([
+    // Create users. `users` is global, not tenant-owned, so it carries no
+    // organizationId and no audit stamps.
+    const users = await UserModel.create([
       {
         email: "user1@test.com",
         name: "User 1",
         passwordHash: "hash",
-        createdBy: new Types.ObjectId(),
-        updatedBy: new Types.ObjectId(),
       },
       {
         email: "user2@test.com",
         name: "User 2",
         passwordHash: "hash",
-        createdBy: new Types.ObjectId(),
-        updatedBy: new Types.ObjectId(),
       },
       {
         email: "user3@test.com",
         name: "User 3",
         passwordHash: "hash",
-        createdBy: new Types.ObjectId(),
-        updatedBy: new Types.ObjectId(),
       },
-    ])) as Array<{ _id: Types.ObjectId }>;
+    ]);
     user1 = users[0]._id;
     user2 = users[1]._id;
     user3 = users[2]._id;

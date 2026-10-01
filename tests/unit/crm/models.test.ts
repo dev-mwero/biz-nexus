@@ -4,12 +4,14 @@ import { connectToDatabase } from "@/db/connection";
 import {
   COMPANY_STATUSES,
   type Company,
+  type CompanyStatus,
   CompanyModel,
   companySchemaDefinition,
 } from "@/modules/crm/company.model";
 import {
   CONTACT_STATUSES,
   type Contact,
+  type ContactStatus,
   ContactModel,
   contactSchemaDefinition,
 } from "@/modules/crm/contact.model";
@@ -17,25 +19,30 @@ import {
   FIELD_ENTITY_TYPES,
   FIELD_TYPES,
   type FieldDefinition,
+  type FieldEntityType,
   FieldDefinitionModel,
   fieldDefinitionSchemaDefinition,
+  type FieldType,
 } from "@/modules/crm/field-definition.model";
 import {
   LEAD_STATUS_TRANSITIONS,
   LEAD_STATUSES,
   type Lead,
+  type LeadStatus,
   LeadModel,
   leadSchemaDefinition,
 } from "@/modules/crm/lead.model";
 import {
   SAVED_VIEW_ENTITY_TYPES,
   type SavedView,
+  type SavedViewEntityType,
   SavedViewModel,
   savedViewSchemaDefinition,
 } from "@/modules/crm/saved-view.model";
 import {
   TAG_COLORS,
   type Tag,
+  type TagColor,
   TagModel,
   tagSchemaDefinition,
 } from "@/modules/crm/tag.model";
@@ -43,6 +50,20 @@ import {
 beforeAll(async () => {
   await connectToDatabase();
 });
+
+/**
+ * A string that is deliberately outside an enum union, typed as that union.
+ *
+ * Several tests here assert that the schema *rejects* an invalid enum value.
+ * The model types are literal unions, so a raw `"INVALID"` is a compile error
+ * and the assertion would never run. This widens the literal to the union the
+ * schema declares, so the value reaches `Model.create` and is rejected by the
+ * validator at runtime — which is the behaviour under test — without `any` on
+ * the model and without a suppression comment.
+ */
+function outsideEnum<T extends string>(value: string): T {
+  return value as T;
+}
 
 afterEach(async () => {
   await Promise.all([
@@ -107,7 +128,7 @@ describe("CRM Models", () => {
         TagModel.create({
           organizationId: orgId,
           name: "Bad Color",
-          color: "invalid",
+          color: outsideEnum<TagColor>("invalid"),
         }),
       ).rejects.toThrow();
     });
@@ -226,7 +247,7 @@ describe("CRM Models", () => {
       await expect(
         FieldDefinitionModel.create({
           organizationId: orgId,
-          entityType: "INVALID",
+          entityType: outsideEnum<FieldEntityType>("INVALID"),
           key: "test",
           label: "Test",
           type: "TEXT",
@@ -241,7 +262,7 @@ describe("CRM Models", () => {
           entityType: "CONTACT",
           key: "test",
           label: "Test",
-          type: "INVALID",
+          type: outsideEnum<FieldType>("INVALID"),
         }),
       ).rejects.toThrow();
     });
@@ -365,7 +386,7 @@ describe("CRM Models", () => {
         SavedViewModel.create({
           organizationId: orgId,
           userId,
-          entityType: "INVALID",
+          entityType: outsideEnum<SavedViewEntityType>("INVALID"),
           name: "Test",
         }),
       ).rejects.toThrow();
@@ -425,7 +446,7 @@ describe("CRM Models", () => {
           organizationId: orgId,
           name: "Bad Status",
           ownerId: userId,
-          status: "INVALID",
+          status: outsideEnum<CompanyStatus>("INVALID"),
         }),
       ).rejects.toThrow();
     });
@@ -530,7 +551,7 @@ describe("CRM Models", () => {
           firstName: "Bad",
           lastName: "Status",
           ownerId: userId,
-          status: "INVALID",
+          status: outsideEnum<ContactStatus>("INVALID"),
         }),
       ).rejects.toThrow();
     });
@@ -643,7 +664,7 @@ describe("CRM Models", () => {
           contactSnapshot: { firstName: "A", lastName: "B", email: "a@b.com" },
           source: "Test",
           ownerId: userId,
-          status: "INVALID",
+          status: outsideEnum<LeadStatus>("INVALID"),
         }),
       ).rejects.toThrow();
     });

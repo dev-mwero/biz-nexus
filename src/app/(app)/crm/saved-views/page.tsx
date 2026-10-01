@@ -25,9 +25,17 @@ export default function SavedViewsPage() {
       render: (row: any) => (
         <div className="flex items-center gap-2">
           {row.isShared ? (
-            <Users className="h-4 w-4 text-blue-600" title="Shared" />
+            <Users
+              className="h-4 w-4 text-blue-600"
+              aria-label="Shared"
+              role="img"
+            />
           ) : (
-            <User className="h-4 w-4 text-ink-400" title="Personal" />
+            <User
+              className="h-4 w-4 text-ink-400"
+              aria-label="Personal"
+              role="img"
+            />
           )}
           <span className="font-medium">{row.name}</span>
         </div>
@@ -123,7 +131,12 @@ export default function SavedViewsPage() {
     <div className="flex flex-col h-full gap-4">
       {/* Entity Type Selector */}
       <div className="flex items-center gap-4">
-        <Select value={entityType} onValueChange={setEntityType}>
+        <Select
+          value={entityType}
+          // A cleared select is `null`; the list has to scope to one entity
+          // type, so a cleared select falls back to the default.
+          onValueChange={(v) => setEntityType(v ?? "CONTACT")}
+        >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Entity Type" />
           </SelectTrigger>

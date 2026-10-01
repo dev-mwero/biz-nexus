@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
-import { ListPage } from "../../crm/ListPage";
+import { ListPage } from "../crm/ListPage";
 
 export default function DealsPage() {
   const columns = [
@@ -123,9 +123,9 @@ export default function DealsPage() {
   };
 
   const statusBadgeConfig = {
-    OPEN: { variant: "default" as const },
-    WON: { variant: "success" as const },
-    LOST: { variant: "danger" as const },
+    OPEN: { tone: "neutral" as const },
+    WON: { tone: "positive" as const },
+    LOST: { tone: "critical" as const },
   };
 
   const rowActions = (row: any) => (
