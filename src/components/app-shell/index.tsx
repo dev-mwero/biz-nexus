@@ -5,13 +5,22 @@ import { SessionProvider } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
 import { CommandPalette } from "./command-palette";
 import { Header } from "./header";
+import { OnboardingRedirect } from "./onboarding-redirect";
 import { Sidebar, SidebarTrigger } from "./sidebar";
 
+/**
+ * The authenticated shell.
+ *
+ * `OnboardingRedirect` sits inside `SessionProvider` because it reads the
+ * session, and it is a sibling of the chrome rather than a wrapper: it renders
+ * nothing, so the shell lays out exactly as it did before the check existed.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <SessionProvider>
+      <OnboardingRedirect />
       <div className="min-h-screen bg-canvas">
         {/* Skip to main content link - first focusable element */}
         <a
