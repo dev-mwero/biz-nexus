@@ -1,6 +1,4 @@
-import { expect, test } from "@playwright/test";
-
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
+import { BASE_URL, expect, test } from "./fixtures";
 
 /**
  * Isolation Path E2E Test
@@ -14,13 +12,12 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
  * 3. All attempts should return 404 (not found) or empty results
  */
 
-test.describe.configure({ retries: 2 });
-
 test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
   let orgAAuthCookie: string;
   let orgBUserAuthCookie: string;
   let orgAId: string;
   let orgBId: string;
+  let orgAUserId: string;
   let orgAContactId: string;
   let orgACompanyId: string;
   let orgALeadId: string;
@@ -28,50 +25,68 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
   let orgATaskId: string;
   let orgAPipelineId: string;
 
-  test.beforeAll(async ({ request }) => {
-    // Create Org A user
-    const orgARegisterResponse = await request.post(
-      `${BASE_URL}/api/v1/auth/register`,
-      {
-        data: {
-          email: `org-a-${Date.now()}@example.com`,
-          name: "Org A User",
-          password: "TestPassword123!",
+  test.beforeAll(async ({ playwright }) => {
+    // Created from the worker-scoped `playwright` fixture rather than the
+    // test-scoped `request` fixture: a `beforeAll` that depends on a
+    // test-scoped fixture re-runs for every test, which would register a fresh
+    // pair of users per test and leave later tests holding cookies for accounts
+    // that no longer correspond to the organisations created earlier.
+    const context = await playwright.request.newContext({
+      baseURL: BASE_URL,
+      extraHTTPHeaders: { Origin: BASE_URL },
+    });
+
+    try {
+      // Create Org A user
+      const orgARegisterResponse = await context.post(
+        `${BASE_URL}/api/v1/auth/register`,
+        {
+          data: {
+            email: `org-a-${Date.now()}@example.com`,
+            name: "Org A User",
+            password: "TestPassword123!",
+          },
         },
-      },
-    );
+      );
 
-    expect(orgARegisterResponse.status()).toBe(201);
-    const orgACookies = orgARegisterResponse.headers()["set-cookie"];
-    if (orgACookies) {
-      const sessionMatch = orgACookies.match(/session=([^;]+)/);
-      if (sessionMatch) {
-        orgAAuthCookie = `session=${sessionMatch[1]}`;
+      expect(orgARegisterResponse.status()).toBe(201);
+      const orgARegisterData = await orgARegisterResponse.json();
+      orgAUserId = orgARegisterData.data.user.id;
+
+      const orgACookies = orgARegisterResponse.headers()["set-cookie"];
+      if (orgACookies) {
+        const sessionMatch = orgACookies.match(/bn_session=([^;]+)/);
+        if (sessionMatch) {
+          orgAAuthCookie = `bn_session=${sessionMatch[1]}`;
+        }
       }
-    }
-    expect(orgAAuthCookie).toBeDefined();
+      expect(orgAAuthCookie).toBeDefined();
 
-    // Create Org B user
-    const orgBRegisterResponse = await request.post(
-      `${BASE_URL}/api/v1/auth/register`,
-      {
-        data: {
-          email: `org-b-${Date.now()}@example.com`,
-          name: "Org B User",
-          password: "TestPassword123!",
+      // Create Org B user
+      const orgBRegisterResponse = await context.post(
+        `${BASE_URL}/api/v1/auth/register`,
+        {
+          data: {
+            email: `org-b-${Date.now()}@example.com`,
+            name: "Org B User",
+            password: "TestPassword123!",
+          },
         },
-      },
-    );
+      );
 
-    expect(orgBRegisterResponse.status()).toBe(201);
-    const orgBCookies = orgBRegisterResponse.headers()["set-cookie"];
-    if (orgBCookies) {
-      const sessionMatch = orgBCookies.match(/session=([^;]+)/);
-      if (sessionMatch) {
-        orgBUserAuthCookie = `session=${sessionMatch[1]}`;
+      expect(orgBRegisterResponse.status()).toBe(201);
+
+      const orgBCookies = orgBRegisterResponse.headers()["set-cookie"];
+      if (orgBCookies) {
+        const sessionMatch = orgBCookies.match(/bn_session=([^;]+)/);
+        if (sessionMatch) {
+          orgBUserAuthCookie = `bn_session=${sessionMatch[1]}`;
+        }
       }
+      expect(orgBUserAuthCookie).toBeDefined();
+    } finally {
+      await context.dispose();
     }
-    expect(orgBUserAuthCookie).toBeDefined();
   });
 
   test.describe("Org A - Create Data", () => {
@@ -115,8 +130,11 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         data: {
           firstName: "Alice",
           lastName: "Anderson",
-          email: "alice@orga.example.com",
-          phone: "+1-555-1001",
+          ownerId: orgAUserId,
+          emails: [
+            { label: "work", value: "alice@orga.example.com", isPrimary: true },
+          ],
+          phones: [{ label: "mobile", value: "+1-555-1001", isPrimary: true }],
           jobTitle: "CEO",
           status: "CUSTOMER",
           notes: "Org A confidential contact",
@@ -125,7 +143,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgAContactId = data.data.id;
+      orgAContactId = data.data._id;
       expect(orgAContactId).toBeDefined();
     });
 
@@ -140,6 +158,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
           industry: "Defense",
           website: "https://secret.orga.example.com",
           email: "secret@orga.example.com",
+          ownerId: orgAUserId,
           status: "CUSTOMER",
           size: 100,
           annualRevenue: 50000000,
@@ -149,7 +168,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgACompanyId = data.data.id;
+      orgACompanyId = data.data._id;
       expect(orgACompanyId).toBeDefined();
     });
 
@@ -160,6 +179,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         headers: { Cookie: orgAAuthCookie },
         data: {
           title: "Org A Confidential Lead",
+          ownerId: orgAUserId,
           contactId: orgAContactId,
           companyId: orgACompanyId,
           source: "Referral",
@@ -177,7 +197,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgALeadId = data.data.id;
+      orgALeadId = data.data._id;
       expect(orgALeadId).toBeDefined();
     });
 
@@ -187,16 +207,17 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       const response = await request.post(`${BASE_URL}/api/v1/pipelines`, {
         headers: { Cookie: orgAAuthCookie },
         data: {
+          // Non-default: the organisation already has a provisioned default.
           name: "Org A Sales Pipeline",
           description: "Org A confidential pipeline",
-          isDefault: true,
+          isDefault: false,
           stages: [
-            { name: "New", order: 1, probability: 10 },
+            { key: "NEW", name: "New", order: 1, probability: 10 },
             {
+              key: "WON",
               name: "Won",
               order: 2,
               probability: 100,
-              isClosed: true,
               isWon: true,
             },
           ],
@@ -205,7 +226,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgAPipelineId = data.data.id;
+      orgAPipelineId = data.data._id;
       expect(orgAPipelineId).toBeDefined();
     });
 
@@ -222,7 +243,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       );
       const pipelineData = await pipelineResponse.json();
       const pipeline = pipelineData.data.find(
-        (p: { id: string }) => p.id === orgAPipelineId,
+        (p: { _id: string }) => p._id === orgAPipelineId,
       );
       const firstStage = pipeline?.stages?.[0];
 
@@ -235,7 +256,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
           contactId: orgAContactId,
           companyId: orgACompanyId,
           pipelineId: orgAPipelineId,
-          stageId: firstStage.id,
+          stageId: firstStage._id,
           value: 1000000,
           currency: "USD",
           probability: 50,
@@ -243,13 +264,12 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
             Date.now() + 30 * 24 * 60 * 60 * 1000,
           ).toISOString(),
           description: "Org A confidential deal",
-          tags: ["confidential", "orga"],
         },
       });
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgADealId = data.data.id;
+      orgADealId = data.data._id;
       expect(orgADealId).toBeDefined();
     });
 
@@ -271,7 +291,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(201);
       const data = await response.json();
-      orgATaskId = data.data.id;
+      orgATaskId = data.data._id;
       expect(orgATaskId).toBeDefined();
     });
   });
@@ -380,7 +400,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgAContactInOrgB = data.data.find(
-        (c: { id: string }) => c.id === orgAContactId,
+        (c: { _id: string }) => c._id === orgAContactId,
       );
       expect(orgAContactInOrgB).toBeUndefined();
     });
@@ -396,7 +416,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgACompanyInOrgB = data.data.find(
-        (c: { id: string }) => c.id === orgACompanyId,
+        (c: { _id: string }) => c._id === orgACompanyId,
       );
       expect(orgACompanyInOrgB).toBeUndefined();
     });
@@ -412,7 +432,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgALeadInOrgB = data.data.find(
-        (l: { id: string }) => l.id === orgALeadId,
+        (l: { _id: string }) => l._id === orgALeadId,
       );
       expect(orgALeadInOrgB).toBeUndefined();
     });
@@ -428,7 +448,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgADealInOrgB = data.data.find(
-        (d: { id: string }) => d.id === orgADealId,
+        (d: { _id: string }) => d._id === orgADealId,
       );
       expect(orgADealInOrgB).toBeUndefined();
     });
@@ -444,7 +464,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgATaskInOrgB = data.data.find(
-        (t: { id: string }) => t.id === orgATaskId,
+        (t: { _id: string }) => t._id === orgATaskId,
       );
       expect(orgATaskInOrgB).toBeUndefined();
     });
@@ -459,7 +479,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       const orgAPipelineInOrgB = data.data.find(
-        (p: { id: string }) => p.id === orgAPipelineId,
+        (p: { _id: string }) => p._id === orgAPipelineId,
       );
       expect(orgAPipelineInOrgB).toBeUndefined();
     });
@@ -474,24 +494,15 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      // Search should return empty results for Org A's data
-      expect(data.data.contacts).toBeInstanceOf(Array);
-      expect(data.data.companies).toBeInstanceOf(Array);
-      expect(data.data.deals).toBeInstanceOf(Array);
-      expect(data.data.tasks).toBeInstanceOf(Array);
+      // Search returns one ranked array across entity types, not a per-type
+      // map, so isolation is asserted over the union of result ids.
+      expect(data.data).toBeInstanceOf(Array);
 
-      // Verify no Org A data in search results
-      const hasOrgAData =
-        data.data.contacts.some(
-          (c: { id: string }) => c.id === orgAContactId,
-        ) ||
-        data.data.companies.some(
-          (c: { id: string }) => c.id === orgACompanyId,
-        ) ||
-        data.data.deals.some((d: { id: string }) => d.id === orgADealId) ||
-        data.data.tasks.some((t: { id: string }) => t.id === orgATaskId);
-
-      expect(hasOrgAData).toBe(false);
+      const resultIds = data.data.map((result: { id: string }) => result.id);
+      expect(resultIds).not.toContain(orgAContactId);
+      expect(resultIds).not.toContain(orgACompanyId);
+      expect(resultIds).not.toContain(orgADealId);
+      expect(resultIds).not.toContain(orgATaskId);
     });
 
     test("21. Org B's dashboard does not include Org A's metrics", async ({
@@ -522,7 +533,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgAContactId);
+      expect(data.data._id).toBe(orgAContactId);
     });
 
     test("23. Org A can still access own company", async ({ request }) => {
@@ -537,7 +548,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgACompanyId);
+      expect(data.data._id).toBe(orgACompanyId);
     });
 
     test("24. Org A can still access own lead", async ({ request }) => {
@@ -552,7 +563,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgALeadId);
+      expect(data.data._id).toBe(orgALeadId);
     });
 
     test("25. Org A can still access own deal", async ({ request }) => {
@@ -567,7 +578,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgADealId);
+      expect(data.data._id).toBe(orgADealId);
     });
 
     test("26. Org A can still access own task", async ({ request }) => {
@@ -582,7 +593,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgATaskId);
+      expect(data.data._id).toBe(orgATaskId);
     });
 
     test("27. Org A can still access own pipeline", async ({ request }) => {
@@ -597,7 +608,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      expect(data.data.id).toBe(orgAPipelineId);
+      expect(data.data._id).toBe(orgAPipelineId);
     });
   });
 });

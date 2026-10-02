@@ -15,7 +15,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "NEXT_DIST_DIR=.next-e2e next build && playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
     "validate": "npm run lint && npm run typecheck && npm run test:coverage",
     "validate:fast": "npm run lint && npm run typecheck && npm run test:unit",

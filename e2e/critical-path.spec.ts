@@ -1,6 +1,4 @@
-import { expect, test } from "@playwright/test";
-
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
+import { BASE_URL, expect, test } from "./fixtures";
 
 /**
  * Critical Path E2E Test
@@ -16,8 +14,6 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
  * 8. Verify notification is received
  */
 
-test.describe.configure({ retries: 2 });
-
 test.describe("Critical Path - Full User Journey", () => {
   let authCookie: string;
   let organizationId: string;
@@ -30,33 +26,50 @@ test.describe("Critical Path - Full User Journey", () => {
   let dealId: string;
   let taskId: string;
 
-  test.beforeAll(async ({ request }) => {
-    // Register a new user
-    const registerResponse = await request.post(
-      `${BASE_URL}/api/v1/auth/register`,
-      {
-        data: {
-          email: `critical-${Date.now()}@example.com`,
-          name: "Critical Path User",
-          password: "TestPassword123!",
+  test.beforeAll(async ({ playwright }) => {
+    // A context created here from the worker-scoped `playwright` fixture, not
+    // the test-scoped `request` fixture. `request` in `beforeAll` makes the hook
+    // run once per test (Playwright cannot hoist a hook that depends on a
+    // test-scoped fixture), so every test would register a new user and the
+    // cookie captured below would point at a user that no longer exists by the
+    // time later tests run.
+    const context = await playwright.request.newContext({
+      baseURL: BASE_URL,
+      extraHTTPHeaders: { Origin: BASE_URL },
+    });
+
+    try {
+      // Register a new user
+      const registerResponse = await context.post(
+        `${BASE_URL}/api/v1/auth/register`,
+        {
+          data: {
+            email: `critical-${Date.now()}@example.com`,
+            name: "Critical Path User",
+            password: "TestPassword123!",
+          },
         },
-      },
-    );
+      );
 
-    expect(registerResponse.status()).toBe(201);
-    const registerData = await registerResponse.json();
-    ownerUserId = registerData.data.user.id;
+      expect(registerResponse.status()).toBe(201);
+      const registerData = await registerResponse.json();
+      ownerUserId = registerData.data.user.id;
 
-    // Extract session cookie
-    const cookies = registerResponse.headers()["set-cookie"];
-    if (cookies) {
-      const sessionMatch = cookies.match(/session=([^;]+)/);
-      if (sessionMatch) {
-        authCookie = `session=${sessionMatch[1]}`;
+      // Extract session cookie. The value is carried explicitly rather than left
+      // in the request context's cookie jar: the E2E server is in production mode,
+      // so the cookie is `Secure` while the connection is plain HTTP.
+      const cookies = registerResponse.headers()["set-cookie"];
+      if (cookies) {
+        const sessionMatch = cookies.match(/bn_session=([^;]+)/);
+        if (sessionMatch) {
+          authCookie = `bn_session=${sessionMatch[1]}`;
+        }
       }
-    }
 
-    expect(authCookie).toBeDefined();
+      expect(authCookie).toBeDefined();
+    } finally {
+      await context.dispose();
+    }
   });
 
   test("1. Create organization", async ({ request }) => {
@@ -119,8 +132,11 @@ test.describe("Critical Path - Full User Journey", () => {
         data: {
           firstName: "John",
           lastName: "Doe",
-          email: "john.doe@example.com",
-          phone: "+1-555-0123",
+          ownerId: ownerUserId,
+          emails: [
+            { label: "work", value: "john.doe@example.com", isPrimary: true },
+          ],
+          phones: [{ label: "mobile", value: "+1-555-0123", isPrimary: true }],
           jobTitle: "CTO",
           status: "LEAD",
           notes: "Initial contact from critical path test",
@@ -130,7 +146,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      contactId = data.data.id;
+      contactId = data.data._id;
       expect(contactId).toBeDefined();
     });
 
@@ -148,6 +164,7 @@ test.describe("Critical Path - Full User Journey", () => {
           website: "https://acme.example.com",
           email: "contact@acme.example.com",
           phone: "+1-555-0100",
+          ownerId: ownerUserId,
           status: "PROSPECT",
           size: 50,
           annualRevenue: 1000000,
@@ -158,7 +175,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      companyId = data.data.id;
+      companyId = data.data._id;
       expect(companyId).toBeDefined();
     });
 
@@ -191,15 +208,35 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      leadId = data.data.id;
+      leadId = data.data._id;
       expect(leadId).toBeDefined();
     });
 
     test("3d. Convert lead to contact + company + deal", async ({
       request,
     }) => {
-      if (!leadId || !pipelineId) {
-        test.skip(true, "Lead or pipeline not created");
+      if (!leadId) {
+        test.skip(true, "Lead not created");
+      }
+
+      // Creating an organisation provisions a default pipeline, so a real
+      // pipeline and stage exist here, before the explicit pipeline test runs.
+      // The conversion validates that both are present, so a placeholder id
+      // would only earn a 500 from the ObjectId cast.
+      const pipelineResponse = await request.get(
+        `${BASE_URL}/api/v1/pipelines`,
+        {
+          headers: { Cookie: authCookie },
+        },
+      );
+      const pipelineData = await pipelineResponse.json();
+      const defaultPipeline =
+        pipelineData.data.find((p: { isDefault: boolean }) => p.isDefault) ??
+        pipelineData.data[0];
+      const convertStage = defaultPipeline?.stages?.[0];
+
+      if (!defaultPipeline || !convertStage) {
+        test.skip(true, "No pipeline stage available for conversion");
       }
 
       const response = await request.post(
@@ -212,8 +249,8 @@ test.describe("Critical Path - Full User Journey", () => {
             createDeal: true,
             deal: {
               name: "Acme Corp - Enterprise License",
-              pipelineId,
-              stageId: "stage-1", // Will need to be a valid stage ID
+              pipelineId: defaultPipeline._id,
+              stageId: convertStage._id,
               value: 50000,
               expectedCloseDate: new Date(
                 Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -223,17 +260,13 @@ test.describe("Critical Path - Full User Journey", () => {
         },
       );
 
-      if (response.status() === 404) {
-        test.skip(true, "Lead conversion endpoint not implemented");
-      }
-
       expect(response.status()).toBe(201);
       const data = await response.json();
-      expect(data.data).toBeDefined();
-      expect(data.data.contact).toBeDefined();
-      expect(data.data.company).toBeDefined();
-      expect(data.data.deal).toBeDefined();
-      dealId = data.data.deal.id;
+      // The endpoint returns the ids it created, not the documents.
+      expect(data.data.contactId).toBeDefined();
+      expect(data.data.companyId).toBeDefined();
+      expect(data.data.dealId).toBeDefined();
+      dealId = data.data.dealId;
     });
   });
 
@@ -246,27 +279,45 @@ test.describe("Critical Path - Full User Journey", () => {
       const response = await request.post(`${BASE_URL}/api/v1/pipelines`, {
         headers: { Cookie: authCookie },
         data: {
-          name: "Sales Pipeline",
-          description: "Main sales pipeline for critical path test",
-          isDefault: true,
+          // Not "Sales Pipeline": organisation creation already provisioned a
+          // default by that name, and both the name index and the single-default
+          // index would reject a second one.
+          name: `Critical Path Pipeline ${Date.now()}`,
+          description: "Secondary pipeline for critical path test",
+          isDefault: false,
           stages: [
-            { name: "Prospecting", order: 1, probability: 10 },
-            { name: "Qualification", order: 2, probability: 25 },
-            { name: "Proposal", order: 3, probability: 50 },
-            { name: "Negotiation", order: 4, probability: 75 },
             {
+              key: "PROSPECTING",
+              name: "Prospecting",
+              order: 1,
+              probability: 10,
+            },
+            {
+              key: "QUALIFICATION",
+              name: "Qualification",
+              order: 2,
+              probability: 25,
+            },
+            { key: "PROPOSAL", name: "Proposal", order: 3, probability: 50 },
+            {
+              key: "NEGOTIATION",
+              name: "Negotiation",
+              order: 4,
+              probability: 75,
+            },
+            {
+              key: "WON",
               name: "Closed Won",
               order: 5,
               probability: 100,
-              isClosed: true,
               isWon: true,
             },
             {
+              key: "LOST",
               name: "Closed Lost",
               order: 6,
               probability: 0,
-              isClosed: true,
-              isWon: false,
+              isLost: true,
             },
           ],
         },
@@ -275,19 +326,8 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      pipelineId = data.data.id;
+      pipelineId = data.data._id;
       expect(pipelineId).toBeDefined();
-
-      // Store the first stage ID for deal creation
-      const firstStage = data.data.stages.find(
-        (s: { name: string }) => s.name === "Prospecting",
-      );
-      if (firstStage) {
-        // We'll use this for deal creation
-        test
-          .info()
-          .annotations.push({ type: "stageId", description: firstStage.id });
-      }
     });
 
     test("4b. Verify pipeline is listed", async ({ request }) => {
@@ -304,7 +344,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(data.data).toBeInstanceOf(Array);
       expect(data.data.length).toBeGreaterThan(0);
       const pipeline = data.data.find(
-        (p: { id: string }) => p.id === pipelineId,
+        (p: { _id: string }) => p._id === pipelineId,
       );
       expect(pipeline).toBeDefined();
     });
@@ -325,7 +365,7 @@ test.describe("Critical Path - Full User Journey", () => {
       );
       const pipelineData = await pipelineResponse.json();
       const pipeline = pipelineData.data.find(
-        (p: { id: string }) => p.id === pipelineId,
+        (p: { _id: string }) => p._id === pipelineId,
       );
       const firstStage = pipeline?.stages?.[0];
 
@@ -340,7 +380,7 @@ test.describe("Critical Path - Full User Journey", () => {
           contactId,
           companyId,
           pipelineId,
-          stageId: firstStage.id,
+          stageId: firstStage._id,
           value: 25000,
           currency: "USD",
           probability: 25,
@@ -348,14 +388,13 @@ test.describe("Critical Path - Full User Journey", () => {
             Date.now() + 14 * 24 * 60 * 60 * 1000,
           ).toISOString(),
           description: "Deal created during critical path test",
-          tags: ["critical-path", "test"],
         },
       });
 
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      dealId = data.data.id;
+      dealId = data.data._id;
       expect(dealId).toBeDefined();
     });
 
@@ -375,7 +414,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      expect(data.data.stages).toBeInstanceOf(Array);
+      expect(data.data.columns).toBeInstanceOf(Array);
     });
   });
 
@@ -402,7 +441,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(201);
       const data = await response.json();
       expect(data.data).toBeDefined();
-      taskId = data.data.id;
+      taskId = data.data._id;
       expect(taskId).toBeDefined();
     });
 
@@ -414,7 +453,7 @@ test.describe("Critical Path - Full User Journey", () => {
       expect(response.status()).toBe(200);
       const data = await response.json();
       expect(data.data).toBeInstanceOf(Array);
-      const task = data.data.find((t: { id: string }) => t.id === taskId);
+      const task = data.data.find((t: { _id: string }) => t._id === taskId);
       expect(task).toBeDefined();
     });
   });

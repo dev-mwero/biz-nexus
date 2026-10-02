@@ -1,27 +1,46 @@
-import { expect, test as setup } from "@playwright/test";
-
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
+import type { APIResponse } from "@playwright/test";
+import { expect, test as setup } from "./fixtures";
 
 /**
- * Creates an authenticated session for a test user.
- * This setup runs once per worker and stores the session state.
+ * The session cookie's name. Must match `SESSION_COOKIE` in
+ * `src/shared/auth/session-cookie.ts`; the suite fails loudly if it drifts.
  */
-setup("authenticate test user", async ({ page }) => {
+const SESSION_COOKIE = "bn_session";
+
+/**
+ * Read the session cookie out of a response's `Set-Cookie` header.
+ *
+ * The E2E server runs in production mode, where the cookie is `Secure`, and the
+ * suite talks to it over plain HTTP. A real browser would refuse to send it, and
+ * so would Playwright's cookie jar — so the value is carried explicitly on the
+ * requests that need it rather than relied on to survive the jar.
+ */
+function sessionCookieHeader(response: APIResponse): string {
+  const setCookie = response.headers()["set-cookie"] ?? "";
+  const match = setCookie.match(new RegExp(`${SESSION_COOKIE}=([^;]+)`));
+  if (!match) {
+    throw new Error(`Response did not set a ${SESSION_COOKIE} cookie.`);
+  }
+  return `${SESSION_COOKIE}=${match[1]}`;
+}
+
+/**
+ * Creates an authenticated session for a test user, with no active
+ * organisation. This is the state a freshly registered account is actually in,
+ * and the starting point for the onboarding flow.
+ */
+setup("authenticate test user", async ({ request }) => {
   const testEmail = `test-${Date.now()}@example.com`;
   const testPassword = "TestPassword123!";
   const testName = "Test User";
 
-  // Register a new user
-  const registerResponse = await page.request.post(
-    `${BASE_URL}/api/v1/auth/register`,
-    {
-      data: {
-        email: testEmail,
-        name: testName,
-        password: testPassword,
-      },
+  const registerResponse = await request.post("/api/v1/auth/register", {
+    data: {
+      email: testEmail,
+      name: testName,
+      password: testPassword,
     },
-  );
+  });
 
   expect(registerResponse.status()).toBe(201);
 
@@ -29,69 +48,65 @@ setup("authenticate test user", async ({ page }) => {
   expect(registerData.data.user).toBeDefined();
   expect(registerData.data.user.email).toBe(testEmail);
 
-  // Get the session cookie
-  const cookies = await page.context().cookies();
-  const sessionCookie = cookies.find((c) => c.name === "session");
-  expect(sessionCookie).toBeDefined();
+  const cookie = sessionCookieHeader(registerResponse);
 
-  // Verify the session works by calling /api/v1/auth/me
-  const meResponse = await page.request.get(`${BASE_URL}/api/v1/auth/me`);
+  // Verify the session actually authenticates: registration sets the cookie, a
+  // 200 from /auth/me proves the server accepts it.
+  const meResponse = await request.get("/api/v1/auth/me", {
+    headers: { Cookie: cookie },
+  });
   expect(meResponse.status()).toBe(200);
 
   const meData = await meResponse.json();
   expect(meData.data.user).toBeDefined();
   expect(meData.data.user.email).toBe(testEmail);
 
-  // Save the authenticated state
-  await page.context().storageState({ path: "e2e/.auth/user-state.json" });
+  await request.storageState({ path: "e2e/.auth/user-state.json" });
 });
 
 /**
- * Creates an authenticated session with an organization.
- * This setup creates a user, registers them, creates an organization,
- * and stores the authenticated state with the organization active.
+ * Creates an authenticated session whose account has created and activated an
+ * organisation. The organisation becomes active on the same session, so the
+ * cookie captured here can reach the organisation-scoped API.
  */
-setup("authenticate with organization", async ({ page }) => {
+setup("authenticate with organization", async ({ request }) => {
   const testEmail = `test-org-${Date.now()}@example.com`;
   const testPassword = "TestPassword123!";
   const testName = "Test Org User";
 
-  // Register a new user
-  const registerResponse = await page.request.post(
-    `${BASE_URL}/api/v1/auth/register`,
-    {
-      data: {
-        email: testEmail,
-        name: testName,
-        password: testPassword,
-      },
+  const registerResponse = await request.post("/api/v1/auth/register", {
+    data: {
+      email: testEmail,
+      name: testName,
+      password: testPassword,
     },
-  );
+  });
 
   expect(registerResponse.status()).toBe(201);
 
-  // Create an organization
-  const createOrgResponse = await page.request.post(
-    `${BASE_URL}/api/v1/organizations`,
-    {
-      data: {
-        name: "Test Organization",
-      },
-    },
-  );
+  const cookie = sessionCookieHeader(registerResponse);
 
-  if (createOrgResponse.status() === 404) {
-    // Organization creation endpoint might not exist yet
-    // Skip this setup if the endpoint doesn't exist
-    console.log("Organization creation endpoint not found, skipping org setup");
-    return;
-  }
+  const createOrgResponse = await request.post("/api/v1/organizations", {
+    headers: { Cookie: cookie },
+    data: {
+      name: "Test Organization",
+    },
+  });
 
   expect(createOrgResponse.status()).toBe(201);
 
   const orgData = await createOrgResponse.json();
   expect(orgData.data.organization).toBeDefined();
+  expect(orgData.data.organization.id).toBeDefined();
 
-  // Save the authenticated state with organization
-  await page.context().storageState({ path: "e2e/.auth/org-user-state.json" });
+  // The created organisation is the session's active one, so organisation-scoped
+  // calls with this cookie now resolve.
+  const meResponse = await request.get("/api/v1/auth/me", {
+    headers: { Cookie: cookie },
+  });
+  expect(meResponse.status()).toBe(200);
+  const meData = await meResponse.json();
+  expect(meData.data.activeOrganizationId).toBe(orgData.data.organization.id);
+
+  await request.storageState({ path: "e2e/.auth/org-user-state.json" });
 });
