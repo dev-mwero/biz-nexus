@@ -7,7 +7,12 @@ export {
   dealSchemaDefinition,
 } from "./deal.model";
 
-export { DealRepository } from "./deal.repository";
+export {
+  DEAL_EDITABLE_FIELDS,
+  type DealEditableField,
+  DealRepository,
+  type DealUpdatePayload,
+} from "./deal.repository";
 
 export {
   type CreateDealInput,
@@ -15,4 +20,5 @@ export {
   DealService,
   type MoveDealInput,
   type MoveDealResult,
+  type UpdateDealInput,
 } from "./deal.service";
