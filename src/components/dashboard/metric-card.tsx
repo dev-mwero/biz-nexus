@@ -15,6 +15,15 @@ interface MetricCardProps {
   loading?: boolean;
   currency?: string;
   compact?: boolean;
+  /**
+   * Landed on the card, because the card is the grid item.
+   *
+   * A span class handed to a wrapper `div` would size the wrapper instead, and
+   * the wrapper — not the card — would take the row's stretched height, leaving
+   * a short card sitting next to a tall one. Grid placement and grid height are
+   * two questions about the same box, so they are answered on the same box.
+   */
+  className?: string;
 }
 
 export function MetricCard({
@@ -26,6 +35,7 @@ export function MetricCard({
   loading = false,
   currency = "USD",
   compact = false,
+  className,
 }: MetricCardProps) {
   const displayValue = loading
     ? null
@@ -36,7 +46,7 @@ export function MetricCard({
   const trendLabel = trend?.label ?? "";
 
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" className={className}>
       <CardContent className={cn("pt-4", compact && "pb-3")}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -139,9 +149,18 @@ export function MetricCard({
   );
 }
 
-export function MetricCardSkeleton({ compact = false }: { compact?: boolean }) {
+export function MetricCardSkeleton({
+  compact = false,
+  className,
+}: {
+  compact?: boolean;
+  className?: string;
+}) {
+  // Takes a `className` for the same reason `MetricCard` does: the skeleton has
+  // to occupy the cell the real card will occupy, or the grid reflows at the
+  // moment the data arrives and the row a reader was already looking at moves.
   return (
-    <Card variant="outlined" aria-hidden="true">
+    <Card variant="outlined" aria-hidden="true" className={className}>
       <CardContent className={cn("pt-4", compact && "pb-3")}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
