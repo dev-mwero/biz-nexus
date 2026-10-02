@@ -8,7 +8,12 @@ import {
   DealModel,
   type DealStatus,
 } from "@/modules/deals/deal.model";
-import type { DealRepository } from "@/modules/deals/deal.repository";
+import {
+  DEAL_EDITABLE_FIELDS,
+  type DealEditableField,
+  type DealRepository,
+  type DealUpdatePayload,
+} from "@/modules/deals/deal.repository";
 import { UserModel } from "@/modules/identity";
 import type { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
 import { AppError, type ErrorCode } from "@/shared/errors/app-error";
@@ -55,6 +60,59 @@ export interface MoveDealInput {
 export interface MoveDealResult {
   deal: Deal;
   activity: Awaited<ReturnType<typeof recordActivity>> | null;
+}
+
+/**
+ * What `DealService.update` will accept off the wire.
+ *
+ * The editable fields of `DealUpdatePayload`, plus the two keys this method
+ * refuses. Naming them here is deliberate: the rejection can only happen for a
+ * field the caller was able to pass, and a field the type cannot mention is a
+ * field the caller cannot be told off for.
+ */
+export interface UpdateDealInput extends Partial<DealUpdatePayload> {
+  pipelineId?: CreateDealInput["pipelineId"];
+  stageId?: CreateDealInput["stageId"];
+}
+
+/**
+ * The runtime half of the editable-field allowlist. See
+ * `DEAL_EDITABLE_FIELDS` for why this cannot be derived from the zod schema:
+ * both are erased before the service runs.
+ */
+const EDITABLE_FIELD_SET: ReadonlySet<string> = new Set<string>(
+  DEAL_EDITABLE_FIELDS,
+);
+
+/**
+ * The answer to a `stageId` or `pipelineId` in an update.
+ *
+ * Said once, here, because the service is the layer that knows what the move
+ * endpoint maintains. The route's schema lets these two keys through precisely
+ * so they arrive here and get this sentence.
+ */
+const MOVE_STAGE_HINT =
+  "To change a deal's stage, use POST /api/v1/deals/:id/move. That endpoint maintains status, closedAt, and lostReason together with events and audit entries.";
+
+/**
+ * Copy one editable field across, if it was supplied.
+ *
+ * Generic in the key rather than writing `payload[key] = input[key]` inside a
+ * loop over the tuple. With a union of keys on the left-hand side TypeScript
+ * demands the value satisfy the *intersection* of every payload field type, and
+ * a caller reaching for a suppression to get past that is exactly the mistake
+ * worth making impossible. Generic, the key is one key, the value's type is the
+ * one that belongs to it, and a field whose types disagree between `input` and
+ * `DealUpdatePayload` fails here rather than at runtime.
+ */
+function copyEditableField<K extends DealEditableField>(
+  payload: DealUpdatePayload,
+  source: Partial<DealUpdatePayload>,
+  key: K,
+): void {
+  if (key in source) {
+    payload[key] = source[key];
+  }
 }
 
 /**
@@ -163,29 +221,40 @@ export class DealService {
 
   /**
    * Update a deal.
+   *
+   * Only the fields in `EDITABLE_FIELD_SET` are written. This is the check the
+   * security fix rests on, and it is a runtime check on purpose: the zod schema
+   * in the route and the `UpdateDealInput` type are both gone by the time this
+   * method is called, and a caller inside the process - a script, a job, a
+   * future endpoint that forgets to validate - is not obliged to have been to
+   * the route at all. Every field the pipeline owns, and every field the tenant
+   * owns, is written by the method that is responsible for it.
+   *
+   * Stage changes are refused in favour of `POST /api/v1/deals/:id/move`, which
+   * maintains the derived state around them.
    */
   async update(
     id: Types.ObjectId | string,
-    input: Partial<CreateDealInput>,
+    input: UpdateDealInput,
   ): Promise<Deal | null> {
-    // If pipelineId or stageId is being changed, validate
-    if (input.pipelineId || input.stageId) {
-      const deal = await this.dealRepo.findDealById(id);
-      if (!deal) {
-        throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
+    for (const key of Object.keys(input)) {
+      if (key === "stageId" || key === "pipelineId") {
+        throw new DealError("VALIDATION_FAILED", MOVE_STAGE_HINT);
       }
-      const pipelineId = input.pipelineId ?? deal.pipelineId;
-      const stageId = input.stageId ?? deal.stageId;
-      const stage = await this.pipelineRepo.getStage(pipelineId, stageId);
-      if (!stage) {
+      if (!EDITABLE_FIELD_SET.has(key)) {
         throw new DealError(
           "VALIDATION_FAILED",
-          "The selected stage does not belong to the specified pipeline.",
+          `The field "${key}" cannot be updated via this endpoint.`,
         );
       }
     }
 
-    return this.dealRepo.update(id, input);
+    const payload: DealUpdatePayload = {};
+    for (const key of DEAL_EDITABLE_FIELDS) {
+      copyEditableField(payload, input, key);
+    }
+
+    return this.dealRepo.update(id, payload);
   }
 
   /**
