@@ -77,12 +77,33 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      # Reporting, not gating. The coverage gate is the threshold check inside
+      # `npm run test:coverage` one step above, which has already run and passed
+      # by the time this step is reached.
+      #
+      # The step is skipped when CODECOV_TOKEN is absent rather than failing.
+      # The repository has no token configured, and Codecov rejects tokenless
+      # uploads ("Token required - not valid tokenless upload"), so a hard
+      # `fail_ci_if_error: true` meant a missing third-party credential failed
+      # every run after the tests had already succeeded.
+      #
+      # The secret is passed through `env` rather than referenced in the `if`
+      # directly, which GitHub does not permit. Add the secret and this step
+      # starts running with no further change.
       - name: Upload coverage to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Report coverage upload status
+        if: ${{ env.CODECOV_TOKEN == '' }}
+        run: |
+          echo "::notice::Skipping the Codecov upload: CODECOV_TOKEN is not set."
+          echo "Coverage was gated by test:coverage; only the upload is skipped."
 
   build:
     name: Build
