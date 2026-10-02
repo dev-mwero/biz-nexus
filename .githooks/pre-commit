@@ -36,3 +36,30 @@ if ! npm run "${validate_script}"; then
   echo "            Run 'npm run ${validate_script}' to see the failure." >&2
   exit 1
 fi
+
+# Lint the workflows with actionlint when it is available.
+#
+# This exists because a syntactically valid YAML file is not a valid workflow.
+# A `services:` block with a `command:` key parsed fine and passed every YAML
+# linter we had, and GitHub rejected the whole file — so all four CI jobs
+# failed in 0 seconds without running a single step, and the only report was
+# "this run likely failed because of a workflow file issue".
+#
+# Skipped rather than fatal when actionlint is not installed, so a fresh clone
+# without it can still commit. CI is where this has to hold, and the honest
+# fix for that is a workflow-lint job; until then this catches it locally
+# when the tool is there.
+if git diff --cached --name-only --diff-filter=ACM | grep -q '^\.github/workflows/'; then
+  if command -v actionlint >/dev/null 2>&1; then
+    echo "pre-commit: linting workflows with actionlint"
+    changed_workflows=$(git diff --cached --name-only --diff-filter=ACM | grep '^\.github/workflows/' || true)
+    # shellcheck disable=SC2086
+    if ! actionlint -shellcheck= -pyflakes= $changed_workflows; then
+      echo
+      echo "pre-commit: actionlint rejected the workflow. Nothing was committed." >&2
+      exit 1
+    fi
+  else
+    echo "pre-commit: actionlint not installed, skipping workflow lint" >&2
+  fi
+fi
