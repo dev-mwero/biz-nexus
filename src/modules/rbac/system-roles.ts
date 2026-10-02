@@ -39,6 +39,8 @@ export const RECORD_DOMAINS: readonly string[] = [
   "activities",
   "tasks",
   "savedViews",
+  "dashboard",
+  "search",
 ] as const;
 
 /**

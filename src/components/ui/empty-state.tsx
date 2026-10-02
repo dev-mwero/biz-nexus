@@ -1,6 +1,21 @@
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
+import { Button, ButtonLink } from "./button";
+
+/**
+ * The action a description form or an element takes.
+ *
+ * A descriptor rather than a bare `ReactNode` so that the button is built once,
+ * here, instead of at every call site — and so that `onClick` and `href` cannot
+ * both be forgotten. Passing arbitrary children still works for the cases that
+ * genuinely need them (a split button, a form).
+ */
+export type EmptyStateAction =
+  | ReactNode
+  | { label: string; onClick?: () => void; href?: string };
+
+type EmptyStateActionDescriptor = Extract<EmptyStateAction, { label: string }>;
 
 /**
  * The state a screen is in when it has nothing to show.
@@ -18,14 +33,17 @@ export function EmptyState({
   className,
   compact = false,
 }: {
-  icon: LucideIcon;
+  /** Optional. An error state has nothing to illustrate, so the box is skipped. */
+  icon?: LucideIcon;
   title: string;
   description?: ReactNode;
-  action?: ReactNode;
+  action?: EmptyStateAction;
   className?: string;
   /** For an empty region inside an already-dense screen, not a whole page. */
   compact?: boolean;
 }) {
+  const renderedAction = renderAction(action, compact);
+
   return (
     <div
       className={cn(
@@ -34,15 +52,17 @@ export function EmptyState({
         className,
       )}
     >
-      <div
-        aria-hidden="true"
-        className={cn(
-          "grid place-items-center rounded-lg border border-line bg-surface-sunken text-ink-400 dark:border-line dark:bg-surface-raised",
-          compact ? "size-9" : "size-12",
-        )}
-      >
-        <Icon className={compact ? "size-4" : "size-5"} strokeWidth={1.75} />
-      </div>
+      {Icon ? (
+        <div
+          aria-hidden="true"
+          className={cn(
+            "grid place-items-center rounded-lg border border-line bg-surface-sunken text-ink-400 dark:border-line dark:bg-surface-raised",
+            compact ? "size-9" : "size-12",
+          )}
+        >
+          <Icon className={compact ? "size-4" : "size-5"} strokeWidth={1.75} />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-1">
         <p
           className={cn(
@@ -58,8 +78,37 @@ export function EmptyState({
           </p>
         ) : null}
       </div>
-      {action ? <div className="mt-1">{action}</div> : null}
+      {renderedAction ? <div className="mt-1">{renderedAction}</div> : null}
     </div>
+  );
+}
+
+function renderAction(action: EmptyStateAction, compact: boolean) {
+  if (!action) return null;
+  // Anything that is not a plain descriptor is rendered as given.
+  if (!isActionDescriptor(action)) return action;
+  if (action.href) {
+    return (
+      <ButtonLink href={action.href} size={compact ? "sm" : "md"}>
+        {action.label}
+      </ButtonLink>
+    );
+  }
+  return (
+    <Button size={compact ? "sm" : "md"} onClick={action.onClick}>
+      {action.label}
+    </Button>
+  );
+}
+
+function isActionDescriptor(
+  action: EmptyStateAction,
+): action is EmptyStateActionDescriptor {
+  return (
+    typeof action === "object" &&
+    action !== null &&
+    !isValidElement(action) &&
+    "label" in action
   );
 }
 

@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import type { ClientSession, Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
 import { recordActivity } from "@/modules/activities/activity.service";
 import { recordAction } from "@/modules/audit/audit.service";
@@ -9,13 +9,23 @@ import {
   type DealStatus,
 } from "@/modules/deals/deal.model";
 import type { DealRepository } from "@/modules/deals/deal.repository";
+import { UserModel } from "@/modules/identity";
 import type { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
-import { AppError } from "@/shared/errors/app-error";
+import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 
+/**
+ * A deal operation that could not be carried out.
+ *
+ * Each site names its own code, because the status is the client's answer:
+ * a deal that is not there is a 404 and must stay one, a deal that is already
+ * won is a 409, and a pipeline with no won stage is a 422 the caller can fix.
+ * A single catch-all code would flatten those into one indistinguishable status
+ * and leave the route handlers string-matching on messages to tell them apart.
+ */
 export class DealError extends AppError {
-  constructor(message: string) {
-    super("DEAL_OPERATION_FAILED", { message });
+  constructor(code: ErrorCode, message: string) {
+    super(code, { message });
     this.name = "DealError";
   }
 }
@@ -58,6 +68,31 @@ export class DealService {
   ) {}
 
   /**
+   * The audit actor for a write inside a transaction.
+   *
+   * `RecordActionInput.actor` is `{ id, name }`, not a bare id, and the name is
+   * denormalised onto the audit row precisely so the log still reads after the
+   * user is deleted. This service is constructed with an id alone, so the name
+   * has to be read.
+   *
+   * Read inside the caller's session rather than separately, so the audit row
+   * cannot name an actor that the transaction has not committed. A user who has
+   * genuinely been deleted yields "System": that is `recordAction`'s own
+   * documented fallback, and it is the honest reading of an actor we can no
+   * longer name. The same pattern appears in `invitation.service`.
+   */
+  private async auditActor(session: ClientSession) {
+    const actor = await UserModel.findOne({ _id: this.actorId }, undefined, {
+      session,
+    })
+      .select("name")
+      .lean<{ name?: string } | null>()
+      .exec();
+
+    return { id: this.actorId, name: actor?.name ?? "System" };
+  }
+
+  /**
    * List deals with filters.
    */
   async list(
@@ -82,7 +117,7 @@ export class DealService {
    * Get a deal by ID.
    */
   async getById(id: Types.ObjectId | string): Promise<Deal | null> {
-    return this.dealRepo.findById(id);
+    return this.dealRepo.findDealById(id);
   }
 
   /**
@@ -96,6 +131,7 @@ export class DealService {
     );
     if (!stage) {
       throw new DealError(
+        "VALIDATION_FAILED",
         "The selected stage does not belong to the specified pipeline.",
       );
     }
@@ -134,15 +170,16 @@ export class DealService {
   ): Promise<Deal | null> {
     // If pipelineId or stageId is being changed, validate
     if (input.pipelineId || input.stageId) {
-      const deal = await this.dealRepo.findById(id);
+      const deal = await this.dealRepo.findDealById(id);
       if (!deal) {
-        throw new DealError("Deal not found.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
       }
       const pipelineId = input.pipelineId ?? deal.pipelineId;
       const stageId = input.stageId ?? deal.stageId;
       const stage = await this.pipelineRepo.getStage(pipelineId, stageId);
       if (!stage) {
         throw new DealError(
+          "VALIDATION_FAILED",
           "The selected stage does not belong to the specified pipeline.",
         );
       }
@@ -173,7 +210,7 @@ export class DealService {
         { session },
       );
       if (!deal) {
-        throw new DealError("Deal not found.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
       }
 
       // Validate target stage belongs to deal's pipeline
@@ -183,6 +220,7 @@ export class DealService {
       );
       if (!stage) {
         throw new DealError(
+          "VALIDATION_FAILED",
           "The target stage does not belong to this deal's pipeline.",
         );
       }
@@ -228,7 +266,7 @@ export class DealService {
       );
 
       if (!updatedDeal) {
-        throw new DealError("Deal not found after update.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found after update.");
       }
 
       // Emit the stage changed event
@@ -258,24 +296,23 @@ export class DealService {
       // Record audit entry
       await recordAction({
         organizationId: this.dealRepo.organizationId,
-        actorId: this.actorId,
+        actor: await this.auditActor(session),
         action: "deal.stage_change",
         entityType: "deal",
         entityId: deal._id,
         entityLabel: deal.name,
-        changes: {
-          before: {
-            stageId: deal.stageId,
-            sortOrder: deal.sortOrder,
-            status: deal.status,
-          },
-          after: {
-            stageId: input.stageId,
-            sortOrder: input.sortOrder,
-            status: newStatus,
-          },
+        before: {
+          stageId: deal.stageId,
+          sortOrder: deal.sortOrder,
+          status: deal.status,
+        },
+        after: {
+          stageId: input.stageId,
+          sortOrder: input.sortOrder,
+          status: newStatus,
         },
         metadata: { reason: input.reason },
+        occurredAt,
       });
 
       // Get the activity that was recorded by the subscriber
@@ -318,21 +355,27 @@ export class DealService {
         { session },
       );
       if (!deal) {
-        throw new DealError("Deal not found.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
       }
 
       if (deal.status === "WON") {
-        throw new DealError("Deal is already won.");
+        throw new DealError("INVALID_STATE", "Deal is already won.");
       }
 
       if (deal.status === "LOST") {
-        throw new DealError("Cannot win a lost deal. Reopen it first.");
+        throw new DealError(
+          "INVALID_STATE",
+          "Cannot win a lost deal. Reopen it first.",
+        );
       }
 
       // Get the pipeline's won stage
       const wonStage = await this.pipelineRepo.getWonStage(deal.pipelineId);
       if (!wonStage) {
-        throw new DealError("This pipeline has no 'Won' stage configured.");
+        throw new DealError(
+          "VALIDATION_FAILED",
+          "This pipeline has no 'Won' stage configured.",
+        );
       }
 
       const closedAt = new Date();
@@ -353,7 +396,7 @@ export class DealService {
       );
 
       if (!updatedDeal) {
-        throw new DealError("Deal not found after update.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found after update.");
       }
 
       // Emit deal.won event
@@ -372,19 +415,18 @@ export class DealService {
       // Record audit entry
       await recordAction({
         organizationId: this.dealRepo.organizationId,
-        actorId: this.actorId,
+        actor: await this.auditActor(session),
         action: "deal.won",
         entityType: "deal",
         entityId: deal._id,
         entityLabel: deal.name,
-        changes: {
-          before: {
-            stageId: deal.stageId,
-            status: deal.status,
-            probability: deal.probability,
-          },
-          after: { stageId: wonStage._id, status: "WON", probability: 100 },
+        before: {
+          stageId: deal.stageId,
+          status: deal.status,
+          probability: deal.probability,
         },
+        after: { stageId: wonStage._id, status: "WON", probability: 100 },
+        occurredAt,
       });
 
       return updatedDeal;
@@ -411,21 +453,27 @@ export class DealService {
         { session },
       );
       if (!deal) {
-        throw new DealError("Deal not found.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
       }
 
       if (deal.status === "LOST") {
-        throw new DealError("Deal is already lost.");
+        throw new DealError("INVALID_STATE", "Deal is already lost.");
       }
 
       if (deal.status === "WON") {
-        throw new DealError("Cannot lose a won deal. Reopen it first.");
+        throw new DealError(
+          "INVALID_STATE",
+          "Cannot lose a won deal. Reopen it first.",
+        );
       }
 
       // Get the pipeline's lost stage
       const lostStage = await this.pipelineRepo.getLostStage(deal.pipelineId);
       if (!lostStage) {
-        throw new DealError("This pipeline has no 'Lost' stage configured.");
+        throw new DealError(
+          "VALIDATION_FAILED",
+          "This pipeline has no 'Lost' stage configured.",
+        );
       }
 
       const closedAt = new Date();
@@ -448,7 +496,7 @@ export class DealService {
       );
 
       if (!updatedDeal) {
-        throw new DealError("Deal not found after update.");
+        throw new DealError("RECORD_NOT_FOUND", "Deal not found after update.");
       }
 
       // Emit deal.lost event
@@ -466,26 +514,25 @@ export class DealService {
       // Record audit entry
       await recordAction({
         organizationId: this.dealRepo.organizationId,
-        actorId: this.actorId,
+        actor: await this.auditActor(session),
         action: "deal.lost",
         entityType: "deal",
         entityId: deal._id,
         entityLabel: deal.name,
-        changes: {
-          before: {
-            stageId: deal.stageId,
-            status: deal.status,
-            probability: deal.probability,
-            lostReason: deal.lostReason,
-          },
-          after: {
-            stageId: lostStage._id,
-            status: "LOST",
-            probability: 0,
-            lostReason,
-          },
+        before: {
+          stageId: deal.stageId,
+          status: deal.status,
+          probability: deal.probability,
+          lostReason: deal.lostReason,
+        },
+        after: {
+          stageId: lostStage._id,
+          status: "LOST",
+          probability: 0,
+          lostReason,
         },
         metadata: { reason },
+        occurredAt,
       });
 
       return updatedDeal;

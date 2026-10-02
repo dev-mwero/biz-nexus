@@ -74,6 +74,7 @@ object disagree.
 | 409 | `ORGANIZATION_CREATION_FAILED` | Could not create the organisation |
 | 409 | `ROLE_PROVISIONING_FAILED` | System roles already provisioned |
 | 409 | `OWNER_REQUIRED` | Would leave the organisation with no active owner |
+| 409 | `INVALID_STATE` | Record is in a state that forbids the action — merged contact, already-converted lead, already-closed deal |
 | 410 | `INVITATION_EXPIRED` | Past its seven-day window |
 | 410 | `INVITATION_USED` | Already accepted |
 | 410 | `INVITATION_REVOKED` | Revoked by an administrator |
@@ -133,7 +134,7 @@ organisation is read from the session. The only way to change it is
 | `POST` | `/auth/forgot-password` | — | Always `200`, whether or not the account exists. |
 | `POST` | `/auth/reset-password` | — | Consume a single-use token. Revokes all sessions. |
 | `POST` | `/auth/verify-email` | — | Consume a verification token. |
-| `POST` | `/auth/resend-verification` | authenticated | Reissue. **Not yet rate limited** — see §10. |
+| `POST` | `/auth/resend-verification` | authenticated | Reissue verification token. **Not yet rate limited** — see §10. |
 
 ```http
 POST /api/v1/auth/login
@@ -142,73 +143,111 @@ Content-Type: application/json
 { "email": "owner@acme.com", "password": "correct horse battery staple" }
 ```
 
----
+### Organisation bootstrap
 
-## 4. Organisations and members
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/organizations` | authenticated | The organisations the caller can act in. Both a brand-new account with none and a member who has lost their active organisation are answered normally. |
+| `POST` | `/organizations` | authenticated | Create an organisation. Body: `{ name }`. The creator becomes OWNER and the new organisation becomes the session's active one. |
+| `POST` | `/organizations/active` | authenticated | Switch the session's active organisation. Body: `{ organizationId }`. A 404 that does not distinguish "no such organisation" from "not a member". |
 
-| Method | Path | Permission |
-|---|---|---|
-| `POST` | `/organizations` | authenticated — creates and joins |
-| `GET` | `/organizations/current` | `organization.read` |
-| `PATCH` | `/organizations/current` | `settings.manage` |
-| `GET` | `/organizations` | authenticated — the user's organisations |
-| `POST` | `/organizations/active` | authenticated — switch; verifies membership |
-| `GET` | `/organizations/current/members` | `users.read` |
-| `POST` | `/organizations/current/members/invitations` | `users.invite` |
-| `GET` | `/organizations/current/invitations` | `users.read` |
-| `DELETE` | `/organizations/current/invitations/:invitationId` | `users.invite` |
-| `PATCH` | `/organizations/current/members/:membershipId` | `users.update` |
-| `DELETE` | `/organizations/current/members/:membershipId` | `users.remove` |
-| `POST` | `/organizations/current/leave` | authenticated |
-| `GET` | `/organizations/current/roles` | `users.read` |
-| `POST` | `/organizations/current/roles` | `settings.manage` |
-| `PATCH` | `/organizations/current/roles/:roleId` | `settings.manage` |
-| `DELETE` | `/organizations/current/roles/:roleId` | `settings.manage` — system roles are `409` |
-| `POST` | `/auth/accept-invitation` | — token in the body |
-
-Accepting an invitation is the only path that creates a membership without an
-authenticated inviter, and it is bound to a single-use token that names the
-organisation and the role.
+These are deliberately outside the active-organisation requirement: onboarding
+exists precisely for the caller who has no active organisation yet.
 
 ---
 
-## 5. CRM resources
+## 4. Activities
 
-Shared across contacts, companies, leads, deals and tasks.
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/activities` | `activities.read` | Organisation feed, filterable by `type`, `actorId`, `ownerId`, `entityType`, `entityId`, `before` |
+| `POST` | `/activities` | `activities.create` | Create note, call, or meeting. Body: `{ entityType, entityId, type: "NOTE"\|"CALL"\|"MEETING", title, body?, direction?, durationSeconds?, occurredAt? }` |
+| `DELETE` | `/activities/:id` | `activities.delete` | Delete own activity |
+| `GET` | `/activities/feed` | `activities.read` | Cursor-paginated organisation feed |
+
+### Activity feed cursor pagination
+
+`GET /activities/feed?cursor=<ObjectId>&limit=20&before=<ISO8601>`
+
+Returns:
+```json
+{
+  "data": {
+    "activities": [ ... ],
+    "nextCursor": "65f..."
+  }
+}
+```
+
+---
+
+## 5. Audit logs
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/{resource}` | `{resource}.read` |
-| `POST` | `/{resource}` | `{resource}.create` |
-| `GET` | `/{resource}/:id` | `{resource}.read` |
-| `PATCH` | `/{resource}/:id` | `{resource}.update` |
-| `DELETE` | `/{resource}/:id` | `{resource}.delete` — soft delete |
-| `POST` | `/{resource}/:id/restore` | `{resource}.update` |
+| `GET` | `/audit-logs` | `audit.read` |
 
-`resource` ∈ `contacts`, `companies`, `leads`, `deals`, `tasks`.
+---
 
-**Additional endpoints**
+## 6. CRM — Companies
+
+Base path: `/crm/companies`
 
 | Method | Path | Permission |
 |---|---|---|
-| `POST` | `/leads/:id/convert` | `leads.convert` |
-| `GET` | `/leads/:id/convert-preview` | `leads.read` |
-| `POST` | `/deals/:id/move` | `deals.move` |
-| `GET` | `/deals/pipeline-board` | `deals.read` |
-| `GET` | `/deals/summary` | `deals.read` |
-| `GET` | `/companies/:id/contacts` | `companies.read` |
-| `GET` | `/contacts/:id/companies` | `contacts.read` — future multi-company |
-| `GET` | `/contacts/:id/timeline` | `contacts.read` |
-| `GET` | `/deals/:id/timeline` | `deals.read` |
-| `GET` | `/companies/:id/timeline` | `companies.read` |
-| `GET` | `/tasks/:id/timeline` | `tasks.read` |
+| `GET` | `/crm/companies` | `companies.read` |
+| `POST` | `/crm/companies` | `companies.create` |
+| `GET` | `/crm/companies/:id` | `companies.read` |
+| `PATCH` | `/crm/companies/:id` | `companies.update` |
+| `POST` | `/crm/companies/:id/restore` | `companies.update` | Restore a soft-deleted company |
+| `DELETE` | `/crm/companies/:id` | `companies.delete` — soft delete |
+| `GET` | `/crm/companies/:id/contacts` | `contacts.read` | List contacts for a company |
+
+**Filters:** `status`, `industry`, `ownerId`, `tag` (repeat the parameter, or comma-separate), `createdFrom`, `createdTo`
+
+---
+
+## 7. CRM — Contacts
+
+Base path: `/crm/contacts`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/crm/contacts` | `contacts.read` |
+| `POST` | `/crm/contacts` | `contacts.create` |
+| `GET` | `/crm/contacts/:id` | `contacts.read` |
+| `PATCH` | `/crm/contacts/:id` | `contacts.update` |
+| `POST` | `/crm/contacts/:id/restore` | `contacts.update` | Restore a soft-deleted contact |
+| `DELETE` | `/crm/contacts/:id` | `contacts.delete` — soft delete |
+| `POST` | `/crm/contacts/:id/merge` | `contacts.update` | Merge into another contact |
+
+**Filters:** `status`, `companyId`, `ownerId`, `tag` (repeat the parameter, or comma-separate), `createdFrom`, `createdTo`, `hasEmail`
+
+---
+
+## 8. CRM — Leads
+
+Base path: `/crm/leads`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/crm/leads` | `leads.read` |
+| `POST` | `/crm/leads` | `leads.create` |
+| `GET` | `/crm/leads/:id` | `leads.read` |
+| `PATCH` | `/crm/leads/:id` | `leads.update` |
+| `POST` | `/crm/leads/:id/restore` | `leads.update` | Restore a soft-deleted lead |
+| `DELETE` | `/crm/leads/:id` | `leads.delete` — soft delete |
+| `POST` | `/crm/leads/:id/convert` | `leads.convert` | Convert to contact, optionally company and deal |
+| `GET` | `/crm/leads/:id/convert-preview` | `leads.read` | Preview conversion without executing |
+
+**Filters:** `status`, `source`, `ownerId`, `scoreMin`, `scoreMax`, `createdFrom`, `createdTo`
 
 ### Lead conversion
 
 The most complex write in the MVP, so it gets an explicit contract.
 
 ```http
-POST /api/v1/leads/65f.../convert
+POST /api/v1/crm/leads/65f.../convert
 
 {
   "createContact": true,
@@ -233,15 +272,78 @@ entry.
 **Idempotent.** A second call returns `409 INVALID_STATE`, and includes
 `convertedContactId` / `convertedDealId` so the caller can recover the result.
 
-```json
-{
-  "error": {
-    "code": "INVALID_STATE",
-    "message": "This lead has already been converted.",
-    "details": [{ "path": "leadId", "convertedContactId": "65c...", "convertedDealId": "65d..." }]
-  }
-}
-```
+---
+
+## 9. CRM — Tags
+
+Base path: `/crm/tags`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/crm/tags` | `tags.read` |
+| `POST` | `/crm/tags` | `tags.create` |
+| `GET` | `/crm/tags/:id` | `tags.read` |
+| `PATCH` | `/crm/tags/:id` | `tags.update` |
+| `DELETE` | `/crm/tags/:id` | `tags.delete` — soft delete |
+| `POST` | `/crm/tags/:id/merge` | `tags.update` | Merge into another tag |
+
+**Filters:** (none specific — use `q` for name search)
+
+---
+
+## 10. CRM — Custom field definitions
+
+Base path: `/crm/field-definitions`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/crm/field-definitions` | `fieldDefinitions.read` | List definitions; filter by `entityType` |
+| `POST` | `/crm/field-definitions` | `fieldDefinitions.create` |
+| `GET` | `/crm/field-definitions/:id` | `fieldDefinitions.read` |
+| `PATCH` | `/crm/field-definitions/:id` | `fieldDefinitions.update` |
+| `DELETE` | `/crm/field-definitions/:id` | `fieldDefinitions.delete` — removes the value from records |
+
+`entityType` ∈ `CONTACT` \| `COMPANY` \| `LEAD` \| `DEAL` \| `TASK`
+
+---
+
+## 11. CRM — Saved views
+
+Base path: `/crm/saved-views`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/crm/saved-views` | `savedViews.read` | List views; filter by `entityType` |
+| `POST` | `/crm/saved-views` | `savedViews.create` |
+| `GET` | `/crm/saved-views/:id` | `savedViews.read` |
+| `PATCH` | `/crm/saved-views/:id` | owner only, or `isShared` and `savedViews.update` |
+| `DELETE` | `/crm/saved-views/:id` | owner only |
+
+Filters are stored as validated data, never as a raw query string. This is both a
+safety property and the reason `NoSQL injection` cannot reach a saved view.
+
+---
+
+## 12. Deals
+
+Base path: `/deals`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/deals` | `deals.read` |
+| `POST` | `/deals` | `deals.create` |
+| `GET` | `/deals/:id` | `deals.read` |
+| `PATCH` | `/deals/:id` | `deals.update` |
+| `DELETE` | `/deals/:id` | `deals.delete` — soft delete |
+| `POST` | `/deals/:id/move` | `deals.move` | Move to a stage |
+| `POST` | `/deals/:id/win` | `deals.move` | Mark as won (moves to won stage) |
+| `POST` | `/deals/:id/lose` | `deals.move` | Mark as lost (moves to lost stage, requires `reason`) |
+| `GET` | `/deals/:id/timeline` | `deals.read` | Activity timeline for this deal |
+| `GET` | `/deals/pipeline-board` | `deals.read` | Kanban board data |
+| `GET` | `/deals/summary` | `deals.read` | Aggregated pipeline summary |
+
+**Filters:** `status`, `pipelineId`, `stageId`, `companyId`, `contactId`, `ownerId`,
+`valueMin`, `valueMax`, `closingFrom`, `closingTo`, `tag` (repeat the parameter, or comma-separate)
 
 ### Deal stage move
 
@@ -257,9 +359,59 @@ recording both stage names, and an audit entry with a before/after diff. A move
 into a stage flagged `isWon` or `isLost` sets `status`, `closedAt`, and
 `lostReason` where applicable, and emits `deal.won` or `deal.lost`.
 
+### Deal win / lose
+
+```http
+POST /api/v1/deals/65f.../win
+```
+
+```http
+POST /api/v1/deals/65f.../lose
+Content-Type: application/json
+
+{ "reason": "Budget not approved" }
+```
+
+Convenience endpoints that move to the pipeline's won/lost stage respectively.
+
 ---
 
-## 6. Pipelines, tags, custom fields, saved views
+## 13. Dashboard
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/dashboard` | `dashboard.read` |
+
+Returns all MVP dashboard metrics in a single round-trip using MongoDB `$facet` aggregation:
+- Metric cards: deals won/lost this month, lead conversion rate, pipeline value, win rate
+- Pipeline summary: deals by stage (count + total value)
+- Overdue tasks count
+- Recent activity (10 items)
+
+---
+
+## 14. Notifications
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/notifications` | `notifications.read` — own only |
+| `GET` | `/notifications/stream` | `notifications.read` — Server-Sent Events for real-time updates |
+| `GET` | `/notifications/unread-count` | `notifications.read` |
+| `PATCH` | `/notifications/:id/read` | `notifications.update` |
+| `POST` | `/notifications/read-all` | `notifications.update` |
+
+### SSE stream
+
+`GET /notifications/stream` returns a text/event-stream:
+- Initial message: `{ "type": "unread-count", "count": N }`
+- On new notification or mark-read: `{ "type": "unread-count", "count": N }`
+- Heartbeat: `: heartbeat\n\n` every 30 seconds
+
+---
+
+## 15. Pipelines
+
+Base path: `/pipelines`
 
 | Method | Path | Permission |
 |---|---|---|
@@ -268,37 +420,14 @@ into a stage flagged `isWon` or `isLost` sets `status`, `closedAt`, and
 | `GET` | `/pipelines/:id` | `pipelines.read` |
 | `PATCH` | `/pipelines/:id` | `pipelines.update` — includes atomic stage reorder |
 | `DELETE` | `/pipelines/:id` | `pipelines.delete` — `409` if deals reference it |
-| `GET` | `/tags` | `contacts.read` |
-| `POST` | `/tags` | `contacts.create` |
-| `PATCH` | `/tags/:id` | `contacts.update` |
-| `DELETE` | `/tags/:id` | `contacts.delete` |
-| `GET` | `/custom-fields/:entityType` | `{entity}.read` |
-| `POST` | `/custom-fields` | `settings.manage` |
-| `PATCH` | `/custom-fields/:id` | `settings.manage` |
-| `DELETE` | `/custom-fields/:id` | `settings.manage` — removes the value from records |
-| `GET` | `/saved-views/:entityType` | `{entity}.read` |
-| `POST` | `/saved-views` | `{entity}.create` |
-| `PATCH` | `/saved-views/:id` | owner only, or `isShared` and `{entity}.update` |
-| `DELETE` | `/saved-views/:id` | owner only |
+| `POST` | `/pipelines/:id/reorder` | `pipelines.update` | Atomic stage reorder |
 
 ---
 
-## 7. Activities, tasks, notifications, audit, dashboard, search
+## 16. Search
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/activities` | `activities.read` — organisation feed, filterable |
-| `POST` | `/activities` | `activities.create` — note, call, meeting |
-| `GET` | `/activities/:id` | `activities.read` |
-| `DELETE` | `/activities/:id` | `activities.create` — author or `settings.manage` |
-| `GET` | `/notifications` | `notifications.read` — own only, always |
-| `PATCH` | `/notifications/:id/read` | `notifications.update` |
-| `POST` | `/notifications/read-all` | `notifications.update` |
-| `GET` | `/notifications/unread-count` | `notifications.read` |
-| `GET` | `/audit-logs` | `audit.read` |
-| `GET` | `/dashboard` | `reports.view` |
-| `GET` | `/dashboard/pipeline` | `reports.view` |
-| `GET` | `/dashboard/tasks` | `reports.view` |
 | `GET` | `/search` | authenticated — contacts, companies, deals, tasks |
 
 `/search` returns only what the caller may read, and always only within the
@@ -307,7 +436,50 @@ the caller has no permission for.
 
 ---
 
-## 8. List query parameters
+## 17. Tasks
+
+Base path: `/tasks`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/tasks` | `tasks.read` |
+| `POST` | `/tasks` | `tasks.create` |
+| `GET` | `/tasks/:id` | `tasks.read` |
+| `PATCH` | `/tasks/:id` | `tasks.update` |
+| `DELETE` | `/tasks/:id` | `tasks.delete` — soft delete |
+
+**Filters:** `status`, `priority`, `assigneeId`, `dueFrom`, `dueTo`, `overdue`, `relatedEntityType`,
+`relatedEntityId`, `completedFrom`, `completedTo`
+
+### Task completion
+
+```http
+PATCH /api/v1/tasks/65f...
+
+{ "status": "DONE" }
+```
+
+Sets `completedAt` to now, `completedById` to the actor. Emits `task.completed`,
+which produces a `TASK` activity on the task and all related entities
+(contact, company, deal). The activity title is `Completed "Task name"`.
+
+Reopening (`status: "TODO"` or `"IN_PROGRESS"`) clears `completedAt` and
+`completedById` and emits `task.reopened`.
+
+### Task assignment
+
+```http
+PATCH /api/v1/tasks/65f...
+
+{ "assigneeId": "65a..." }
+```
+
+Emits `task.assigned`, which produces a `TASK` activity. Setting `assigneeId:
+null` emits `task.unassigned`.
+
+---
+
+## 18. List query parameters
 
 One convention across every collection. Never a bespoke parameter set.
 
@@ -321,15 +493,20 @@ One convention across every collection. Never a bespoke parameter set.
 
 Resource-specific filters, all optional, all validated:
 
+`*` marks a filter that may be given more than once.
+
 ```
-contacts      status, companyId, ownerId, tag[], createdFrom, createdTo, hasEmail
-companies     status, industry, ownerId, tag[], createdFrom, createdTo
+contacts      status, companyId, ownerId, tag*, createdFrom, createdTo, hasEmail
+companies     status, industry, ownerId, tag*, createdFrom, createdTo
 leads         status, source, ownerId, scoreMin, scoreMax, createdFrom, createdTo
 deals         status, pipelineId, stageId, companyId, contactId, ownerId,
-              valueMin, valueMax, closingFrom, closingTo, tag[]
+              valueMin, valueMax, closingFrom, closingTo, tag*
 tasks         status, priority, assigneeId, dueFrom, dueTo, overdue, relatedEntityType,
-              relatedEntityId
-activities     type, actorId, ownerId, entityType, entityId, from, to
+              relatedEntityId, completedFrom, completedTo
+activities     type, actorId, ownerId, entityType, entityId, before
+fieldDefs     entityType (required query param)
+savedViews    entityType (required query param)
+tags          (none specific)
 ```
 
 **Unknown parameters are rejected**, not ignored. A typo in a filter that is
@@ -342,7 +519,7 @@ speculatively now.
 
 ---
 
-## 9. Status codes
+## 19. Status codes
 
 | Code | Used for |
 |---|---|
@@ -360,7 +537,7 @@ speculatively now.
 
 ---
 
-## 10. Rate limits
+## 20. Rate limits
 
 **The limits below are the target, not the current state.** Of these, only the
 5-consecutive-failures lockout is enforced today; it lives in the database, on
@@ -377,7 +554,7 @@ no marker on which ones work is how a reviewer concludes the whole table works.
 | `POST /auth/forgot-password` | 3 / hour / email | Always `200`; throttled silently | no — 1.31 |
 | `POST /auth/resend-verification` | 3 / hour / user | Always `200`; throttled silently | no — 1.31 |
 | `POST /auth/reset-password` | 5 / hour / IP | `429` | no — 1.31 |
-| `POST /organizations/current/members/invitations` | 20 / day / organisation | `429` | no — not built |
+| `POST /crm/contacts` etc. | 20 / day / organisation | `429` | no — not built |
 | `GET /search` | 60 / minute / user | `429` | no — not built |
 | Everything else | 300 / minute / user | `429` | no — not built |
 
@@ -387,7 +564,7 @@ boundary. See [`SECURITY.md` §9](./SECURITY.md).
 
 ---
 
-## 11. Versioning
+## 21. Versioning
 
 Path-based: `/api/v1`. A breaking change means `/api/v2`, and `v1` continues to
 be served until no client uses it.
@@ -404,7 +581,7 @@ value as a neutral fallback rather than crashing.
 
 ---
 
-## 12. Conventions this API commits to
+## 22. Conventions this API commits to
 
 1. `organizationId` is never an input.
 2. The response envelope never varies by endpoint.
@@ -418,3 +595,37 @@ value as a neutral fallback rather than crashing.
 9. IDs are opaque strings in JSON. MongoDB `ObjectId` is a storage detail, not
    part of the contract.
 10. Money is a decimal number in major units plus a `currency` code.
+
+---
+
+## 23. Endpoints NOT implemented (documented for clarity)
+
+The following endpoints appear in earlier designs or related documentation but
+are **not implemented** in the current codebase:
+
+| Endpoint | Status | Notes |
+|---|---|---|
+| `POST /auth/accept-invitation` | Not implemented | Invitation acceptance not built |
+| `GET /organizations/current` | Not implemented | Organisation management not built |
+| `PATCH /organizations/current` | Not implemented | Organisation settings not built |
+| `GET /organizations/current/members` | Not implemented | Member management not built |
+| `POST /organizations/current/members/invitations` | Not implemented | Invitation management not built |
+| `GET /organizations/current/invitations` | Not implemented | |
+| `DELETE /organizations/current/invitations/:id` | Not implemented | |
+| `PATCH /organizations/current/members/:id` | Not implemented | |
+| `DELETE /organizations/current/members/:id` | Not implemented | |
+| `POST /organizations/current/leave` | Not implemented | |
+| `GET /organizations/current/roles` | Not implemented | Role management not built |
+| `POST /organizations/current/roles` | Not implemented | |
+| `PATCH /organizations/current/roles/:id` | Not implemented | |
+| `DELETE /organizations/current/roles/:id` | Not implemented | |
+| `GET /crm/companies/:id/contacts` | Not implemented | |
+| `GET /crm/contacts/:id/companies` | Not implemented | Multi-company not built |
+| `GET /crm/contacts/:id/timeline` | Not implemented | Use `/activities?entityType=CONTACT&entityId=:id` |
+| `GET /crm/companies/:id/timeline` | Not implemented | Use `/activities?entityType=COMPANY&entityId=:id` |
+| `GET /crm/tasks/:id/timeline` | Not implemented | Use `/activities?entityType=TASK&entityId=:id` |
+| `GET /dashboard/pipeline` | Not implemented | Use `/deals/pipeline-board` |
+| `GET /dashboard/tasks` | Not implemented | Use `/tasks` with filters |
+
+These endpoints are tracked in the project plan and will be implemented in
+subsequent phases.

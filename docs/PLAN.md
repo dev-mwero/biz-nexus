@@ -182,12 +182,13 @@ system is provably incapable of leaking data across organisation boundaries.
 decision: it is the number that makes an offline attack expensive, and it is
 revisited only by a decision to change it, not by a decision to make hashing
 faster. What 1.78 evaluates is the *implementation* — `bcryptjs` is pure
-JavaScript and measures roughly 2.2s per verification here, against the
-~250ms the documentation describes for a native bcrypt. That is not a security
-finding; it is a nine-fold discrepancy between what the docs say a sign-in
-costs and what it costs, and it has a consequence that is a security concern:
-1.31 sizes a rate limiter, and a limiter configured against 250ms on a machine
-that spends 2.2s hashing does not bound the attack it exists to bound.
+JavaScript and measures roughly **1.8s per hash / 1.9s per verify** on an i5-7200U,
+against the ~250ms the documentation previously described for a native bcrypt on
+modern server CPU. That is not a security finding; it is a **>7x discrepancy**
+between what the docs said a sign-in costs and what it costs, and it has a
+consequence that is a security concern: 1.31 sizes a rate limiter, and a limiter
+configured against 250ms on a machine that spends 1.8s hashing does not bound
+the attack it exists to bound.
 
 **Exit criteria (Gate 1):**
 

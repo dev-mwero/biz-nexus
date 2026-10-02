@@ -1,18 +1,45 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Card, CardContent, CardHeader, Skeleton } from "@/components/ui";
+import { SignInForm } from "./sign-in-form";
+
+export const metadata: Metadata = {
+  title: "Sign in",
+  description: "Sign in to your BizNexus account.",
+};
+
 /**
- * Placeholder for the sign-in page.
+ * Sign in.
  *
- * Task 1.16 is the proxy; the real form is a later UI task. This page exists so
- * the redirect target resolves and the redirect itself is testable — a proxy
- * that redirects to a 404 is not a working proxy.
+ * A server component, because `metadata` cannot be exported from a `"use
+ * client"` module and every page in this group is titled.
  *
- * Route groups use parentheses and do not appear in the URL, so this file is
- * served at /sign-in.
+ * The `Suspense` boundary is not decoration. `SignInForm` reads the query string
+ * through `useSearchParams`, and with no boundary above it the closest fallback
+ * is the entire route — which turns a page that could be prerendered into one
+ * that cannot, and fails the production build outright. The fallback holds the
+ * card's real geometry, so the form replaces a shape rather than pushing the
+ * page around when it arrives.
  */
 export default function SignInPage() {
   return (
-    <main>
-      <h1>Sign in</h1>
-      <p>Authentication form lands in a later task.</p>
-    </main>
+    <Suspense fallback={<SignInFallback />}>
+      <SignInForm />
+    </Suspense>
+  );
+}
+
+function SignInFallback() {
+  return (
+    <Card variant="outlined" aria-busy="true">
+      <CardHeader>
+        <Skeleton className="h-5 w-20" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Skeleton className="h-9" />
+        <Skeleton className="h-9" />
+        <Skeleton className="h-9" />
+      </CardContent>
+    </Card>
   );
 }

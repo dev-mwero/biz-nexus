@@ -61,7 +61,7 @@ export const buttonVariants = cva(
   },
 );
 
-type ButtonProps = ComponentPropsWithoutRef<"button"> &
+export type ButtonProps = ComponentPropsWithoutRef<"button"> &
   VariantProps<typeof buttonVariants> & { loading?: boolean };
 
 /**
@@ -91,6 +91,70 @@ export function Button({
       aria-busy={loading || undefined}
       disabled={disabled || loading}
       className={cn(buttonVariants({ variant, size }), className)}
+      {...props}
+    >
+      {loading ? <Spinner className="absolute" /> : null}
+      <span
+        className={cn("inline-flex items-center gap-2", loading && "invisible")}
+      >
+        {children}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * A button whose content is a single glyph.
+ *
+ * This is a wrapper rather than `size: "icon"` on `Button` for one reason: an
+ * icon button has no visible text, so it has no accessible name unless one is
+ * supplied, and nothing in the styling can supply it for you. Naming it
+ * separately makes `aria-label` the first thing you look for when you reach for
+ * it, in the same way a separate `Icon` name does.
+ *
+ * `variant` is `Button`'s, unchanged. `size` accepts `Button`'s full size union
+ * so a call site can move between the two without retuning it, and the square
+ * dimension comes from `ICON_BUTTON_SIZES` rather than from the text sizes —
+ * `sm` on a text button is `h-8 px-3`, which is not square and cannot hold a
+ * glyph on its optical centre. Defaulting to `icon` rather than `md` keeps the
+ * common case from having to ask.
+ *
+ * `loading` still holds the button's width, so a row of action buttons in a
+ * table's row-actions cell does not reflow mid-flight.
+ */
+type ButtonSize = NonNullable<VariantProps<typeof buttonVariants>["size"]>;
+
+const ICON_BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "size-8",
+  md: "size-9",
+  lg: "size-11",
+  icon: "size-9",
+  "icon-sm": "size-8",
+};
+
+export function IconButton({
+  className,
+  variant,
+  size = "icon",
+  loading = false,
+  disabled,
+  children,
+  ...props
+}: Omit<ButtonProps, "size"> & { size?: ButtonSize }) {
+  return (
+    <button
+      type="button"
+      data-slot="icon-button"
+      aria-busy={loading || undefined}
+      disabled={disabled || loading}
+      className={cn(
+        buttonVariants({ variant, size }),
+        // Width is forced square and padding is dropped, so a text size that
+        // carries horizontal padding cannot make the button oblong.
+        ICON_BUTTON_SIZES[size ?? "icon"],
+        "px-0",
+        className,
+      )}
       {...props}
     >
       {loading ? <Spinner className="absolute" /> : null}

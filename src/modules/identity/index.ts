@@ -9,9 +9,11 @@ export {
   verifyEmailBody,
 } from "./auth.schemas";
 export {
+  type LoginRefusal,
   type LoginResult,
   loginWithPassword,
   startPasswordReset,
+  unauthenticated,
 } from "./auth.service";
 export {
   EMAIL_VERIFICATION_TTL_HOURS,

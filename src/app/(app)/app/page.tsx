@@ -1,14 +1,13 @@
+import { redirect } from "next/navigation";
+
 /**
- * Protected placeholder. Replaced by the real dashboard in a later UI task.
+ * Legacy alias for the dashboard.
  *
- * Reached at `/app` — the group name is not a URL segment. Listed in
- * PROTECTED_PREFIXES so the proxy treats it as needing a session.
+ * `/app` predates the real dashboard at `/dashboard` and is still the
+ * `DEFAULT_AUTHENTICATED_PATH` the proxy sends a signed-in visitor to, so it has
+ * to resolve to something useful. Redirecting keeps a single dashboard
+ * implementation instead of a second placeholder that drifts from it.
  */
-export default function DashboardPage() {
-  return (
-    <main>
-      <h1>Dashboard</h1>
-      <p>Dashboard UI lands in a later task.</p>
-    </main>
-  );
+export default function LegacyAppPage() {
+  redirect("/dashboard");
 }

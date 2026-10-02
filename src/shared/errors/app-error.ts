@@ -16,6 +16,8 @@
  * reach", and answering it is how enumeration works.
  */
 
+import { ZodError } from "zod";
+
 /** A field-level validation failure, safe to hand back to the client. */
 export interface FieldDetail {
   path: string;
@@ -151,6 +153,21 @@ export const ERROR_CATALOGUE = {
   OWNER_REQUIRED: {
     status: 409,
     message: "This is the only active owner. Transfer ownership first.",
+    expose: true,
+  },
+  /**
+   * The record is in a state that forbids this action: a lead that cannot make
+   * the requested transition, a contact already merged into another, a deal
+   * already won.
+   *
+   * Distinct from `VALIDATION_FAILED` because the request was well-formed - the
+   * caller sent a legal status, and the answer is that this particular record
+   * has already moved somewhere it cannot come back from. 409 rather than 422
+   * because retrying the identical request gets the identical answer.
+   */
+  INVALID_STATE: {
+    status: 409,
+    message: "This record is not in a state that allows that action.",
     expose: true,
   },
   /**
@@ -312,6 +329,56 @@ export function isAppError(value: unknown): value is AppError {
   return value instanceof AppError;
 }
 
+/**
+ * A zod failure, as a client-facing validation error.
+ *
+ * Every route in this tree validates its input with `schema.parse`, and
+ * `parse` throws `ZodError` rather than returning a result. Without this,
+ * a client that sends one bad field gets a 500 with `INTERNAL` — the
+ * application reporting its own input handling as an unexpected fault, which
+ * is both wrong and unactionable for whoever has the failing request.
+ *
+ * The status is `BAD_REQUEST` rather than `VALIDATION_FAILED` because the two
+ * mean different things to a caller. `VALIDATION_FAILED` is this
+ * application's answer: the request parsed, and the *record* it names is
+ * unacceptable — a company id that does not exist, a `fromEnd` segment that is
+ * not an ObjectId. A `ZodError` is the request not having parsed at all, and
+ * the field paths in the issue list are the only thing the client can act on.
+ * Collapsing them would leave a client unable to tell a malformed body from a
+ * bad reference, which is the distinction it most needs.
+ *
+ * Issues are flattened to `{ path, message }` because that is the shape the
+ * envelope already carries, and the raw issue list would put zod's own
+ * structure into the response contract.
+ */
+function asAppError(error: unknown): AppError | null {
+  if (isAppError(error)) return error;
+  if (!isZodError(error)) return null;
+
+  return new AppError("BAD_REQUEST", {
+    message: "The request could not be read.",
+    details: error.issues.map((issue) => ({
+      path: issue.path.join(".") || "(body)",
+      message: issue.message,
+    })),
+    cause: error,
+  });
+}
+
+/**
+ * True only for a real zod failure.
+ *
+ * `instanceof` rather than a check on `name === "ZodError"` and an `issues`
+ * array. The structural version also matches any plain object shaped like one,
+ * and this is the function that decides what a caller is told — so it would let
+ * `{ name: "ZodError", issues: [{ message: <anything> }] }` written anywhere in
+ * the tree choose its own 400 and its own message. The single-copy assumption
+ * is worth more than the tolerance.
+ */
+function isZodError(error: unknown): error is ZodError {
+  return error instanceof ZodError;
+}
+
 export interface ErrorPayload {
   code: string;
   message: string;
@@ -328,11 +395,15 @@ export interface ErrorPayload {
  * and the contract test throws objects built to get past every other check.
  */
 export function toErrorPayload(error: unknown): ErrorPayload {
-  if (isAppError(error)) {
+  const appError = asAppError(error);
+
+  if (appError) {
     return {
-      code: error.code,
-      message: error.expose ? error.message : ERROR_CATALOGUE.INTERNAL.message,
-      ...(error.details?.length ? { details: error.details } : {}),
+      code: appError.code,
+      message: appError.expose
+        ? appError.message
+        : ERROR_CATALOGUE.INTERNAL.message,
+      ...(appError.details?.length ? { details: appError.details } : {}),
     };
   }
 
@@ -344,5 +415,6 @@ export function toErrorPayload(error: unknown): ErrorPayload {
 
 /** The status a thrown value should be reported as. */
 export function toErrorStatus(error: unknown): number {
-  return isAppError(error) ? error.status : ERROR_CATALOGUE.INTERNAL.status;
+  const appError = asAppError(error);
+  return appError ? appError.status : ERROR_CATALOGUE.INTERNAL.status;
 }

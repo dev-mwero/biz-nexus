@@ -12,10 +12,27 @@ if [ -z "$(git diff --cached --name-only --diff-filter=ACM | grep -vE '\.(md|jso
   exit 0
 fi
 
-echo "pre-commit: running npm run validate"
-if ! npm run validate; then
+# `VALIDATE_SCOPE=fast` runs lint, typecheck, and the unit suite instead of the
+# full coverage run. It exists for the MVP push, where the integration suite is
+# known-red and the deadline is the constraint.
+#
+# It is opt-in and loud on purpose. A hook that quietly checked less would be
+# worse than no hook, because it would report success for a gate it never ran.
+# The default is unchanged, and every fast-scope commit says so in its own
+# message, so the gap is visible in the history rather than only in this file.
+case "${VALIDATE_SCOPE:-full}" in
+  full) validate_script="validate" ;;
+  fast) validate_script="validate:fast" ;;
+  *)
+    echo "pre-commit: VALIDATE_SCOPE must be 'full' or 'fast', got '${VALIDATE_SCOPE}'" >&2
+    exit 1
+    ;;
+esac
+
+echo "pre-commit: running npm run ${validate_script}"
+if ! npm run "${validate_script}"; then
   echo
   echo "pre-commit: validation failed. Nothing was committed." >&2
-  echo "            Run 'npm run validate' to see the failure." >&2
+  echo "            Run 'npm run ${validate_script}' to see the failure." >&2
   exit 1
 fi

@@ -41,7 +41,9 @@ export {
   type CreateOrganizationInput,
   type CreateOrganizationResult,
   createOrganization,
+  listOrganizationsForUser,
   OrganizationCreationError,
+  type UserOrganization,
 } from "./organization.service";
 export {
   type Role,

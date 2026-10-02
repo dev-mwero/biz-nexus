@@ -23,19 +23,63 @@ import { AppError } from "@/shared/errors/app-error";
  * trace that points at neither.
  */
 
+/**
+ * A successful sign-in. `ok: true` is present so the union with `LoginRefusal`
+ * discriminates on one field; without it the route's `if (!outcome.ok)` would be
+ * a test for a property the success shape does not have.
+ */
 export interface LoginResult {
+  ok: true;
   user: User;
 }
+
+/**
+ * A refused sign-in, described without being reported.
+ *
+ * The three reasons are what `withApi` logs and what the audit event records; none
+ * of them reaches the client. `userId` is null exactly when the address was not
+ * registered — the one case where there is no account to attribute the attempt
+ * to, and the case an operator most wants to see, since an unauthenticated
+ * caller naming addresses is what credential stuffing looks like before it
+ * becomes a takeover.
+ *
+ * `locked` is carried rather than folded into `reason`, because the attempt that
+ * trips the lockout is *also* a wrong password, and a union of reasons would have
+ * to drop one of those two facts. `authenticateWithPassword` decides it (see
+ * `password.service.ts`); this only passes it up.
+ */
+export type LoginRefusal = {
+  ok: false;
+  userId: Types.ObjectId | null;
+  reason:
+    | "unknown-account"
+    | "invalid-credentials"
+    | "locked-out"
+    | "suspended";
+  locked: boolean;
+};
 
 /**
  * Verify a password and report success.
  *
  * Every failure - unknown address, wrong password, locked out, suspended -
- * throws the same `UNAUTHENTICATED`. Not because the reasons are unimportant but
- * because they are exactly what an attacker is guessing at: a distinct code or
- * message for "no such account" turns the endpoint into a membership oracle, and
- * a distinct one for "locked out" confirms a correct password to someone who only
- * had the address. The caller learns the difference from the log, not the body.
+ * is rendered as one identical `UNAUTHENTICATED`. Not because the reasons are
+ * unimportant but because they are exactly what an attacker is guessing at: a
+ * distinct code or message for "no such account" turns the endpoint into a
+ * membership oracle, and a distinct one for "locked out" confirms a correct
+ * password to someone who only had the address. The caller learns the difference
+ * from the log and the audit event, not the body.
+ *
+ * **This returns rather than throwing on refusal**, and the route raises the
+ * error. That is a deliberate change of shape from the rest of this file, and the
+ * reason is that the reasons are no longer only for the log: ADR-0006 writes an
+ * `auth.login_failed` row and, on the attempt that trips it, an `auth.lockout`
+ * row, and neither the account nor the lockout flag is reachable from an
+ * exception's message. Putting the throw in the route keeps the enumeration
+ * defence exactly where it was — the response is still one code, one message,
+ * one `internal` — while giving the caller the facts it needs. The alternative
+ * was parsing `AppError.internal` back out of a message, which makes a security
+ * record depend on a human-readable string surviving an edit.
  *
  * The `burnPasswordTiming` call is the other half. Without it an unregistered
  * address returns in the time it takes to miss the index, while a registered one
@@ -62,24 +106,50 @@ export async function loginWithPassword(
   email: string,
   password: string,
   now = new Date(),
-): Promise<LoginResult> {
+): Promise<LoginResult | LoginRefusal> {
   const user = await UserModel.findOne({
     email: email.trim().toLowerCase(),
   }).select("+passwordHash");
 
   if (!user) {
     await burnPasswordTiming(password);
-    throw unauthenticated();
+    return {
+      ok: false,
+      userId: null,
+      reason: "unknown-account",
+      locked: false,
+    };
   }
 
   const outcome = await authenticateWithPassword(user, password, now);
   if (!outcome.ok) {
-    // `reason` distinguishes "invalid-credentials" from "locked-out" from
-    // "suspended" for the caller, and is deliberately dropped here.
-    throw unauthenticated(outcome.reason);
+    return {
+      ok: false,
+      userId: user._id,
+      reason: outcome.reason,
+      locked: outcome.locked,
+    };
   }
 
-  return { user: outcome.user };
+  return { ok: true, user: outcome.user };
+}
+
+/**
+ * The one error a refused sign-in ever becomes.
+ *
+ * Exported so the route throws the identical error this function used to throw
+ * itself — the codes and messages must not be able to drift apart, which is the
+ * entire property `auth.login_failed` is recorded next to.
+ */
+export function unauthenticated(reason?: string): AppError {
+  return new AppError("UNAUTHENTICATED", {
+    message: "Sign in to continue.",
+    // The reason is for the log, never the body: `internal` is not serialised
+    // into the error payload, while `message` is.
+    internal: reason
+      ? `login failed: ${reason}`
+      : "login failed: unknown account",
+  });
 }
 
 /**
@@ -107,15 +177,4 @@ export async function startPasswordReset(
 
   const { token } = await createPasswordResetToken(user._id, requestIp ?? null);
   return { token, userId: user._id };
-}
-
-function unauthenticated(reason?: string): AppError {
-  return new AppError("UNAUTHENTICATED", {
-    message: "Sign in to continue.",
-    // The reason is for the log, never the body: `internal` is not serialised
-    // into the error payload, while `message` is.
-    internal: reason
-      ? `login failed: ${reason}`
-      : "login failed: unknown account",
-  });
 }

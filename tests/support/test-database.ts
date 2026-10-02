@@ -48,6 +48,20 @@ function readSystemBinaryVersion(binary: string): string | undefined {
 
 let replicaSet: MongoMemoryReplSet | undefined;
 
+/** Apply one consistent system-binary selection to every in-memory server. */
+export function createTestMongoOptions() {
+  const systemBinary = findSystemBinary();
+  const systemVersion = systemBinary && readSystemBinaryVersion(systemBinary);
+  return {
+    binary: systemBinary
+      ? {
+          systemBinary,
+          ...(systemVersion ? { version: systemVersion } : {}),
+        }
+      : {},
+  };
+}
+
 /**
  * Boots a single-node replica set and returns its connection string.
  * Idempotent: repeated calls within one process return the same instance.
@@ -57,13 +71,8 @@ export async function startTestDatabase(): Promise<string> {
     return replicaSet.getUri();
   }
 
-  const systemBinary = findSystemBinary();
-  const systemVersion = systemBinary && readSystemBinaryVersion(systemBinary);
-
   replicaSet = await MongoMemoryReplSet.create({
-    binary: systemBinary
-      ? { systemBinary, ...(systemVersion ? { version: systemVersion } : {}) }
-      : {},
+    binary: createTestMongoOptions().binary,
     replSet: { count: 1, storageEngine: "wiredTiger" },
     // Vitest starts one worker per test file, so with the auth contract suites
     // added this is several replica sets booting at once on the same machine.

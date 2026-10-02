@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import {
   type Activity,
   type ActivityDirection,
@@ -81,6 +81,8 @@ export interface TimelineInput {
   organizationId: Types.ObjectId;
   limit?: number;
   before?: Date;
+  /** Cursor-based pagination: activity _id to start after */
+  afterId?: Types.ObjectId;
 }
 
 /** Everything that happened to one record, newest first. */
@@ -92,6 +94,7 @@ export async function timelineForEntity(
       organizationId: input.organizationId,
       "subjects.entityId": input.entityId,
       ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+      ...(input.afterId ? { _id: { $lt: input.afterId } } : {}),
     },
     input.limit,
   );
@@ -105,9 +108,66 @@ export async function organizationFeed(
     {
       organizationId: input.organizationId,
       ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+      ...(input.afterId ? { _id: { $lt: input.afterId } } : {}),
     },
     input.limit,
   );
+}
+
+/**
+ * Cursor-based pagination for organization feed.
+ *
+ * The same filters as {@link organizationFeed}, plus the two the feed UI needs:
+ * a type set and a single actor or owner. Filtering happens before the cursor is
+ * applied rather than after, so `nextCursor` points at the last activity of the
+ * *filtered* page and paging never skips or repeats a row.
+ */
+export async function organizationFeedCursor(
+  input: TimelineInput & {
+    cursor?: string;
+    limit?: number;
+    types?: ActivityType[];
+    actorId?: Types.ObjectId;
+    ownerId?: Types.ObjectId;
+    /** Already-escaped, case-insensitive pattern matched against title and body. */
+    search?: RegExp;
+  },
+): Promise<{ activities: Activity[]; nextCursor: string | null }> {
+  const limit = Math.min(Math.max(input.limit ?? ACTIVITY_PAGE_SIZE, 1), 100);
+
+  const filter: Record<string, unknown> = {
+    organizationId: input.organizationId,
+    ...(input.before ? { occurredAt: { $lt: input.before } } : {}),
+    // `$in` rather than `$eq`, and an absent key rather than `[]`: an empty
+    // `$in` matches nothing, which would silently empty the feed.
+    ...(input.types?.length ? { type: { $in: input.types } } : {}),
+    ...(input.actorId ? { actorId: input.actorId } : {}),
+    ...(input.ownerId ? { ownerId: input.ownerId } : {}),
+    // `body` is nullable, so the alternation rather than a bare pattern: an
+    // absent body must still match its title.
+    ...(input.search
+      ? { $or: [{ title: input.search }, { body: input.search }] }
+      : {}),
+  };
+
+  // If cursor is provided, decode it (it's an _id)
+  if (input.cursor) {
+    filter._id = { $lt: new Types.ObjectId(input.cursor) };
+  }
+
+  const activities = await ActivityModel.find(filter)
+    .sort({ occurredAt: -1, _id: -1 })
+    .limit(limit + 1) // Fetch one extra to determine if there's a next page
+    .lean<Activity[]>()
+    .exec();
+
+  let nextCursor: string | null = null;
+  if (activities.length > limit) {
+    const nextActivity = activities.pop()!;
+    nextCursor = nextActivity._id.toString();
+  }
+
+  return { activities, nextCursor };
 }
 
 /** "My activity": what a member did, not what was attributed to them. */

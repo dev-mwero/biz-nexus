@@ -1,4 +1,5 @@
 import { toPublicUser } from "@/modules/identity";
+import { listOrganizationsForUser } from "@/modules/organizations";
 import { normalizePermissions } from "@/modules/rbac/permissions";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
@@ -16,6 +17,12 @@ import { AppError } from "@/shared/errors/app-error";
  * join one. Returning a permission list computed from a missing role is also
  * genuinely an empty list, not a failure, so the honest answer is `null` there
  * and `[]` for the permissions.
+ *
+ * `organizations` is the list the client renders its switcher from, and
+ * `activeOrganizationId` says which entry is current. Both are returned on the
+ * no-organisation branch too, where the list may be non-empty: a user who was
+ * removed from their active organisation still belongs to others, and the client
+ * needs those to offer a way back rather than only a way to create.
  */
 export const GET = withApi(async (request: Request): Promise<Response> => {
   const guards = guardsFor(request);
@@ -31,6 +38,8 @@ export const GET = withApi(async (request: Request): Promise<Response> => {
     return Response.json({
       data: {
         user: toPublicUser(user),
+        organizations: await listOrganizationsForUser(user._id),
+        activeOrganizationId: null,
         organization: null,
         role: null,
         permissions: [],
@@ -49,6 +58,8 @@ export const GET = withApi(async (request: Request): Promise<Response> => {
   return Response.json({
     data: {
       user: toPublicUser(context.user),
+      organizations: await listOrganizationsForUser(context.user._id),
+      activeOrganizationId: context.organization._id.toString(),
       organization: {
         id: context.organization._id.toString(),
         name: context.organization.name,

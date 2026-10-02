@@ -103,6 +103,10 @@ export const PERMISSIONS = {
   // permission, and adding one is a security decision rather than a feature.
   "auditLogs.read": {},
 
+  // Dashboard and search.
+  "dashboard.read": {},
+  "search.read": {},
+
   "savedViews.read": {},
   "savedViews.create": {},
   "savedViews.update": {},

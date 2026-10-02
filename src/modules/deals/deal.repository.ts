@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { TenantRepository } from "@/db/tenant-repository";
 import {
   type Deal,
@@ -44,14 +44,26 @@ export class DealRepository extends TenantRepository<Deal> {
   }
 
   /**
-   * Find a deal by ID.
+   * Find a deal by ID, lean.
+   *
+   * Named rather than overriding `findById`. The override was reading as a
+   * convenience and was in fact a stack overflow: it shadowed the base method
+   * and called `this.findById`, which resolved to itself, so every read of a
+   * deal recursed until the process died. The base implementation stays the
+   * single one that applies the tenant scope and the foreign-id-returns-null
+   * rule; this only adds `.lean()` for callers that want a plain object.
    */
-  findById(id: Types.ObjectId | string) {
-    return this.findById(id).lean();
+  async findDealById(id: Types.ObjectId | string): Promise<Deal | null> {
+    return this.findById(id).lean<Deal | null>().exec();
   }
 
   /**
    * Create a new deal.
+   *
+   * Applies the column defaults the schema cannot infer from an absent field,
+   * then delegates to the base writer so the scope and the author stamps stay in
+   * one place. `super.create`, not `this.create`, for the same reason as
+   * `findById` above.
    */
   create(input: {
     name: string;
@@ -68,24 +80,28 @@ export class DealRepository extends TenantRepository<Deal> {
     sortOrder?: number;
     tags?: (Types.ObjectId | string)[];
     customFields?: Record<string, unknown>;
-  }) {
-    return this.create({
+  }): ReturnType<TenantRepository<Deal>["create"]> {
+    const status: DealStatus = "OPEN";
+    const toObjectId = (id: Types.ObjectId | string) =>
+      id instanceof Types.ObjectId ? id : new Types.ObjectId(id);
+
+    return super.create({
       name: input.name,
-      companyId: input.companyId ?? null,
-      contactId: input.contactId ?? null,
-      pipelineId: input.pipelineId,
-      stageId: input.stageId,
-      ownerId: input.ownerId,
+      companyId: input.companyId ? toObjectId(input.companyId) : null,
+      contactId: input.contactId ? toObjectId(input.contactId) : null,
+      pipelineId: toObjectId(input.pipelineId),
+      stageId: toObjectId(input.stageId),
+      ownerId: toObjectId(input.ownerId),
       value: input.value ?? 0,
       currency: input.currency ?? "USD",
       probability: input.probability ?? 0,
-      status: "OPEN" as DealStatus,
+      status,
       expectedCloseDate: input.expectedCloseDate ?? null,
       closedAt: null,
       lostReason: null,
       description: input.description ?? null,
       sortOrder: input.sortOrder ?? 0,
-      tags: input.tags ?? [],
+      tags: input.tags?.map(toObjectId) ?? [],
       customFields: input.customFields ?? {},
     });
   }
