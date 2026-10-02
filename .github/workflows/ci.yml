@@ -8,12 +8,16 @@ on:
 
 env:
   NODE_ENV: test
-  MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_test
   APP_URL: http://localhost:3000
   SESSION_SECRET: ci-only-session-secret-not-for-production-123456
   MAIL_DRIVER: console
   MAIL_FROM: "BizNexus CI <no-reply@example.test>"
   RATELIMIT_DRIVER: memory
+  # MONGODB_URI is deliberately unset. Nothing here listens on 27017: the unit
+  # job's tests boot their own MongoMemoryReplSet in tests/global-setup.ts, and
+  # the E2E job's scripts/e2e-server.mjs boots one for the server under test.
+  # Both publish the real URI to their own process. Leaving a hardcoded value
+  # here suggested a service container that nothing was reading.
   # PLAYWRIGHT_BASE_URL is deliberately unset. The E2E job boots its own server
   # through scripts/e2e-server.mjs on port 3100, and playwright.config.ts
   # derives the port it binds from this origin. Pinning it here pointed the
@@ -46,16 +50,17 @@ jobs:
   unit-and-integration:
     name: Unit & Integration Tests
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:8.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # There is deliberately no `services:` block here. tests/global-setup.ts
+    # boots its own MongoMemoryReplSet and hands the connection string to the
+    # workers through MONGODB_URI, which also makes it a replica set — the
+    # services under test need multi-document transactions, and MongoDB only
+    # offers those on one.
+    #
+    # The container this job used to start was never read by anything. Its
+    # replica set was created by a runner-side `mongosh` step, and mongosh is
+    # not installed on the runner, so that step died with exit 127 before a
+    # single test ran. The job pulls a ~100MB image and waits on its health
+    # check to get there.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,15 +73,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Initiate MongoDB replica set
-        run: |
-          mongosh --eval "rs.initiate({
-            _id: 'rs0',
-            members: [{ _id: 0, host: '127.0.0.1:27017' }]
-          })"
-        env:
-          MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_test?replicaSet=rs0
 
       - name: Run tests with coverage
         run: npm run test:coverage
