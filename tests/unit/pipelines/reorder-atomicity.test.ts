@@ -280,23 +280,26 @@ describe("Pipeline reorderStages atomicity", () => {
     );
   });
 
-  it("should generate new _ids for all stages on reorder", async () => {
+  it("should preserve every stage _id when the same keys are reordered", async () => {
     const repo = new PipelineRepository(organizationId, actorId);
     const service = new PipelineService(repo, actorId);
 
-    // Get original stage IDs
     const original = await repo.findByIdWithStages(pipelineId);
-    const originalIds = original!.stages.map((s) => s._id.toString());
+    const idByKeyBefore = Object.fromEntries(
+      original!.stages.map((stage) => [stage.key, stage._id.toString()]),
+    );
 
-    const newStages = [
+    // The same four keys, shuffled. Nothing is added and nothing is removed,
+    // so every stage here is a stage that already existed.
+    const reordered = [
       {
-        key: "LEAD",
-        name: "Lead",
+        key: "LOST",
+        name: "Lost",
         order: 0,
-        probability: 5,
-        color: "slate",
+        probability: 0,
+        color: "red",
         isWon: false,
-        isLost: false,
+        isLost: true,
       },
       {
         key: "WON",
@@ -308,9 +311,99 @@ describe("Pipeline reorderStages atomicity", () => {
         isLost: false,
       },
       {
+        key: "NEW",
+        name: "New",
+        order: 2,
+        probability: 10,
+        color: "slate",
+        isWon: false,
+        isLost: false,
+      },
+      {
+        key: "QUALIFIED",
+        name: "Qualified",
+        order: 3,
+        probability: 25,
+        color: "blue",
+        isWon: false,
+        isLost: false,
+      },
+    ];
+
+    const updated = await service.reorderStages(pipelineId, reordered);
+
+    // Compared per key rather than as a set, because a set comparison passes
+    // when two stages have swapped ids — and a swap is exactly the corruption
+    // this is here to catch.
+    const idByKeyAfter = Object.fromEntries(
+      updated.stages.map((stage) => [stage.key, stage._id.toString()]),
+    );
+    expect(idByKeyAfter).toEqual(idByKeyBefore);
+
+    // The order really did change, so the assertion above is not passing
+    // because nothing moved.
+    expect(updated.stages.map((s) => s.key)).toEqual([
+      "LOST",
+      "WON",
+      "NEW",
+      "QUALIFIED",
+    ]);
+    expect(updated.stages.map((s) => s.order)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("should mint a new _id for a new key and leave the others alone", async () => {
+    const repo = new PipelineRepository(organizationId, actorId);
+    const service = new PipelineService(repo, actorId);
+
+    const original = await repo.findByIdWithStages(pipelineId);
+    const idByKeyBefore = Object.fromEntries(
+      original!.stages.map((stage) => [stage.key, stage._id.toString()]),
+    );
+    const originalIds = Object.values(idByKeyBefore);
+
+    const withNewStage = [
+      {
+        key: "NEW",
+        name: "New",
+        order: 0,
+        probability: 10,
+        color: "slate",
+        isWon: false,
+        isLost: false,
+      },
+      {
+        key: "QUALIFIED",
+        name: "Qualified",
+        order: 1,
+        probability: 25,
+        color: "blue",
+        isWon: false,
+        isLost: false,
+      },
+      // Not a key this pipeline has held before, so it is a new stage and
+      // there is no identity to preserve.
+      {
+        key: "NEGOTIATION",
+        name: "Negotiation",
+        order: 2,
+        probability: 75,
+        color: "orange",
+        isWon: false,
+        isLost: false,
+      },
+      {
+        key: "WON",
+        name: "Won",
+        order: 3,
+        probability: 100,
+        color: "green",
+        isWon: true,
+        isLost: false,
+      },
+      {
         key: "LOST",
         name: "Lost",
-        order: 2,
+        order: 4,
         probability: 0,
         color: "red",
         isWon: false,
@@ -318,11 +411,19 @@ describe("Pipeline reorderStages atomicity", () => {
       },
     ];
 
-    const updated = await service.reorderStages(pipelineId, newStages);
-    const newIds = updated.stages.map((s) => s._id.toString());
+    const updated = await service.reorderStages(pipelineId, withNewStage);
 
-    // All stage IDs should be new (no overlap with original)
-    expect(newIds.every((id) => !originalIds.includes(id))).toBe(true);
+    const idByKeyAfter = Object.fromEntries(
+      updated.stages.map((stage) => [stage.key, stage._id.toString()]),
+    );
+
+    // The keys the pipeline already held keep their own ids...
+    expect(idByKeyAfter.NEW).toBe(idByKeyBefore.NEW);
+    expect(idByKeyAfter.QUALIFIED).toBe(idByKeyBefore.QUALIFIED);
+    expect(idByKeyAfter.WON).toBe(idByKeyBefore.WON);
+    expect(idByKeyAfter.LOST).toBe(idByKeyBefore.LOST);
+    // ...and only the new key gets a fresh one.
+    expect(originalIds).not.toContain(idByKeyAfter.NEGOTIATION);
   });
 
   it("should persist the reordered stages to the database", async () => {
