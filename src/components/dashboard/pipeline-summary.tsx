@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from "@/shared/lib/format";
 
 interface PipelineStageSummary {
   stageId: string;
@@ -14,7 +13,18 @@ interface PipelineStageSummary {
 
 interface PipelineSummaryProps {
   stages: PipelineStageSummary[];
-  currency: string;
+  /**
+   * The sum of `stages`, formatted server-side in the organisation's currency.
+   *
+   * The footer used to add the raw values up here and re-format the result
+   * against a `currency` prop that every call site passed as "USD", while the
+   * rows above it arrived already formatted in the organisation's own currency.
+   * For any non-USD tenant the footer therefore disagreed with the rows it was
+   * summing, and it disagreed by applying a currency conversion to a sum of
+   * amounts that are not convertible — a wrong number, not a wrong format. The
+   * server already knows the total and the currency, so it sends the string.
+   */
+  formattedTotalValue: string;
   loading?: boolean;
 }
 
@@ -22,11 +32,10 @@ const LOADING_ROW_KEYS = ["row-1", "row-2", "row-3", "row-4", "row-5"] as const;
 
 export function PipelineSummary({
   stages,
-  currency,
+  formattedTotalValue,
   loading = false,
 }: PipelineSummaryProps) {
   const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
-  const totalValue = stages.reduce((sum, s) => sum + s.totalValue, 0);
 
   if (loading) {
     return (
@@ -127,7 +136,7 @@ export function PipelineSummary({
                       <span className="sr-only"> total deals</span>
                     </span>
                     <span className="font-mono tabular-nums text-sm font-semibold text-ink-900 dark:text-ink-50">
-                      {formatCurrency(totalValue, currency)}
+                      {formattedTotalValue}
                       <span className="sr-only"> total value</span>
                     </span>
                   </div>

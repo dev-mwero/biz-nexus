@@ -28,13 +28,34 @@ export const GET = withApi(async (request: Request): Promise<Response> => {
 
   const organizationId = context.organization._id;
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // UTC month boundary, not the server's local one.
+  //
+  // A server's local zone is never the right answer for a tenant's calendar
+  // month: it is the answer for whoever deployed the box, so a deal closed at
+  // 23:30 UTC on the 1st silently moves between months when the process moves
+  // to another region, and every "this month" count changes with the
+  // infrastructure. `formatDate` documents the same hazard for display dates.
+  //
+  // UTC is a fixed choice, not the correct one. Per-organisation months need a
+  // timezone per tenant and a tz library to resolve them, which is out of scope
+  // here — treat this as a floor that makes the answer the same on every
+  // deployment, not as timezone support.
+  const startOfMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  // Get the default pipeline for this organization
+  // Get the default pipeline for this organization.
+  //
+  // `deletedAt: null` because `PipelineRepository.findDefault()` adds it, and two
+  // code paths answering "what is this organisation's default pipeline" must
+  // not disagree. Without it the dashboard reports on a deleted pipeline while
+  // every other screen reports that there is none.
   const defaultPipeline = await PipelineModel.findOne({
     organizationId,
     isDefault: true,
+    deletedAt: null,
   }).lean();
 
   if (!defaultPipeline) {
@@ -47,18 +68,18 @@ export const GET = withApi(async (request: Request): Promise<Response> => {
   const stageIdToName = new Map(
     defaultPipeline.stages.map((s) => [s._id.toString(), s.name]),
   );
-  const wonStage = defaultPipeline.stages.find((s) => s.isWon);
-  const lostStage = defaultPipeline.stages.find((s) => s.isLost);
 
+  // No won/lost stage lookup here any more. `status` decides won and lost, so
+  // the counts and the win rate behind them cannot drift apart; a deal sitting
+  // in a non-terminal stage but marked WON is still a won deal.
   const [aggregationResult] = await DealModel.aggregate(
     buildDashboardAggregationPipeline({
       organizationId,
+      pipelineId: defaultPipeline._id,
       now,
       startOfMonth,
       thirtyDaysAgo,
       stageIds,
-      wonStageId: wonStage?._id,
-      lostStageId: lostStage?._id,
       leadCollection: LeadModel.collection.name,
       taskCollection: TaskModel.collection.name,
       activityCollection: ActivityModel.collection.name,
