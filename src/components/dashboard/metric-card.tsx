@@ -4,7 +4,6 @@ import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/cn";
-import { formatCurrency } from "@/shared/lib/format";
 
 interface MetricCardProps {
   title: string;
@@ -13,7 +12,6 @@ interface MetricCardProps {
   trend?: { value: number; label: string };
   icon?: React.ReactNode;
   loading?: boolean;
-  currency?: string;
   compact?: boolean;
 }
 
@@ -24,13 +22,25 @@ export function MetricCard({
   trend,
   icon,
   loading = false,
-  currency = "USD",
   compact = false,
 }: MetricCardProps) {
+  // A bare number carries no unit, so this card does not invent one.
+  //
+  // It used to route any numeric `value` through `formatCurrency`, on the
+  // assumption that a number on a dashboard is money. Most of them are not: two
+  // deals won became "$2.00", which is not a formatting nit but a wrong number
+  // wearing the costume of a right one — and worse than a blank, because it
+  // looks like something the system actually measured.
+  //
+  // Only the caller knows what a figure is, so only the caller may format it.
+  // `formattedValue` is rendered verbatim because the server has already
+  // formatted it in the organization's own currency — reformatting here would
+  // be the same guess one layer down. Everything else falls through as a plain
+  // number in the viewer's locale.
   const displayValue = loading
     ? null
     : (formattedValue ??
-      (typeof value === "number" ? formatCurrency(value, currency) : value));
+      (typeof value === "number" ? value.toLocaleString() : value));
 
   const trendValue = trend?.value ?? 0;
   const trendLabel = trend?.label ?? "";
