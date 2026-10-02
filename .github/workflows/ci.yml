@@ -8,12 +8,20 @@ on:
 
 env:
   NODE_ENV: test
-  MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_test
   APP_URL: http://localhost:3000
   SESSION_SECRET: ci-only-session-secret-not-for-production-123456
   MAIL_DRIVER: console
   MAIL_FROM: "BizNexus CI <no-reply@example.test>"
   RATELIMIT_DRIVER: memory
+  # Nothing listens on 27017 in CI, and this URI is never connected to. It
+  # exists because src/env.ts runs its presence checks during `next build` —
+  # deliberately, since a build missing MONGODB_URI or SESSION_SECRET should
+  # fail — so the Build job needs the name present, not a reachable server.
+  #
+  # The two jobs that talk to MongoDB publish their own URI at runtime and
+  # overwrite this: tests/global-setup.ts boots a MongoMemoryReplSet for the
+  # unit suite, and scripts/e2e-server.mjs boots one for the E2E server.
+  MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_build
   # PLAYWRIGHT_BASE_URL is deliberately unset. The E2E job boots its own server
   # through scripts/e2e-server.mjs on port 3100, and playwright.config.ts
   # derives the port it binds from this origin. Pinning it here pointed the
@@ -46,16 +54,17 @@ jobs:
   unit-and-integration:
     name: Unit & Integration Tests
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:8.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # There is deliberately no `services:` block here. tests/global-setup.ts
+    # boots its own MongoMemoryReplSet and hands the connection string to the
+    # workers through MONGODB_URI, which also makes it a replica set — the
+    # services under test need multi-document transactions, and MongoDB only
+    # offers those on one.
+    #
+    # The container this job used to start was never read by anything. Its
+    # replica set was created by a runner-side `mongosh` step, and mongosh is
+    # not installed on the runner, so that step died with exit 127 before a
+    # single test ran. The job pulls a ~100MB image and waits on its health
+    # check to get there.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,24 +78,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initiate MongoDB replica set
-        run: |
-          mongosh --eval "rs.initiate({
-            _id: 'rs0',
-            members: [{ _id: 0, host: '127.0.0.1:27017' }]
-          })"
-        env:
-          MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_test?replicaSet=rs0
-
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      # Reporting, not gating. The coverage gate is the threshold check inside
+      # `npm run test:coverage` one step above, which has already run and passed
+      # by the time this step is reached.
+      #
+      # The step is skipped when CODECOV_TOKEN is absent rather than failing.
+      # The repository has no token configured, and Codecov rejects tokenless
+      # uploads ("Token required - not valid tokenless upload"), so a hard
+      # `fail_ci_if_error: true` meant a missing third-party credential failed
+      # every run after the tests had already succeeded.
+      #
+      # The secret is passed through `env` rather than referenced in the `if`
+      # directly, which GitHub does not permit. Add the secret and this step
+      # starts running with no further change.
       - name: Upload coverage to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Report coverage upload status
+        if: ${{ env.CODECOV_TOKEN == '' }}
+        run: |
+          echo "::notice::Skipping the Codecov upload: CODECOV_TOKEN is not set."
+          echo "Coverage was gated by test:coverage; only the upload is skipped."
 
   build:
     name: Build
