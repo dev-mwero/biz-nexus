@@ -109,7 +109,7 @@ export function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
             <PipelineSummary stages={[]} formattedTotalValue="" loading />
-            <OverdueTasks count={0} tasks={[]} loading />
+            <OverdueTasks count={0} loading />
           </div>
           <div className="lg:col-span-1">
             <RecentActivity activities={[]} loading />
@@ -280,7 +280,7 @@ export function Dashboard() {
             stages={pipelineSummary}
             formattedTotalValue={metricCards.formattedPipelineValue}
           />
-          <OverdueTasks count={overdueTasks} tasks={[]} />
+          <OverdueTasks count={overdueTasks} />
         </section>
         <section aria-labelledby="activity-heading" className="lg:col-span-1">
           <h2 id="activity-heading" className="sr-only">

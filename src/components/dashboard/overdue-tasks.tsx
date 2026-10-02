@@ -1,64 +1,52 @@
 "use client";
 
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock } from "lucide-react";
+import { ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/cn";
-import { formatRelativeTime } from "@/shared/lib/format";
-
-interface OverdueTask {
-  _id: string;
-  title: string;
-  dueAt: string | null;
-  status: string;
-  priority: string;
-  assigneeId?: string | null;
-}
 
 interface OverdueTasksProps {
   count: number;
-  tasks: OverdueTask[];
   loading?: boolean;
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  URGENT: "Urgent priority",
-  HIGH: "High priority",
-  MEDIUM: "Medium priority",
-  LOW: "Low priority",
-};
-
-// Placeholder rows are a fixed-length skeleton, so the slot is the identity.
-const LOADING_ROW_KEYS = ["skeleton-1", "skeleton-2", "skeleton-3"] as const;
-
-export function OverdueTasks({
-  count,
-  tasks,
-  loading = false,
-}: OverdueTasksProps) {
+/**
+ * The count is the whole story, because the count is all there is.
+ *
+ * The dashboard endpoint's `overdueTasks` facet is a `$count` pipeline stage: it
+ * returns how many open tasks are past their due date and no task documents
+ * with it. This card used to take a `tasks` prop and render the first five rows
+ * of it, but the only caller passed an empty array and no query in the codebase
+ * could ever fill it — so any non-zero count produced a title badge reading "3
+ * overdue tasks" above a completely empty body, with the "View all" link gated
+ * behind a `tasks.length > 5` that could never be satisfied either.
+ *
+ * Rather than render a list the system cannot deliver, the count is the
+ * primary content and the card points at the tasks page, which is where the
+ * detail actually lives. Adding a facet to return the rows is a real fix, but
+ * it belongs to the API rather than to a presentational component, and until
+ * then the honest summary is worth more than an empty promise.
+ */
+export function OverdueTasks({ count, loading = false }: OverdueTasksProps) {
   if (loading) {
     return (
       <Card variant="outlined" aria-hidden="true">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle
-              className="size-4 text-attention"
-              aria-hidden="true"
-            />
+            <AlertTriangle className="size-4" aria-hidden="true" />
             Overdue Tasks
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3" aria-live="polite" aria-atomic="true">
-            {LOADING_ROW_KEYS.map((key) => (
-              <div
-                key={key}
-                className="flex items-center gap-3 p-3 bg-surface-sunken dark:bg-surface-raised rounded-lg"
-              >
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-24 ml-auto" />
-              </div>
-            ))}
+          {/* The skeleton mirrors the real body — a figure over an action —
+              because a list-shaped placeholder in front of a single number
+              spends a screen's worth of vertical space promising rows that
+              never arrive, then yanks the card out from under the reader. */}
+          <div className="flex flex-col items-center gap-3 py-6">
+            <Skeleton className="h-10 w-16" />
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-8 w-28" />
           </div>
         </CardContent>
       </Card>
@@ -77,12 +65,6 @@ export function OverdueTasks({
             aria-hidden="true"
           />
           Overdue Tasks
-          {count > 0 && (
-            <span className="ml-auto font-mono tabular-nums text-sm font-semibold text-attention">
-              {count}
-              <span className="sr-only"> overdue tasks</span>
-            </span>
-          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -99,60 +81,24 @@ export function OverdueTasks({
             <p className="text-ink-500 dark:text-ink-400">No overdue tasks</p>
           </div>
         ) : (
-          <ul className="space-y-2" aria-label="Overdue tasks">
-            {tasks.slice(0, 5).map((task) => (
-              <li
-                key={task._id}
-                className={cn(
-                  "flex items-center gap-3 p-3 bg-surface-sunken dark:bg-surface-raised rounded-lg",
-                  task.priority === "URGENT" && "border-l-2 border-critical",
-                  task.priority === "HIGH" && "border-l-2 border-attention",
-                )}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink-900 dark:text-ink-50 truncate">
-                    {task.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-ink-500 dark:text-ink-400">
-                    <span
-                      className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-medium uppercase",
-                        task.priority === "URGENT" &&
-                          "bg-critical-surface text-critical",
-                        task.priority === "HIGH" &&
-                          "bg-attention-surface text-attention",
-                        task.priority === "MEDIUM" &&
-                          "bg-info-surface text-info",
-                        task.priority === "LOW" &&
-                          "bg-neutral-surface text-ink-500",
-                      )}
-                    >
-                      <span aria-hidden="true">{task.priority}</span>
-                      <span className="sr-only">
-                        {PRIORITY_LABELS[task.priority] ?? task.priority}
-                      </span>
-                    </span>
-                    {task.dueAt && (
-                      <time dateTime={task.dueAt} className="font-mono">
-                        Due {formatRelativeTime(task.dueAt)}
-                      </time>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-
-            {tasks.length > 5 && (
-              <li className="text-center pt-2">
-                <a
-                  href="/tasks?filter=overdue"
-                  className="text-sm text-info hover:underline font-medium"
-                >
-                  View all {tasks.length} overdue tasks
-                </a>
-              </li>
-            )}
-          </ul>
+          <div
+            className="flex flex-col items-center gap-3 py-6 text-center"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <p className="font-mono text-4xl font-semibold tabular-nums text-attention">
+              {count.toLocaleString()}
+            </p>
+            <p className="text-sm text-ink-500 dark:text-ink-400">
+              {count === 1
+                ? "task is past its due date"
+                : "tasks are past their due dates"}
+            </p>
+            <ButtonLink href="/tasks" variant="secondary" size="sm">
+              View tasks
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </ButtonLink>
+          </div>
         )}
       </CardContent>
     </Card>
