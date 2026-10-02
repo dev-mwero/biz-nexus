@@ -119,17 +119,13 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: build
-    services:
-      mongodb:
-        image: mongo:8.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"localhost:27017\" }] }) }'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-        command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    # There is deliberately no `services:` block here. scripts/e2e-server.mjs
+    # starts its own single-node replica set, which is what the
+    # transaction-using services need, so nothing in this job reads a
+    # MONGODB_URI. The replica set flags that used to be attempted here via
+    # `command:` were never valid — a services block accepts only image, ports,
+    # options, env, volumes and credentials — and they were why the whole
+    # workflow failed to parse, taking every job down with it.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
