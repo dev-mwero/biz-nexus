@@ -10,12 +10,17 @@ import { defineConfig, devices } from "@playwright/test";
  * production build it just made, and a running dev server neither breaks the
  * suite nor is disturbed by it.
  */
-const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
-
 // Must match the server's APP_URL origin: every mutating API route checks the
 // request Origin against it. `localhost` is the host src/env.ts allows over
 // plain HTTP in production, which is how the E2E server boots.
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3100";
+
+// The port the server binds is read back out of the base URL rather than
+// derived separately. CI sets PLAYWRIGHT_BASE_URL, and when the two were
+// computed independently the server bound one port while Playwright polled
+// another, so the run died on a 120s webServer timeout instead of a test
+// failure. One origin, one port, no way to disagree.
+const port = new URL(baseURL).port || "3000";
 
 /**
  * Test-only session signing key.

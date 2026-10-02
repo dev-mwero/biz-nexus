@@ -14,7 +14,11 @@ env:
   MAIL_DRIVER: console
   MAIL_FROM: "BizNexus CI <no-reply@example.test>"
   RATELIMIT_DRIVER: memory
-  PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+  # PLAYWRIGHT_BASE_URL is deliberately unset. The E2E job boots its own server
+  # through scripts/e2e-server.mjs on port 3100, and playwright.config.ts
+  # derives the port it binds from this origin. Pinning it here pointed the
+  # suite at a port nothing was listening on, which surfaced as a 120s
+  # webServer timeout rather than a test failure.
 
 jobs:
   lint-and-typecheck:
@@ -136,11 +140,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: next-build
-          path: .next/
+      # No build artifact is downloaded here. `npm run test:e2e` builds into
+      # `.next-e2e` itself, and downloading the build job's `.next` would put
+      # an artefact in the tree that nothing reads.
 
       - name: Install dependencies
         run: npm ci
@@ -151,8 +153,11 @@ jobs:
       - name: Run E2E tests
         run: npm run test:e2e
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
-          MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_e2e?replicaSet=rs0
+          # MONGODB_URI is deliberately unset too. scripts/e2e-server.mjs starts
+          # its own single-node replica set and passes that URI to the server,
+          # which is what the transaction-using services need. The service
+          # container above is kept for the unit-and-integration job, which
+          # does read this variable.
 
       - name: Upload Playwright report on failure
         if: failure()
