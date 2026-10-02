@@ -102,14 +102,53 @@ export class PipelineRepository extends TenantRepository<Pipeline> {
    * Atomically replace the entire stages array.
    * This is the only way to reorder, add, remove, or rename stages.
    * Returns the updated pipeline with new stages.
+   *
+   * Stage identity is resolved here, from the pipeline's own current stages,
+   * rather than from a pipeline the caller happens to be holding. The service
+   * does have one in hand from its `findById` — but it is a snapshot taken for
+   * a different reason, and a repository method that trusted a caller-supplied
+   * copy of the state it is about to overwrite would be correct only for as
+   * long as every caller remembered to pass it.
+   *
+   * The read that resolves identity and the write that applies it are not one
+   * atomic operation, so two reorders issued concurrently can both resolve
+   * against the same pre-state and the later write wins on content. That is not
+   * a new hazard — the array was already last-write-wins, and the test suite
+   * pins that — and it cannot invalidate an id the winner reused: a key that
+   * either reorder carried keeps the id it arrived with. Closing the window
+   * entirely needs a version guard on the pipeline, which is out of scope.
    */
   async replaceStages(
     id: Types.ObjectId | string,
     stages: Omit<PipelineStage, "_id">[],
   ): Promise<Pipeline | null> {
+    // `Deal.stageId` is a foreign key into `stages._id`, so an id is not a
+    // cosmetic detail of a reorder. `key` is the identity the schema already
+    // promises ("Machine key, stable across renames"), and the client contract
+    // offers no alternative: both stage-writing endpoints take
+    // `Omit<PipelineStage, "_id">[]`, so a client cannot ask to keep an id even
+    // if it wanted to. This method used to mint a new ObjectId for every stage
+    // on every call, which is what let one reorder silently detach every deal
+    // in the pipeline — the old ids were unrecoverable and no repair path
+    // existed, because nothing had ever recorded the mapping.
+    const current = await this.findById(id, {
+      projection: { stages: 1 },
+    }).lean();
+    const idByKey = new Map(
+      (current?.stages ?? []).map((stage) => [stage.key, stage._id]),
+    );
+
+    // Keys match as exact strings, deliberately. Nothing in the codebase
+    // normalises case or separators, so "QUALIFIED" and "Qualified" are two
+    // different keys and the second one is a new stage: a client that changes a
+    // key's casing is performing a delete plus a create, and the deals on the
+    // old stage are orphaned. That is a consequence of the identity rule, not
+    // an accident of it, so it is stated here rather than left to be
+    // discovered. Constraining the key format to make it unrepresentable is a
+    // separate change and was not made here.
     const stagesWithIds = stages.map((stage) => ({
       ...stage,
-      _id: new Types.ObjectId(),
+      _id: idByKey.get(stage.key) ?? new Types.ObjectId(),
     }));
 
     const update = { $set: { stages: stagesWithIds } };

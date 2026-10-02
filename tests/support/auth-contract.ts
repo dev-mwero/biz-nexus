@@ -121,6 +121,31 @@ export function authedPost(
   });
 }
 
+/**
+ * A JSON PATCH, addressed from the app root rather than from the auth base.
+ *
+ * Not `postJson` with a different verb: that one is scoped to `/api/v1/auth`,
+ * which is the wrong prefix for the one caller of this that is not an auth route,
+ * and a helper that silently builds `/api/v1/auth/api/v1/deals/7` is a helper
+ * that hides which URL a test actually hit.
+ */
+export function patchJson(
+  route: string,
+  body: unknown,
+  init: RequestInit = {},
+): Request {
+  return new Request(`${ORIGIN}${route}`, {
+    method: "PATCH",
+    ...json(body),
+    ...init,
+    headers: {
+      origin: ORIGIN,
+      "content-type": "application/json",
+      ...init.headers,
+    },
+  });
+}
+
 export interface Envelope<T = Record<string, unknown>> {
   data?: T;
   error?: {

@@ -34,6 +34,16 @@ interface DashboardData {
   }>;
 }
 
+const METRIC_GRID = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3";
+/**
+ * Five metrics in a grid of four left a row with one card in it and three empty
+ * cells, which reads as a failed render rather than a layout. Three columns
+ * fills every cell at `lg` when the fifth card spans two, and the same span
+ * makes it full-width at `sm` — the odd card out is the one that stretches, so
+ * the raggedness lands somewhere deliberate instead of at the end of the grid.
+ */
+const WIDE_METRIC_CARD = "sm:col-span-2 lg:col-span-2";
+
 export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,19 +98,17 @@ export function Dashboard() {
           </Button>
         </div>
 
-        <section
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          aria-label="Metric cards"
-        >
+        <section className={METRIC_GRID} aria-label="Metric cards">
           <MetricCardSkeleton />
           <MetricCardSkeleton />
           <MetricCardSkeleton />
           <MetricCardSkeleton />
+          <MetricCardSkeleton className={WIDE_METRIC_CARD} />
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
-            <PipelineSummary stages={[]} currency="USD" loading />
+            <PipelineSummary stages={[]} formattedTotalValue="" loading />
             <OverdueTasks count={0} loading />
           </div>
           <div className="lg:col-span-1">
@@ -171,7 +179,7 @@ export function Dashboard() {
         <h2 id="metrics-heading" className="sr-only">
           Key Metrics
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={METRIC_GRID}>
           <MetricCard
             title="Deals Won This Month"
             value={metricCards.dealsWonThisMonth}
@@ -237,6 +245,29 @@ export function Dashboard() {
               </svg>
             }
           />
+          <MetricCard
+            // Win rate was computed, rounded and shipped in the payload since
+            // before any of these cards existed, and rendered by none of them.
+            // That is the metric that would have made the old contradiction
+            // visible — the two counts could not add up to its denominator — so
+            // hiding it left the inconsistency with nothing to expose it.
+            title="Win Rate"
+            value={`${metricCards.winRate}%`}
+            className={WIDE_METRIC_CARD}
+            icon={
+              <svg
+                className="text-positive"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="4" />
+              </svg>
+            }
+          />
         </div>
       </section>
 
@@ -245,7 +276,10 @@ export function Dashboard() {
           <h2 id="pipeline-heading" className="sr-only">
             Pipeline & Tasks
           </h2>
-          <PipelineSummary stages={pipelineSummary} currency="USD" />
+          <PipelineSummary
+            stages={pipelineSummary}
+            formattedTotalValue={metricCards.formattedPipelineValue}
+          />
           <OverdueTasks count={overdueTasks} />
         </section>
         <section aria-labelledby="activity-heading" className="lg:col-span-1">

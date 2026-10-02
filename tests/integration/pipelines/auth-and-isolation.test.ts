@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectToDatabase, disconnectDatabase } from "@/db/connection";
+import { DealModel } from "@/modules/deals/deal.model";
 import { UserModel } from "@/modules/identity/user.model";
 import { MembershipModel } from "@/modules/organizations/membership.model";
 import { OrganizationModel } from "@/modules/organizations/organization.model";
@@ -116,6 +117,7 @@ describe("Pipelines integration: tenant isolation + service logic", () => {
   });
 
   afterEach(async () => {
+    await DealModel.deleteMany({});
     await PipelineModel.deleteMany({});
     await MembershipModel.deleteMany({});
     await RoleModel.deleteMany({});
@@ -360,6 +362,234 @@ describe("Pipelines integration: tenant isolation + service logic", () => {
 
       const all = await service.list();
       expect(all).toHaveLength(2);
+    });
+  });
+
+  describe("Deal stage integrity across a reorder", () => {
+    let pipelineId: Types.ObjectId;
+    let stageIdByKey: Record<string, Types.ObjectId>;
+
+    beforeEach(async () => {
+      const stages = [
+        {
+          _id: new Types.ObjectId(),
+          key: "NEW",
+          name: "New",
+          order: 0,
+          probability: 10,
+          color: "slate",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          _id: new Types.ObjectId(),
+          key: "QUALIFIED",
+          name: "Qualified",
+          order: 1,
+          probability: 25,
+          color: "blue",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          _id: new Types.ObjectId(),
+          key: "PROPOSAL",
+          name: "Proposal",
+          order: 2,
+          probability: 50,
+          color: "amber",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          _id: new Types.ObjectId(),
+          key: "WON",
+          name: "Won",
+          order: 3,
+          probability: 100,
+          color: "green",
+          isWon: true,
+          isLost: false,
+        },
+        {
+          _id: new Types.ObjectId(),
+          key: "LOST",
+          name: "Lost",
+          order: 4,
+          probability: 0,
+          color: "red",
+          isWon: false,
+          isLost: true,
+        },
+      ];
+
+      const pipeline = await PipelineModel.create({
+        organizationId: org1,
+        name: "Deal Pipeline",
+        isDefault: false,
+        order: 0,
+        stages,
+        createdBy: user1,
+        updatedBy: user1,
+      });
+      pipelineId = pipeline._id;
+      stageIdByKey = Object.fromEntries(
+        stages.map((stage) => [stage.key, stage._id]),
+      );
+    });
+
+    it("should leave a deal's stage resolvable after the pipeline is reordered", async () => {
+      const repo = new PipelineRepository(org1, user1);
+      const service = new PipelineService(repo, user1);
+
+      const deal = await DealModel.create({
+        organizationId: org1,
+        name: "Deal in Proposal",
+        pipelineId,
+        stageId: stageIdByKey.PROPOSAL,
+        ownerId: user1,
+        value: 10000,
+        createdBy: user1,
+        updatedBy: user1,
+      });
+
+      // Every key survives; only the positions change.
+      await service.reorderStages(pipelineId, [
+        {
+          key: "WON",
+          name: "Won",
+          order: 0,
+          probability: 100,
+          color: "green",
+          isWon: true,
+          isLost: false,
+        },
+        {
+          key: "LOST",
+          name: "Lost",
+          order: 1,
+          probability: 0,
+          color: "red",
+          isWon: false,
+          isLost: true,
+        },
+        {
+          key: "PROPOSAL",
+          name: "Proposal",
+          order: 2,
+          probability: 50,
+          color: "amber",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          key: "QUALIFIED",
+          name: "Qualified",
+          order: 3,
+          probability: 25,
+          color: "blue",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          key: "NEW",
+          name: "New",
+          order: 4,
+          probability: 10,
+          color: "slate",
+          isWon: false,
+          isLost: false,
+        },
+      ]);
+
+      // The same lookup `DealService.create` and `moveDeal` use to decide
+      // whether a stage belongs to a pipeline. It returned null after any
+      // reorder before stages kept their identity, which left the deal
+      // invisible to every screen that groups by stage and unresolvable
+      // through the only API that would have let it be moved somewhere safe.
+      const stage = await repo.getStage(pipelineId, deal.stageId);
+      expect(stage).not.toBeNull();
+      expect(stage?.key).toBe("PROPOSAL");
+      expect(stage?.order).toBe(2);
+    });
+
+    it("should orphan the deals on a stage whose key is dropped from the payload", async () => {
+      // Known consequence, pinned deliberately rather than left to be
+      // rediscovered. Dropping a key is a genuine delete — a stage the caller
+      // has decided not to have — and nothing reassigns the deals that were on
+      // it, so they keep pointing at an id the pipeline no longer contains and
+      // disappear from every stage-grouped read. This is a decision, not an
+      // oversight: whether to refuse the removal, or to move those deals to a
+      // stage the caller names, is a product call that has not been made. Note
+      // that `PipelineRepository.hasDeals` answers at pipeline level, so it
+      // cannot distinguish "this pipeline has deals" from "this stage has deals"
+      // and would not be the right guard here as written.
+      const repo = new PipelineRepository(org1, user1);
+      const service = new PipelineService(repo, user1);
+
+      const deal = await DealModel.create({
+        organizationId: org1,
+        name: "Deal in Proposal",
+        pipelineId,
+        stageId: stageIdByKey.PROPOSAL,
+        ownerId: user1,
+        value: 10000,
+        createdBy: user1,
+        updatedBy: user1,
+      });
+
+      // PROPOSAL is gone from the payload; everything else stays.
+      await service.reorderStages(pipelineId, [
+        {
+          key: "NEW",
+          name: "New",
+          order: 0,
+          probability: 10,
+          color: "slate",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          key: "QUALIFIED",
+          name: "Qualified",
+          order: 1,
+          probability: 25,
+          color: "blue",
+          isWon: false,
+          isLost: false,
+        },
+        {
+          key: "WON",
+          name: "Won",
+          order: 2,
+          probability: 100,
+          color: "green",
+          isWon: true,
+          isLost: false,
+        },
+        {
+          key: "LOST",
+          name: "Lost",
+          order: 3,
+          probability: 0,
+          color: "red",
+          isWon: false,
+          isLost: true,
+        },
+      ]);
+
+      // The other stages kept their ids, so only the deals on the removed
+      // stage are the ones left dangling.
+      expect(await repo.getStage(pipelineId, stageIdByKey.NEW)).not.toBeNull();
+      expect(await repo.getStage(pipelineId, stageIdByKey.LOST)).not.toBeNull();
+      expect(await repo.getStage(pipelineId, deal.stageId)).toBeNull();
+
+      // The deal document itself is untouched — it is a dangling foreign key,
+      // not a cascade.
+      const stillThere = await DealModel.findById(deal._id).lean();
+      expect(stillThere?.stageId.toString()).toBe(
+        stageIdByKey.PROPOSAL.toString(),
+      );
     });
   });
 

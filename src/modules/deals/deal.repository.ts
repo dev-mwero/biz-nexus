@@ -5,7 +5,57 @@ import {
   DealModel,
   type DealStatus,
 } from "@/modules/deals/deal.model";
-import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
+
+export interface DealUpdatePayload {
+  name?: string;
+  companyId?: Types.ObjectId | string | null;
+  contactId?: Types.ObjectId | string | null;
+  ownerId?: Types.ObjectId | string;
+  value?: number;
+  currency?: string;
+  probability?: number;
+  expectedCloseDate?: Date | null;
+  description?: string | null;
+  tags?: (Types.ObjectId | string)[];
+  customFields?: Record<string, unknown>;
+}
+
+/**
+ * The fields `PATCH /api/v1/deals/:id` is allowed to write.
+ *
+ * There are three lists of these fields and they cannot become one, because each
+ * is authoritative for a different moment and the other two cannot see it:
+ *
+ * - `updateDealBody` in `deal.schemas` is authoritative for the *wire*. It runs
+ *   first, it is the only one that sees the request as bytes, and its `strict`
+ *   object is what makes an unrecognised key a 422 rather than a silent drop.
+ * - This tuple is authoritative for *compile time*, because `DealUpdatePayload`
+ *   above is checked against it. The `satisfies` catches a field named here that
+ *   the payload does not have, which would otherwise be a field the repository
+ *   refuses to type but the service still copies. The other direction - a field
+ *   added to the payload and forgotten here - is deliberately not asserted: it
+ *   fails closed, because the service rejects anything absent from this tuple,
+ *   so the worst case is a field nobody can set rather than one nobody can stop.
+ * - `EDITABLE_FIELD_SET` in `deal.service` is authoritative for *runtime*. A
+ *   zod schema and a TypeScript type both vanish the moment the request is
+ *   parsed, and the service is callable from inside the process by anything at
+ *   all. The check that actually holds when a caller skips the route is here.
+ */
+export const DEAL_EDITABLE_FIELDS = [
+  "name",
+  "companyId",
+  "contactId",
+  "ownerId",
+  "value",
+  "currency",
+  "probability",
+  "expectedCloseDate",
+  "description",
+  "tags",
+  "customFields",
+] as const satisfies readonly (keyof DealUpdatePayload)[];
+
+export type DealEditableField = (typeof DEAL_EDITABLE_FIELDS)[number];
 
 /**
  * Repository for deal operations.
@@ -107,9 +157,13 @@ export class DealRepository extends TenantRepository<Deal> {
   }
 
   /**
-   * Update a deal.
+   * Update a deal with an allowlisted set of editable fields.
+   *
+   * `Partial<DealUpdatePayload>` rather than the payload type itself, so that
+   * `organizationId` and the rest of the server-owned fields are not merely
+   * unused here but unrepresentable in the argument.
    */
-  update(id: Types.ObjectId | string, update: Record<string, unknown>) {
+  update(id: Types.ObjectId | string, update: Partial<DealUpdatePayload>) {
     return this.findByIdAndUpdate(id, { $set: update });
   }
 

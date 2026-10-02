@@ -76,6 +76,61 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
+/**
+ * Run the aggregation the dashboard endpoint actually runs.
+ *
+ * Every assertion in this file goes through here rather than through a
+ * hand-written `$facet`. A hand-written facet keeps passing while the shipped
+ * pipeline regresses, because it is a second implementation of the same
+ * question that nothing compares to the first — which is how a pipeline could
+ * contradict itself for months while the suite reported green.
+ */
+async function aggregateDashboard(now: Date, startOfMonth: Date) {
+  const [result] = await DealModel.aggregate(
+    buildDashboardAggregationPipeline({
+      organizationId: orgId,
+      pipelineId,
+      now,
+      startOfMonth,
+      thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      stageIds,
+      leadCollection: LeadModel.collection.name,
+      taskCollection: TaskModel.collection.name,
+      activityCollection: ActivityModel.collection.name,
+    }),
+  );
+
+  return result;
+}
+
+/** A deal in a second pipeline of the same organisation. */
+async function createSecondaryPipeline() {
+  const pipeline = await PipelineModel.create({
+    organizationId: orgId,
+    name: "Renewals Pipeline",
+    isDefault: false,
+    stages: [
+      {
+        _id: new mongoose.Types.ObjectId(),
+        key: "INTRO",
+        name: "Intro",
+        order: 0,
+      },
+      {
+        _id: new mongoose.Types.ObjectId(),
+        key: "RENEWED",
+        name: "Renewed",
+        order: 1,
+        isWon: true,
+      },
+    ],
+    createdBy: userId,
+    updatedBy: userId,
+  });
+
+  return pipeline;
+}
+
 describe("Dashboard Round-trip", () => {
   it("should aggregate dashboard metrics in single $facet query", async () => {
     const now = new Date();
@@ -218,20 +273,7 @@ describe("Dashboard Round-trip", () => {
     ]);
 
     // Exercise the same aggregation builder used by the dashboard endpoint.
-    const [result] = await DealModel.aggregate(
-      buildDashboardAggregationPipeline({
-        organizationId: orgId,
-        now,
-        startOfMonth,
-        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-        stageIds,
-        wonStageId: stageIds[4],
-        lostStageId: stageIds[5],
-        leadCollection: LeadModel.collection.name,
-        taskCollection: TaskModel.collection.name,
-        activityCollection: ActivityModel.collection.name,
-      }),
-    );
+    const result = await aggregateDashboard(now, startOfMonth);
 
     // Verify results
     expect(result.pipelineSummary).toHaveLength(2); // Two stages with open deals
@@ -246,20 +288,7 @@ describe("Dashboard Round-trip", () => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [result] = await DealModel.aggregate(
-      buildDashboardAggregationPipeline({
-        organizationId: orgId,
-        now,
-        startOfMonth,
-        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-        stageIds,
-        wonStageId: stageIds[4],
-        lostStageId: stageIds[5],
-        leadCollection: LeadModel.collection.name,
-        taskCollection: TaskModel.collection.name,
-        activityCollection: ActivityModel.collection.name,
-      }),
-    );
+    const result = await aggregateDashboard(now, startOfMonth);
 
     expect(result.pipelineSummary).toHaveLength(0);
     expect(result.wonThisMonth[0]?.total).toBeUndefined();
@@ -300,18 +329,7 @@ describe("Dashboard Round-trip", () => {
       },
     ]);
 
-    const [result] = await DealModel.aggregate(
-      buildDashboardAggregationPipeline({
-        organizationId: orgId,
-        now,
-        startOfMonth,
-        thirtyDaysAgo: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-        stageIds,
-        leadCollection: LeadModel.collection.name,
-        taskCollection: TaskModel.collection.name,
-        activityCollection: ActivityModel.collection.name,
-      }),
-    );
+    const result = await aggregateDashboard(now, startOfMonth);
 
     expect(result.leadConversion[0]?.total).toBe(2);
     expect(result.leadConversion[0]?.converted).toBe(1);
@@ -360,31 +378,193 @@ describe("Dashboard Round-trip", () => {
       },
     ]);
 
-    const [result] = await DealModel.aggregate([
-      { $match: { organizationId: orgId } },
-      {
-        $facet: {
-          winRate: [
-            {
-              $match: {
-                status: { $in: ["WON", "LOST"] },
-                closedAt: { $gte: startOfMonth },
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: 1 },
-                won: { $sum: { $cond: [{ $eq: ["$status", "WON"] }, 1, 0] } },
-              },
-            },
-          ],
-        },
-      },
-    ]);
+    // Through the shipped builder, where this fixture belongs: the version of this
+    // test that ran a hand-written `$facet` asserted the same two numbers
+    // without touching the code the endpoint calls, so it stayed green through a
+    // regression in every facet around it.
+    const result = await aggregateDashboard(now, startOfMonth);
 
     expect(result.winRate[0]?.total).toBe(3);
     expect(result.winRate[0]?.won).toBe(2);
     // Win rate = 2/3 = 66.7%
+  });
+});
+
+describe("Dashboard metric consistency", () => {
+  // The fixtures below are the ones the shipped suite was missing. Every deal
+  // in "Dashboard Round-trip" sits in the default pipeline, in the stage its
+  // `status` implies — which is exactly the shape where the pipeline cannot
+  // contradict itself, so a suite built from it can stay green while the screen
+  // does. These put the deals where a real tenant puts them: statuses and stage
+  // ids that disagree, a second pipeline, and a stage id left behind by a
+  // reorder.
+
+  it("counts won and lost from status alone, so the two cards add up to the win rate denominator", async () => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const midMonth = new Date(startOfMonth.getTime() + 86400000);
+
+    // A deal marked WON but left in a mid-pipeline stage, and one marked LOST
+    // sitting in Proposal. `status` is written independently of the stage: an
+    // import sets one, a bulk edit sets the other, and a stage reorder rewrites
+    // the stage ids of every deal in the pipeline while leaving `status` alone.
+    await DealModel.create([
+      {
+        organizationId: orgId,
+        name: "Won but still qualified",
+        value: 10000,
+        status: "WON",
+        stageId: stageIds[1],
+        pipelineId,
+        ownerId: userId,
+        closedAt: midMonth,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      {
+        organizationId: orgId,
+        name: "Lost while in proposal",
+        value: 5000,
+        status: "LOST",
+        stageId: stageIds[2],
+        pipelineId,
+        ownerId: userId,
+        closedAt: midMonth,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      {
+        organizationId: orgId,
+        name: "Won in the won stage",
+        value: 20000,
+        status: "WON",
+        stageId: stageIds[4],
+        pipelineId,
+        ownerId: userId,
+        closedAt: midMonth,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      {
+        organizationId: orgId,
+        name: "Lost in the lost stage",
+        value: 5000,
+        status: "LOST",
+        stageId: stageIds[5],
+        pipelineId,
+        ownerId: userId,
+        closedAt: midMonth,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      // Closed last month, so the month boundary is still doing work: without
+      // this, `wonThisMonth` and `winRate` could both be counting everything
+      // ever closed and the invariant would still hold.
+      {
+        organizationId: orgId,
+        name: "Won last month",
+        value: 90000,
+        status: "WON",
+        stageId: stageIds[4],
+        pipelineId,
+        ownerId: userId,
+        closedAt: new Date(startOfMonth.getTime() - 86400000),
+        createdBy: userId,
+        updatedBy: userId,
+      },
+    ]);
+
+    const result = await aggregateDashboard(now, startOfMonth);
+
+    const won = result.wonThisMonth[0]?.total;
+    const lost = result.lostThisMonth[0]?.total;
+    const denominator = result.winRate[0]?.total;
+
+    // Absolute values first, so the invariant below cannot pass vacuously on
+    // two zeroes. These two counts used to read 1 and 1 here, because the won
+    // and lost facets were pinned to the won and lost stages, while the
+    // denominator behind the then-unrendered percentage was 4.
+    expect(won).toBe(2);
+    expect(lost).toBe(2);
+    expect(denominator).toBe(4);
+    expect(result.winRate[0]?.won).toBe(2);
+    expect(won + lost).toBe(denominator);
+  });
+
+  it("scopes the value card and the stage table to the same deals, so the card total equals the table footer", async () => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const renewals = await createSecondaryPipeline();
+    const renewalsStageId = renewals.stages[0]._id;
+
+    await DealModel.create([
+      {
+        organizationId: orgId,
+        name: "Qualified",
+        value: 10000,
+        status: "OPEN",
+        stageId: stageIds[1],
+        pipelineId,
+        ownerId: userId,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      {
+        organizationId: orgId,
+        name: "Qualified again",
+        value: 20000,
+        status: "OPEN",
+        stageId: stageIds[1],
+        pipelineId,
+        ownerId: userId,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      // Open, in the default pipeline, pointing at a stage id the default
+      // pipeline no longer has. A reorder regenerates every stage `_id`
+      // deliberately, so this is the normal state of every deal in a pipeline
+      // after one — and it used to reach the "Pipeline Value" card, where it
+      // raised a total the table below it could not account for.
+      {
+        organizationId: orgId,
+        name: "Open in a stage that no longer exists",
+        value: 5000,
+        status: "OPEN",
+        stageId: new mongoose.Types.ObjectId(),
+        pipelineId,
+        ownerId: userId,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      // Open in a second pipeline. The default pipeline's stages cannot name
+      // this deal's stage, so any total that included it was a number no table
+      // on the screen could produce.
+      {
+        organizationId: orgId,
+        name: "Open in the renewals pipeline",
+        value: 40000,
+        status: "OPEN",
+        stageId: renewalsStageId,
+        pipelineId: renewals._id,
+        ownerId: userId,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+    ]);
+
+    const result = await aggregateDashboard(now, startOfMonth);
+
+    const tableTotal = result.pipelineSummary.reduce(
+      (sum: number, stage: { totalValue: number }) => sum + stage.totalValue,
+      0,
+    );
+
+    // One stage, the two deals that belong to it. The dangling stage id and the
+    // other pipeline's deal are absent from the table.
+    expect(result.pipelineSummary).toHaveLength(1);
+    expect(result.pipelineSummary[0]?.totalValue).toBe(30000);
+    expect(result.pipelineValue[0]?.totalValue).toBe(30000);
+    // This is the claim on the card: "Pipeline Value" above, "Total" below.
+    expect(result.pipelineValue[0]?.totalValue).toBe(tableTotal);
   });
 });

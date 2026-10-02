@@ -1,13 +1,19 @@
+// `parseBody` is not an auth schema and no longer lives in this module - it is
+// the one request-parsing helper the whole tree shares, so it sits in
+// `shared/api` next to the `readJson` it depends on. Re-exported here because
+// every auth route imports it in the same statement as the schema it parses,
+// and they are the routes that made it a shared helper in the first place.
+export { parseBody } from "@/shared/api/parse-body";
 export {
   authEmailSchema,
   authPasswordSchema,
   forgotPasswordBody,
   loginBody,
-  parseBody,
   registerBody,
   resetPasswordBody,
   verifyEmailBody,
 } from "./auth.schemas";
+
 export {
   type LoginRefusal,
   type LoginResult,

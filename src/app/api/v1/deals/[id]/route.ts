@@ -1,8 +1,9 @@
-import type { Types } from "mongoose";
 import { DealRepository } from "@/modules/deals/deal.repository";
+import { updateDealBody } from "@/modules/deals/deal.schemas";
 import { DealService } from "@/modules/deals/deal.service";
 import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { ok } from "@/shared/responses/envelope";
 
@@ -16,7 +17,7 @@ function extractDealId(request: Request): string {
  * GET /api/v1/deals/:id
  * Get a deal by ID.
  */
-export const GET = withApi(async (request, context) => {
+export const GET = withApi(async (request, _context) => {
   const guards = guardsFor(request);
   const ctx = await guards.requirePermission("deals.read");
 
@@ -54,7 +55,7 @@ export const GET = withApi(async (request, context) => {
  * PATCH /api/v1/deals/:id
  * Update a deal.
  */
-export const PATCH = withApi(async (request, context) => {
+export const PATCH = withApi(async (request, _context) => {
   const guards = guardsFor(request);
   const ctx = await guards.requirePermission("deals.update");
 
@@ -68,21 +69,7 @@ export const PATCH = withApi(async (request, context) => {
     );
   }
 
-  const body = await readJson<{
-    name?: string;
-    companyId?: string | null;
-    contactId?: string | null;
-    pipelineId?: string;
-    stageId?: string;
-    ownerId?: string;
-    value?: number;
-    currency?: string;
-    probability?: number;
-    expectedCloseDate?: string | null;
-    description?: string | null;
-    tags?: string[];
-    customFields?: Record<string, unknown>;
-  }>(request);
+  const body = await parseBody(request, updateDealBody);
 
   const repo = new DealRepository(ctx.organization._id, ctx.user._id);
   const pipelineRepo = new PipelineRepository(
@@ -114,7 +101,7 @@ export const PATCH = withApi(async (request, context) => {
  * DELETE /api/v1/deals/:id
  * Soft delete a deal.
  */
-export const DELETE = withApi(async (request, context) => {
+export const DELETE = withApi(async (request, _context) => {
   const guards = guardsFor(request);
   const ctx = await guards.requirePermission("deals.delete");
 

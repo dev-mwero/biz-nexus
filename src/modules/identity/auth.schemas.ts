@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { readJson } from "@/shared/api/with-api";
-import { AppError } from "@/shared/errors/app-error";
 
 /**
  * Request schemas for the auth endpoints.
@@ -69,35 +67,5 @@ export const verifyEmailBody = z.strictObject({
     .min(1, "This verification link is not valid.")
     .max(200),
 });
-
-/**
- * Parse a JSON request body, or fail with the shape every endpoint uses.
- *
- * JSON is read through the wrapper's `readJson`, not `request.json()` directly,
- * for two reasons. The content type is checked there, so `text/plain` carrying
- * JSON is refused before it is parsed; and a body over the size limit is refused
- * with a 413 rather than buffered, so a request that claims to be enormous costs
- * a header read instead of memory.
- */
-export async function parseBody<T extends z.ZodType>(
-  request: Request,
-  schema: T,
-): Promise<z.infer<T>> {
-  const raw = await readJson(request);
-
-  const result = schema.safeParse(raw);
-  if (!result.success) {
-    // Every issue is reported, not just the first: fixing one field at a time
-    // through a form that only ever mentions one is a miserable loop, and these
-    // messages are written for the person filling the form in.
-    throw AppError.validation(
-      result.error.issues.map((issue) => ({
-        path: issue.path.join(".") || "body",
-        message: issue.message,
-      })),
-    );
-  }
-  return result.data;
-}
 
 export { email as authEmailSchema, password as authPasswordSchema };
