@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { type ClientSession, Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
 import {
   EMAIL_VERIFICATION_TTL_HOURS,
@@ -181,6 +181,25 @@ export interface VerifyEmailResult {
  * a write, so two concurrent redemptions of a forwarded link cannot both
  * succeed.
  *
+ * The claim and the verification of the address are one transaction, and the
+ * reason is the loser. One conditional update settles *which* redemption wins,
+ * but the loser still owes an answer, and its question is about the winner's
+ * half-finished work: this token is spent — is the address it belongs to
+ * verified yet? That question was answered by a separate round trip, so it raced
+ * the winner's second write. Two clicks on the same forwarded link, or a mail
+ * client that prefetches while the user clicks, arrive together; the loser sees
+ * the spent token and an address that is not verified yet, and answers
+ * `ok: false` for a redemption that had in fact succeeded. It passed whenever the
+ * winner's write happened to land first, which is what made it read as a timing
+ * flake rather than as a race.
+ *
+ * In one transaction there is no window to lose. Both writes become a single
+ * commit, so the loser's snapshot either predates it — and then its claim
+ * conflicts with the winner's write on the token row, and `withTransaction`
+ * retries the callback against a snapshot that includes the commit — or it
+ * postdates it, and reads the verified address directly. Either way it observes
+ * `emailVerifiedAt` set, which is the answer it was reaching for.
+ *
  * Every failure is `ok: false` with no reason. "Expired", "already used" and
  * "never existed" are three different answers to the same question from outside
  * the system, and returning which one happened turns a verification link into a
@@ -206,22 +225,25 @@ export async function verifyEmailToken(
   token: string,
   now = new Date(),
 ): Promise<VerifyEmailResult> {
-  const claimed = await EmailVerificationTokenModel.findOneAndUpdate(
-    { tokenHash: hashToken(token), usedAt: null, expiresAt: { $gt: now } },
-    { $set: { usedAt: now } },
-    { returnDocument: "after" },
-  );
+  return withTransaction(async (session) => {
+    const claimed = await EmailVerificationTokenModel.findOneAndUpdate(
+      { tokenHash: hashToken(token), usedAt: null, expiresAt: { $gt: now } },
+      { $set: { usedAt: now } },
+      { returnDocument: "after", session },
+    );
 
-  if (!claimed) {
-    return spentButVerified(token);
-  }
+    if (!claimed) {
+      return spentButVerified(token, session);
+    }
 
-  const result = await UserModel.updateOne(
-    { _id: claimed.userId, emailVerifiedAt: null },
-    { $set: { emailVerifiedAt: now } },
-  );
+    const result = await UserModel.updateOne(
+      { _id: claimed.userId, emailVerifiedAt: null },
+      { $set: { emailVerifiedAt: now } },
+      { session },
+    );
 
-  return { ok: true, alreadyVerified: result.modifiedCount === 0 };
+    return { ok: true, alreadyVerified: result.modifiedCount === 0 };
+  });
 }
 
 /**
@@ -230,18 +252,28 @@ export async function verifyEmailToken(
  * Reads the row rather than trusting the caller's claim, and answers false for
  * anything it is unsure about — a token that never existed must stay
  * indistinguishable from one that expired.
+ *
+ * Both reads carry the caller's session deliberately. The address it is looking
+ * for is written by the redemption that beat this one, and reading it outside
+ * the transaction is the race that transaction exists to close: the answer would
+ * depend on whether that write happened to be committed yet.
  */
-async function spentButVerified(token: string): Promise<VerifyEmailResult> {
-  const spent = await EmailVerificationTokenModel.findOne({
-    tokenHash: hashToken(token),
-    usedAt: { $ne: null },
-  });
+async function spentButVerified(
+  token: string,
+  session: ClientSession,
+): Promise<VerifyEmailResult> {
+  const spent = await EmailVerificationTokenModel.findOne(
+    { tokenHash: hashToken(token), usedAt: { $ne: null } },
+    undefined,
+    { session },
+  );
   if (!spent) return { ok: false };
 
-  const user = await UserModel.findOne({
-    _id: spent.userId,
-    emailVerifiedAt: { $ne: null },
-  });
+  const user = await UserModel.findOne(
+    { _id: spent.userId, emailVerifiedAt: { $ne: null } },
+    undefined,
+    { session },
+  );
   // `expiresAt` is deliberately not re-checked. A link that was valid and was
   // used stays used; the question here is only whether the address it verified
   // is now verified, and the click that asks does not redeem it a second time
