@@ -13,11 +13,15 @@ env:
   MAIL_DRIVER: console
   MAIL_FROM: "BizNexus CI <no-reply@example.test>"
   RATELIMIT_DRIVER: memory
-  # MONGODB_URI is deliberately unset. Nothing here listens on 27017: the unit
-  # job's tests boot their own MongoMemoryReplSet in tests/global-setup.ts, and
-  # the E2E job's scripts/e2e-server.mjs boots one for the server under test.
-  # Both publish the real URI to their own process. Leaving a hardcoded value
-  # here suggested a service container that nothing was reading.
+  # Nothing listens on 27017 in CI, and this URI is never connected to. It
+  # exists because src/env.ts runs its presence checks during `next build` —
+  # deliberately, since a build missing MONGODB_URI or SESSION_SECRET should
+  # fail — so the Build job needs the name present, not a reachable server.
+  #
+  # The two jobs that talk to MongoDB publish their own URI at runtime and
+  # overwrite this: tests/global-setup.ts boots a MongoMemoryReplSet for the
+  # unit suite, and scripts/e2e-server.mjs boots one for the E2E server.
+  MONGODB_URI: mongodb://127.0.0.1:27017/biz_nexus_build
   # PLAYWRIGHT_BASE_URL is deliberately unset. The E2E job boots its own server
   # through scripts/e2e-server.mjs on port 3100, and playwright.config.ts
   # derives the port it binds from this origin. Pinning it here pointed the
