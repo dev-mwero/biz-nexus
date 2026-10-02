@@ -150,14 +150,13 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      # MONGODB_URI is deliberately unset for this step. scripts/e2e-server.mjs
+      # starts its own single-node replica set and passes that URI to the
+      # server, which is what the transaction-using services need. The service
+      # container above is kept for the unit-and-integration job, which does
+      # read that variable.
       - name: Run E2E tests
         run: npm run test:e2e
-        env:
-          # MONGODB_URI is deliberately unset too. scripts/e2e-server.mjs starts
-          # its own single-node replica set and passes that URI to the server,
-          # which is what the transaction-using services need. The service
-          # container above is kept for the unit-and-integration job, which
-          # does read this variable.
 
       - name: Upload Playwright report on failure
         if: failure()
