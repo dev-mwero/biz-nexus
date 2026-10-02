@@ -178,6 +178,7 @@ needed it is sanitised at write time.
 | API contract | Every route handler: status code, envelope, validation errors. |
 | Authorization | **Every endpoint, every permission.** Plus the cross-tenant matrix. |
 | e2e | The critical business flow, and the isolation flow. |
+| Component | **Not established yet.** `src/components/**` is at 0% and excluded from the coverage gate. See [the open item in PLAN.md](./docs/PLAN.md#open-components-have-no-unit-coverage). |
 
 **A feature without tests is not finished.** A feature without an authorization
 test, when it has a permission, is not finished either.

@@ -204,6 +204,32 @@ the attack it exists to bound.
 
 **Gate 1 is not passed by compiling. It is passed by the evidence above.**
 
+### Open: components have no unit coverage
+
+`src/components/**` is 1014 lines and 362 functions at 0%. It is excluded from
+the coverage thresholds in `vitest.config.mts` for now, so the gate describes
+business logic only, where it holds at 81.8% lines and 82.1% functions.
+
+The exclusion is a placeholder, not a verdict. There is no DOM test environment
+in this repo — the suite runs in `node`, and neither `jsdom` nor
+`@testing-library/react` is installed — so component coverage cannot be added
+without first introducing that tooling. `CONTRIBUTING.md` currently assigns UI
+to the e2e layer, which is a defensible position while the e2e suite covers the
+critical path, but it is not the same as covering the components.
+
+To close it:
+
+```
+[ ] Install jsdom and @testing-library/react
+[ ] Add a per-file `// @vitest-environment jsdom` convention
+[ ] Cover the Kanban board, the notification bell, and the pipeline list first
+[ ] Remove src/components/** from the coverage exclude and satisfy the gate
+[ ] Record the component layer in CONTRIBUTRIBUTING.md's testing table
+```
+
+Until then, component regressions are invisible to CI. That is a known gap, not
+an accepted one.
+
 ---
 
 # Phase 2 and beyond — gated, not planned in detail
