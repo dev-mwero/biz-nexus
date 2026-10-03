@@ -497,6 +497,50 @@ describe("CRM Services", () => {
       ).rejects.toThrow(SavedViewError);
     });
 
+    it("prevents a non-owner from reading a private view", async () => {
+      const otherUser = new Types.ObjectId();
+      const view = await service.create({
+        organizationId: orgId,
+        actorId,
+        userId: otherUser,
+        entityType: "CONTACT",
+        name: "Private",
+      });
+
+      await expect(service.getById(view._id, userId)).rejects.toThrow(
+        SavedViewError,
+      );
+    });
+
+    it("lets a non-owner read a shared view", async () => {
+      const otherUser = new Types.ObjectId();
+      const view = await service.create({
+        organizationId: orgId,
+        actorId,
+        userId: otherUser,
+        entityType: "CONTACT",
+        name: "Shared",
+        isShared: true,
+      });
+
+      const found = await service.getById(view._id, userId);
+      expect(found?.name).toBe("Shared");
+    });
+
+    it("lets the owner read their own view", async () => {
+      const otherUser = new Types.ObjectId();
+      const view = await service.create({
+        organizationId: orgId,
+        actorId,
+        userId: otherUser,
+        entityType: "CONTACT",
+        name: "Mine",
+      });
+
+      const found = await service.getById(view._id, otherUser);
+      expect(found?.name).toBe("Mine");
+    });
+
     it("deletes a saved view", async () => {
       const view = await service.create({
         organizationId: orgId,
@@ -519,7 +563,7 @@ describe("CRM Services", () => {
       await expect(service.listByUser(userId, "CONTACT")).resolves.toHaveLength(
         0,
       );
-      await expect(service.getById(view._id)).resolves.toBeNull();
+      await expect(service.getById(view._id, userId)).resolves.toBeNull();
     });
 
     it("lists views by user", async () => {

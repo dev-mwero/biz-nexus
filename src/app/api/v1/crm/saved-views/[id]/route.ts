@@ -45,7 +45,7 @@ export const GET = withApi(async (request: Request) => {
     context.user._id,
   );
 
-  const savedView = await service.getById(id);
+  const savedView = await service.getById(id, context.user._id);
   if (!savedView) {
     throw new AppError("RECORD_NOT_FOUND", {
       message: "Saved view not found.",

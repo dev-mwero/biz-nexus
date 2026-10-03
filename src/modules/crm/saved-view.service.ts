@@ -198,9 +198,30 @@ export class SavedViewService {
     return this.repo.findShared(entityType);
   }
 
-  /** Get a saved view by ID. */
-  async getById(id: Types.ObjectId | string): Promise<SavedView | null> {
-    return this.repo.findById(id);
+  /**
+   * Get a saved view by ID, for a specific reader.
+   *
+   * A view is private to its owner unless it is shared, which is the same
+   * predicate `update` uses and the same set the list endpoint returns
+   * (personal views plus shared ones). Reading only by id let any member of the
+   * organisation fetch a colleague's private view even though it never appears
+   * in their list.
+   */
+  async getById(
+    id: Types.ObjectId | string,
+    requesterUserId: Types.ObjectId,
+  ): Promise<SavedView | null> {
+    const savedView = await this.repo.findById(id);
+    if (!savedView) return null;
+
+    if (!savedView.userId.equals(requesterUserId) && !savedView.isShared) {
+      throw new SavedViewError(
+        "INSUFFICIENT_PERMISSION",
+        "Only the owner can read this view.",
+      );
+    }
+
+    return savedView;
   }
 
   /** Validate filters against the entity's allowed filter keys. */
