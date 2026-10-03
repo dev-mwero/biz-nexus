@@ -4,7 +4,7 @@ import {
   FieldDefinitionService,
   type UpdateFieldDefinitionInput,
 } from "@/modules/crm";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -77,7 +77,7 @@ export const PATCH = withApi(async (request: Request) => {
   const context = await guards.requirePermission("fieldDefinitions.update");
 
   const id = pathParam(request);
-  const body = await request.json();
+  const body = await readJson(request);
   const input = updateFieldDefinitionSchema.parse(body);
 
   const service = new FieldDefinitionService(

@@ -11,6 +11,7 @@ import {
   consoleLogger,
   jsonResponse,
   type Logger,
+  MAX_BODY_BYTES,
   REDACTED,
   readJson,
   redact,
@@ -699,6 +700,80 @@ describe("readJson", () => {
       post("", { headers: { "content-type": "application/json" } }),
     );
     expect(body).toEqual({});
+  });
+
+  it("accepts a body just under the limit", async () => {
+    // The cap is only worth having if ordinary traffic still goes through, so
+    // this is the boundary that keeps 256 KB from becoming a 0 KB limit.
+    const name = "a".repeat(MAX_BODY_BYTES - 1024);
+    const body = await readJson<{ name: string }>(
+      post(JSON.stringify({ name }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    expect(body.name).toHaveLength(MAX_BODY_BYTES - 1024);
+  });
+
+  it("refuses a body that declares itself too large, without reading it", async () => {
+    // Declared length first: the answer costs a header read, so the request
+    // never gets the chance to spend memory.
+    const handler = withApi(async (request) => ok(await readJson(request)));
+
+    const response = await handler(
+      post(JSON.stringify({ name: "Acme" }), {
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(MAX_BODY_BYTES + 1),
+        },
+      }),
+    );
+    const parsed = (await response.json()) as { error: { code: string } };
+
+    expect(response.status).toBe(413);
+    expect(parsed.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
+  it("refuses a body that understates its length", async () => {
+    // A lying Content-Length is the whole reason the running count exists.
+    const oversized = "a".repeat(MAX_BODY_BYTES + 1024);
+    const handler = withApi(async (request) => ok(await readJson(request)));
+
+    const response = await handler(
+      post(JSON.stringify({ name: oversized }), {
+        headers: {
+          "content-type": "application/json",
+          "content-length": "12",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(413);
+  });
+
+  it("refuses a body that declares no length at all", async () => {
+    // A chunked request arrives with no Content-Length to check, which is the
+    // ordinary way a streaming client sends a body.
+    const chunks = ['{"name":"', "a".repeat(MAX_BODY_BYTES), '"}'];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    });
+    const handler = withApi(async (request) => ok(await readJson(request)));
+
+    const response = await handler(
+      post(
+        stream as unknown as BodyInit,
+        {
+          headers: { "content-type": "application/json" },
+          duplex: "half",
+        } as RequestInit,
+      ),
+    );
+
+    expect(response.status).toBe(413);
   });
 });
 

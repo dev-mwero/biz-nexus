@@ -78,6 +78,7 @@ object disagree.
 | 410 | `INVITATION_EXPIRED` | Past its seven-day window |
 | 410 | `INVITATION_USED` | Already accepted |
 | 410 | `INVITATION_REVOKED` | Revoked by an administrator |
+| 413 | `PAYLOAD_TOO_LARGE` | Body over 256 KB, refused before or during buffering |
 | 422 | `VALIDATION_FAILED` | Schema validation failed; `details` lists the fields |
 | 422 | `EMAIL_REQUIRED` | Address missing or blank |
 | 422 | `ROLE_NOT_IN_ORGANIZATION` | Role id not usable in this organisation |

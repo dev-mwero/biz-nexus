@@ -96,6 +96,62 @@ export function jsonResponse(
 }
 
 /**
+ * The largest body any endpoint will read, in bytes.
+ *
+ * 256 KB is far more than every body in this API needs - the largest is a bulk
+ * import of contacts, and it is nowhere near - so the cap refuses only traffic
+ * that was never going to be a request we wanted to serve.
+ */
+export const MAX_BODY_BYTES = 256 * 1024;
+
+/**
+ * Read the body as text, refusing anything over `MAX_BODY_BYTES`.
+ *
+ * Two checks, because either alone is bypassable. `Content-Length` is a header
+ * the client writes, so it is refused early to save the work of reading a body
+ * we already know is too big - and then ignored, because a client that omits it
+ * or lies about it gets the same answer from the running count. Buffering first
+ * and measuring afterwards would be no protection at all: the allocation has
+ * already happened by the time the length is known, and `request.text()` on a
+ * multi-gigabyte body is the outage.
+ *
+ * Reachable without a session on every auth route, which is why this lives in
+ * the one function all bodies pass through rather than in a middleware that an
+ * individual handler could forget.
+ */
+async function readBodyText(request: Request): Promise<string> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    throw new AppError("PAYLOAD_TOO_LARGE");
+  }
+
+  const body = request.body;
+  if (!body) return "";
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        // Cancel rather than drain: the point is to stop reading, and draining
+        // the rest of the body is precisely the work being avoided.
+        await reader.cancel();
+        throw new AppError("PAYLOAD_TOO_LARGE");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return text + decoder.decode();
+}
+
+/**
  * Read and parse a JSON body, mapping unreadable input to a 400.
  *
  * Without this, malformed JSON surfaces as a `SyntaxError` from `Request.json`
@@ -111,7 +167,7 @@ export async function readJson<T = unknown>(request: Request): Promise<T> {
     });
   }
 
-  const text = await request.text();
+  const text = await readBodyText(request);
   if (text.trim() === "") return {} as T;
 
   try {

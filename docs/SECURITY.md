@@ -413,7 +413,11 @@ discovered.
 per-request database connection · request id on every response and every log
 line · errors mapped from a catalogue so a route cannot invent a status · `POST`
 bodies read through one `readJson` that checks the content type and the size
-limit · five request schemas as Zod `strictObject` · single-use verification and
+limit, the limit enforced both against the declared `Content-Length` and against
+the bytes actually received, so an undeclared or understated length is refused
+too · every mutating route reads its body through that one function rather than
+through `Request.json()`, which would have skipped both checks · five request
+schemas as Zod `strictObject` · single-use verification and
 reset tokens enforced by a conditional update, so concurrent redemption has one
 winner · issuing supersedes, in the same transaction as the insert · password
 reset revokes every session for the account and clears the failure counter and

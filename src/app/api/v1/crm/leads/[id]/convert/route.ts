@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError, type FieldDetail } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -41,7 +41,7 @@ export const POST = withApi(
     // `fromEnd: 2` — this path ends in a static segment (`route.ts`), so the
     // default of 1 would read that literal as the record id.
     const id = pathParam(request, 2);
-    const body = await request.json();
+    const body = await readJson(request);
     const input = convertLeadSchema.parse(body);
 
     const service = new LeadService(context.organization._id, context.user._id);

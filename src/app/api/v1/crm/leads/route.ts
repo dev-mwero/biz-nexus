@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
 import { queryFromSearchParams } from "@/shared/api/search-params";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok, pageMeta } from "@/shared/responses/envelope";
@@ -109,7 +109,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("leads.create");
 
-    const body = await request.json();
+    const body = await readJson(request);
     const input = createLeadSchema.parse(body);
 
     const service = new LeadService(context.organization._id, context.user._id);

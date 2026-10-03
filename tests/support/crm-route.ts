@@ -149,6 +149,17 @@ function handlerFor(method: string, pathname: string): Handler {
 export interface CallRouteInit {
   method?: string;
   body?: unknown;
+  /**
+   * The body exactly as sent, bypassing `JSON.stringify`.
+   *
+   * Needed for the two things a parsed body cannot express: a request whose
+   * JSON is broken, and one large enough to be over the size cap. Both are
+   * properties of the bytes on the wire, so they can only be tested by putting
+   * different bytes on the wire.
+   */
+  rawBody?: string;
+  /** Overrides the content type, to prove a non-JSON body is refused. */
+  contentType?: string;
   token?: string;
   /**
    * Overrides the Origin header. A test that wants to prove the origin check
@@ -174,15 +185,16 @@ export async function callRoute(
 
   if (init.token) headers.set("cookie", `${SESSION_COOKIE}=${init.token}`);
 
-  if (init.body !== undefined) {
-    headers.set("content-type", "application/json");
+  let body: string | undefined;
+  if (init.rawBody !== undefined) {
+    body = init.rawBody;
+    headers.set("content-type", init.contentType ?? "application/json");
+  } else if (init.body !== undefined) {
+    body = JSON.stringify(init.body);
+    headers.set("content-type", init.contentType ?? "application/json");
   }
 
-  const request = new Request(url, {
-    method,
-    headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+  const request = new Request(url, { method, headers, body });
 
   return handlerFor(method, url.pathname)(request);
 }

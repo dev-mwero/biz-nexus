@@ -204,6 +204,11 @@ export const ERROR_CATALOGUE = {
     message: "The request is not valid.",
     expose: true,
   },
+  PAYLOAD_TOO_LARGE: {
+    status: 413,
+    message: "The request body is too large.",
+    expose: true,
+  },
 
   // --- Throttling and verification ------------------------------------------
   RATE_LIMITED: {

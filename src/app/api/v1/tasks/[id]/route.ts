@@ -6,7 +6,7 @@ import {
   type UpdateTaskInput,
   updateTask,
 } from "@/modules/tasks";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -58,7 +58,7 @@ export const PATCH = withApi(async (request) => {
 
   const id = objectIdParam(request);
 
-  const body = await request.json();
+  const body = await readJson(request);
   const parsed = updateTaskSchema.safeParse(body);
   if (!parsed.success) {
     throw AppError.validation(fieldDetails(parsed.error));

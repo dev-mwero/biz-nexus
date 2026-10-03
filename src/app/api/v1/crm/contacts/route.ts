@@ -6,7 +6,7 @@ import {
   type CreateContactInput,
 } from "@/modules/crm";
 import { queryFromSearchParams } from "@/shared/api/search-params";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok, pageMeta } from "@/shared/responses/envelope";
@@ -112,7 +112,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("contacts.create");
 
-    const body = await request.json();
+    const body = await readJson(request);
     const input = createContactSchema.parse(body);
 
     const service = new ContactService(

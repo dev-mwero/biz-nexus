@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ContactError, ContactService } from "@/modules/crm";
-import { withApi } from "@/shared/api/with-api";
+import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -29,7 +29,7 @@ export const POST = withApi(async (request: Request) => {
   // the literal string "merge" as the contact's id. The `pathParam` contract
   // names this case explicitly.
   const id = pathParam(request, 2);
-  const body = await request.json();
+  const body = await readJson(request);
   const input = mergeContactsSchema.parse(body);
 
   if (input.sourceContactId !== id) {
