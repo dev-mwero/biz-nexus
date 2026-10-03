@@ -172,6 +172,64 @@ describe("inviteMember", () => {
     expect(role?.key).toBe("MEMBER");
   });
 
+  it("grants the role a key names", async () => {
+    const { owner, organization, roleIds } = await withOrg();
+
+    const { invitation } = await inviteMember({
+      organizationId: organization._id,
+      email: "admin@example.com",
+      roleKey: "ADMIN",
+      invitedBy: owner._id,
+    });
+
+    expect(invitation.roleId.toString()).toBe(roleIds.ADMIN.toString());
+  });
+
+  it("refuses OWNER by key as it does by id", async () => {
+    // The key path reaches the same assertion, and reaching it is the point: a
+    // client can only name keys today, so a guard that only covered `roleId`
+    // would be a guard on the input nobody sends.
+    const { owner, organization } = await withOrg();
+
+    await expect(
+      inviteMember({
+        organizationId: organization._id,
+        email: "sneaky@example.com",
+        roleKey: "OWNER",
+        invitedBy: owner._id,
+      }),
+    ).rejects.toMatchObject({ code: "ROLE_NOT_IN_ORGANIZATION" });
+
+    expect(
+      await InvitationModel.countDocuments({
+        organizationId: organization._id,
+      }),
+    ).toBe(0);
+  });
+
+  it("resolves a key only inside this organisation", async () => {
+    // A key lookup without `organizationId` in the filter would return the
+    // first ADMIN in any tenant. Here this organisation's own ADMIN is
+    // soft-deleted while another organisation still has one, so a lookup that
+    // leaked across tenants would find it and grant it.
+    const { owner, organization } = await withOrg();
+    await withOrg();
+
+    await RoleModel.updateOne(
+      { organizationId: organization._id, key: "ADMIN" },
+      { $set: { deletedAt: new Date() } },
+    );
+
+    await expect(
+      inviteMember({
+        organizationId: organization._id,
+        email: "new@example.com",
+        roleKey: "ADMIN",
+        invitedBy: owner._id,
+      }),
+    ).rejects.toMatchObject({ code: "ROLE_NOT_IN_ORGANIZATION" });
+  });
+
   it("expires after the documented TTL", async () => {
     const { owner, organization, roleIds } = await withOrg();
     const now = new Date("2026-01-01T00:00:00.000Z");

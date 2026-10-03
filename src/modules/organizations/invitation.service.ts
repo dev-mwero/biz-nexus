@@ -11,6 +11,7 @@ import {
   type Organization,
   OrganizationModel,
   RoleModel,
+  type SystemRoleKey,
 } from "@/modules/organizations";
 import { DEFAULT_ROLE_KEY } from "@/modules/rbac/role.service";
 import { AppError } from "@/shared/errors/app-error";
@@ -102,6 +103,20 @@ export interface InviteMemberInput {
   organizationId: Types.ObjectId | string;
   email: string;
   roleId?: Types.ObjectId | string;
+  /**
+   * Grant this system role instead of naming an id.
+   *
+   * Preferred over `roleId` by every caller outside a test. The roles endpoint
+   * is not built, so an id is something a client cannot obtain: the only way to
+   * learn one would be to read a membership, and a client that has not been
+   * invited yet has none. Naming the role by key is what an invitation form can
+   * actually offer — a choice from a fixed list — and it resolves inside the
+   * organisation, so it cannot be used to reach a role from another tenant.
+   *
+   * `roleId` still works, and wins if both are given, so a caller holding a real
+   * id can use it.
+   */
+  roleKey?: SystemRoleKey;
   invitedBy: Types.ObjectId | string;
   /** Injected in tests; production leaves it to the clock. */
   now?: Date;
@@ -142,7 +157,7 @@ export async function inviteMember(
 
   const roleId = input.roleId
     ? new Types.ObjectId(String(input.roleId))
-    : await defaultRoleId(organizationId);
+    : await roleIdForKey(organizationId, input.roleKey);
 
   await assertRoleInOrganization(organizationId, roleId);
 
@@ -217,18 +232,40 @@ export async function inviteMember(
   });
 }
 
-async function defaultRoleId(
+/**
+ * Resolve a role key to a role inside one organisation.
+ *
+ * The `organizationId` in the filter is the whole point: a bare key lookup would
+ * return the first role with that key in any tenant, so a role id from another
+ * organisation's database could be granted here. It cannot here, because the
+ * filter and the assertion that follows are both scoped to this organisation —
+ * and a key that resolves to nothing in this organisation is the same refusal as
+ * a role id belonging to somebody else, so the two are indistinguishable from
+ * outside.
+ */
+async function roleIdForKey(
   organizationId: Types.ObjectId,
+  key?: SystemRoleKey,
 ): Promise<Types.ObjectId> {
+  const wanted = key ?? DEFAULT_ROLE_KEY;
   const role = await RoleModel.findOne({
     organizationId,
-    key: DEFAULT_ROLE_KEY,
+    key: wanted,
     deletedAt: null,
   });
+
   if (!role) {
     throw new InvitationError(
       "ROLE_NOT_IN_ORGANIZATION",
-      "This organisation has no default role to grant.",
+      // Two wordings, because the two cases are not the same problem. An
+      // organisation with no role at all is misprovisioned, and the caller
+      // naming no role is not at fault. A role the caller did name, and this
+      // organisation does not have, is the same answer as a role belonging to
+      // another organisation — confirming which it is would confirm that a
+      // foreign id is foreign.
+      key === undefined
+        ? "This organisation has no default role to grant."
+        : "That role is not available for this organization.",
     );
   }
   return role._id;
