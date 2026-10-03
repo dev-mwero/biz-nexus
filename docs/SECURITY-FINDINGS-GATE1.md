@@ -7,9 +7,9 @@ Methodology: Three-parallel security review (auth/session/crypto; authorization/
 ## Summary
 - Total findings: 9 (3 High, 4 Medium, 2 Low)
 - High findings: 3 — S1–S3 remediated (S2/S3 were latent, non-exploitable gaps)
-- Medium findings: 4 — S5 and S9 remediated with the list-query migration; S4 accepted by design; S6 open
-- Low findings: 2 — S7, S8 open
-- No open High or Critical finding.
+- Medium findings: 4 — S5, S6, S9 remediated; S4 accepted by design
+- Low findings: 2 — S7, S8 remediated
+- No open High or Critical finding; no open Medium or Low finding.
 
 This document is the artifact for task 1.75.
 
@@ -46,20 +46,23 @@ This document is the artifact for task 1.75.
 - Fix: Migrated all four lists to the shared listQuery() with explicit sortable allow-lists and MAX_PAGE/MAX_PAGE_SIZE, plus validated (regex) ObjectId filters and a bound/escaped search term.
 - Commit: 7558870
 
-### S6 — POST /activities accepts arbitrary entityId (Medium) — NOT YET FIXED
+### S6 — POST /activities accepts arbitrary entityId (Medium) — FIXED
 - Location: src/app/api/v1/activities/route.ts
-- Evidence: entityId not validated against a tenant-owned entity
-- Recommendation: Validate entityId exists in tenant for given entityType before recording
+- Evidence: entityId not validated against a tenant-owned entity; entityType was any non-empty string.
+- Fix: entityType is a closed set (contact, company, lead, deal, task) and the id is resolved through the matching tenant-scoped repository (or the task lookup) before the activity is written.
+- Commit: 6820232
 
-### S7 — Saved-view read lacks ownership check (Low) — NOT YET FIXED
-- Location: src/modules/crm/saved-view.service.ts:202-204
-- Evidence: getById returns any view in org; update/delete check owner/shared
-- Recommendation: Apply same owner-or-shared predicate
+### S7 — Saved-view read lacks ownership check (Low) — FIXED
+- Location: src/modules/crm/saved-view.service.ts:201
+- Evidence: getById returned any view in the organisation; update/delete already checked owner-or-shared.
+- Fix: getById takes the reader and applies the same owner-or-shared predicate; a private view owned by somebody else is a 403.
+- Commit: 6758d60
 
-### S8 — notifications/stream permission gate mismatch (Low) — NOT YET FIXED
+### S8 — notifications/stream permission gate mismatch (Low) — FIXED
 - Location: src/app/api/v1/notifications/stream/route.ts:18
-- Evidence: uses requireOrg(), docs/API.md says notifications.read; data scoped by org+user
-- Recommendation: Change to requirePermission("notifications.read")
+- Evidence: used requireOrg(), which only proves an active membership, while docs/API.md and every sibling route specify notifications.read.
+- Fix: requirePermission("notifications.read"). Only the refusal path is covered by a test, because a permitted request opens a change stream and never ends.
+- Commit: 617952b
 
 ### S9 — Malformed ObjectId query params return 500 (Medium) — FIXED (list endpoints)
 - Locations: crm/companies/route.ts (ownerId, tag), crm/contacts/route.ts, crm/leads/route.ts, deals/route.ts
@@ -68,4 +71,4 @@ This document is the artifact for task 1.75.
 - Commit: 7558870
 
 ## Conclusion
-High-severity, exploitable write-surface defects (S1, S2) are remediated and S3 is hardened. The Medium list-query defects (S5, S9) are remediated. S4 is accepted by design with the rationale recorded above. S6–S8 remain tracked follow-ups; none is a confirmed cross-tenant data disclosure given current codebase behavior. Task 1.75 can be marked complete with these findings tracked.
+High-severity, exploitable write-surface defects (S1, S2) are remediated and S3 is hardened. The Medium defects (S5, S6, S9) and the Low defects (S7, S8) are remediated. S4 is accepted by design with the rationale recorded above. No finding remains open. Task 1.75 can be marked complete.
