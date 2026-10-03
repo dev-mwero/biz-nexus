@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { unstable_rethrow } from "next/navigation";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -271,6 +272,32 @@ describe("mapping deliberate errors", () => {
     expect(logger.entries.at(-1)?.internal).toBe("login failed: locked-out");
     expect(JSON.stringify(body)).not.toContain("locked-out");
     expect(body.error).not.toHaveProperty("internal");
+  });
+
+  it("logs a bad value a write refused as a warning, without the value", async () => {
+    // The other half of mapping a write failure to a 422: it is the application
+    // working, so it belongs beside the 403s and the 404s and not in the error
+    // log. Before this, every `PATCH` carrying one mistyped date logged a stack
+    // trace, which is how a client's typo fills an operator's error budget.
+    const logger = recordingLogger();
+    const response = await withApi(
+      () => {
+        // The message Mongoose builds, value and all: what the mapper has to
+        // survive before it reaches the log line.
+        throw new mongoose.Error.CastError(
+          "date",
+          "LEAKCANARY",
+          "expectedCloseDate",
+        );
+      },
+      { logger },
+    )(post());
+
+    expect(response.status).toBe(422);
+    expect(logger.entries.at(-1)?.level).toBe("warn");
+    const entry = JSON.stringify(logger.entries.at(-1));
+    expect(entry).not.toContain("stack");
+    expect(entry).not.toContain("LEAKCANARY");
   });
 
   it("omits `internal` from a warning that has none", async () => {

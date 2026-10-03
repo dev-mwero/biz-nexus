@@ -6,6 +6,7 @@ import {
   AppError,
   type FieldDetail,
   isAppError,
+  toAppError,
   toErrorPayload,
   toErrorStatus,
 } from "@/shared/errors/app-error";
@@ -293,8 +294,16 @@ export function withApi(
 
       const status = toErrorStatus(error);
       const payload = toErrorPayload(error);
+      // The mapped error, not the thrown one. Asking `isAppError(error)` instead
+      // would send every failure a library raised down the error branch below —
+      // a `ZodError` from a route's own schema, a `CastError` from a write
+      // carrying the value that would not cast, a `ValidationError` carrying
+      // the value the schema refused. Those are all the client working, so they
+      // belong in this branch with the refusals: a warning, no stack, and
+      // nothing in the line that came out of the request.
+      const mapped = toAppError(error);
 
-      if (isAppError(error) && error.expose) {
+      if (mapped?.expose) {
         // A deliberate, client-facing refusal. Logged as a warning because it
         // is the application working, not the application failing — but worth
         // seeing, since a burst of 403s is somebody enumerating ids.
@@ -307,15 +316,16 @@ export function withApi(
         // is it now locked?" has nothing to read.
         //
         // No stack and no `cause` here, unlike the branch below. A stack per 401
-        // turns a real signal into noise, and a refusal is not a failure.
+        // turns a real signal into noise, and a refusal is not a failure. That
+        // reasoning is why this branch is now also where a mistyped value lands:
+        // one bad field from a client is a refusal, and a stack for each is how
+        // a typo becomes a page.
         logger.warn({
           ...context,
           status,
-          code: error.code,
-          message: error.message,
-          ...(isAppError(error) && error.internal
-            ? { internal: error.internal }
-            : {}),
+          code: mapped.code,
+          message: mapped.message,
+          ...(mapped.internal ? { internal: mapped.internal } : {}),
           durationMs: Math.round(performance.now() - startedAt),
         });
       } else {

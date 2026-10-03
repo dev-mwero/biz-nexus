@@ -16,6 +16,7 @@
  * reach", and answering it is how enumeration works.
  */
 
+import mongoose from "mongoose";
 import { ZodError } from "zod";
 
 /** A field-level validation failure, safe to hand back to the client. */
@@ -351,10 +352,7 @@ export function isAppError(value: unknown): value is AppError {
  * envelope already carries, and the raw issue list would put zod's own
  * structure into the response contract.
  */
-function asAppError(error: unknown): AppError | null {
-  if (isAppError(error)) return error;
-  if (!isZodError(error)) return null;
-
+function asBadRequest(error: ZodError): AppError {
   return new AppError("BAD_REQUEST", {
     message: "The request could not be read.",
     details: error.issues.map((issue) => ({
@@ -363,6 +361,194 @@ function asAppError(error: unknown): AppError | null {
     })),
     cause: error,
   });
+}
+
+/**
+ * A value Mongoose refused to store, as a 422.
+ *
+ * Mongoose reports a value it will not accept two different ways, and a write
+ * from a request body can reach either one, so both are answered here.
+ *
+ * A `ValidationError` is the schema saying no: `value: -5` against `min: 0`, a
+ * 200-character name against `maxlength: 160`. It only ever appears once the
+ * repository writes with `runValidators` — see `TenantRepository` — because
+ * Mongoose does not validate updates otherwise.
+ *
+ * A `CastError` is Mongoose failing to make the value into the declared type at
+ * all: `"not-a-date"` into a `Date`, a string that is not an id into an
+ * `ObjectId`. Casting happens before validation and whether or not validation
+ * is enabled, so this class of typo produced a 500 with a stack trace in the log
+ * on every field that cannot be cast, which is most of them — the client told
+ * the server had broken, and the error log filled with a fault that was never
+ * one.
+ *
+ * `VALIDATION_FAILED` rather than `BAD_REQUEST`, for the reason the zod arm
+ * above already gives: the body parsed, and it is the record it names that is
+ * unacceptable. A client distinguishing "I sent you nonsense JSON" from "your
+ * schema rejected my value" is the distinction it most needs, and this is the
+ * second of the two.
+ */
+function asMongooseError(error: unknown): AppError | null {
+  if (error instanceof mongoose.Error.ValidationError) {
+    return new AppError("VALIDATION_FAILED", {
+      details: Object.entries(error.errors).map(([path, failure]) =>
+        mongooseFieldDetail(failure, path),
+      ),
+      cause: error,
+    });
+  }
+
+  if (error instanceof mongoose.Error.CastError) {
+    return new AppError("VALIDATION_FAILED", {
+      details: [mongooseFieldDetail(error)],
+      cause: error,
+    });
+  }
+
+  return null;
+}
+
+/**
+ * One Mongoose field failure as the envelope's `{ path, message }`.
+ *
+ * `key` is preferred over the failure's own `path`, and the order is the point.
+ * Mongoose keys `ValidationError.errors` by the full dotted path while setting
+ * `ValidatorError.path` to the leaf only, so a colour rejected inside
+ * `stages.0` arrives with the key `stages.0.color` and a `path` of `color`. A
+ * client told `color` highlights nothing — there is no field called `color` in
+ * a document that has `stages` — and the map is the only place the full path
+ * exists at all. The failure's own `path` is the fallback for a cast error
+ * thrown on its own, which never went through that map.
+ */
+function mongooseFieldDetail(
+  failure: mongoose.Error.ValidatorError | mongoose.Error.CastError,
+  key?: string,
+): FieldDetail {
+  const path = key || failure.path || "(document)";
+
+  // A `CastError`'s own message embeds the value that failed to cast — see
+  // `mongoose/lib/error/cast.js`, which formats `Cast to <kind> failed for
+  // value <inspect(value)>`. So the message here is rebuilt from the schema type
+  // rather than taken from the error: the type is ours, the value is the
+  // caller's, and the caller already knows what they sent.
+  if (failure instanceof mongoose.Error.CastError) {
+    return { path, message: `Not a valid ${failure.kind}.` };
+  }
+
+  return { path, message: validatorMessage(failure) };
+}
+
+const DEFAULT_FIELD_MESSAGE = "Not a value this field accepts.";
+
+/**
+ * A declared bound as text, or null when it is not one this can render.
+ *
+ * Numbers are the common case (`min: 0`, `maxlength: 160`). A `Date` bound is
+ * rendered as an instant, which is what a date field's client needs and is
+ * still schema data rather than caller input. Anything else is refused rather
+ * than interpolated, so an unexpected bound cannot put an object into a
+ * response.
+ */
+function boundText(bound: unknown): string | null {
+  if (typeof bound === "number" && Number.isFinite(bound)) return String(bound);
+  if (bound instanceof Date && !Number.isNaN(bound.getTime())) {
+    return bound.toISOString();
+  }
+  return null;
+}
+
+/**
+ * What a failed validator is worth saying to the client.
+ *
+ * Mongoose's own message cannot be forwarded here, and the reason is written
+ * down in `mongoose/lib/error/messages.js`: every built-in template
+ * interpolates `{VALUE}` — ``Path `name` (`{VALUE}`, length {LENGTH}) is
+ * longer than the maximum allowed length ({MAXLENGTH}).`` Forwarding it would
+ * put whatever the caller sent into the response body and into the log line.
+ * That value is the caller's, is of no length this codebase controls, and a
+ * client rendering an error message as markup would be reflecting its own input
+ * straight back.
+ *
+ * The bound the schema declared is worth forwarding: it is ours, it is fixed,
+ * and it is the only part of the message the caller can act on. So the message
+ * is rebuilt from the validator's type and the option that failed — never from
+ * `value`, which is also why `properties.value` is not read anywhere below.
+ *
+ * A validator written in this codebase keeps its own message. That message was
+ * written for a person to read, and the schema author chose not to put the
+ * value in it.
+ */
+function validatorMessage(failure: mongoose.Error.ValidatorError): string {
+  // The bound a built-in failed on (`min`, `max`, `minlength`, `maxlength`) is
+  // carried alongside the message on the validator, and lands in `properties`
+  // with the rest of the validator's definition. The declared type omits those
+  // keys, which is a typing gap rather than an absent value.
+  const properties = failure.properties as {
+    type?: string;
+    min?: unknown;
+    max?: unknown;
+    minlength?: unknown;
+    maxlength?: unknown;
+  };
+
+  switch (properties.type) {
+    case "required":
+      return "This field is required.";
+    case "min": {
+      const bound = boundText(properties.min);
+      return bound === null
+        ? "Below the smallest value this field accepts."
+        : `Must be ${bound} or greater.`;
+    }
+    case "max": {
+      const bound = boundText(properties.max);
+      return bound === null
+        ? "Above the largest value this field accepts."
+        : `Must be ${bound} or less.`;
+    }
+    case "minlength": {
+      const bound = boundText(properties.minlength);
+      return bound === null
+        ? "Too short."
+        : `Must be at least ${bound} characters.`;
+    }
+    case "maxlength": {
+      const bound = boundText(properties.maxlength);
+      return bound === null
+        ? "Too long."
+        : `Must be at most ${bound} characters.`;
+    }
+    // The allowed values are schema data rather than caller input, so they could
+    // be listed, but the lists here run to twenty-one colours and a view's own
+    // custom fields. Naming the path is enough to find the list.
+    case "enum":
+      return "Not one of the allowed values.";
+    case "match":
+      return "Not in the expected format.";
+    case "user defined":
+      return failure.message || DEFAULT_FIELD_MESSAGE;
+    default:
+      return DEFAULT_FIELD_MESSAGE;
+  }
+}
+
+/**
+ * Reduce a thrown value to the code it should be reported under, or null.
+ *
+ * In this order because each arm is strictly more specific than the one after
+ * it: an `AppError` is already the answer, a zod failure and a Mongoose failure
+ * are recognisable classes from two different libraries, and anything else is
+ * not ours to interpret.
+ *
+ * `instanceof` rather than a check on `name` and a shape, for the same reason
+ * `isZodError` below is: this is the function that decides what a caller is
+ * told, and a structural match would let an object written anywhere in the tree
+ * choose its own 422 and its own message.
+ */
+function asAppError(error: unknown): AppError | null {
+  if (isAppError(error)) return error;
+  if (isZodError(error)) return asBadRequest(error);
+  return asMongooseError(error);
 }
 
 /**
@@ -386,6 +572,19 @@ export interface ErrorPayload {
 }
 
 /**
+ * The `AppError` a thrown value should be reported as, or null.
+ *
+ * Exported for the one caller that needs the error itself rather than what it
+ * says to a client: `withApi` chooses a log level from whether the failure is
+ * exposed, and that is a question about the mapped error, not about the
+ * response. Anything else should reach for `toErrorPayload` and
+ * `toErrorStatus`, which are the contract and cannot be got wrong.
+ */
+export function toAppError(error: unknown): AppError | null {
+  return asAppError(error);
+}
+
+/**
  * Reduce any thrown value to something a client may see.
  *
  * The default arm is the important one. Anything not recognised becomes a
@@ -393,6 +592,12 @@ export interface ErrorPayload {
  * timeout, a `TypeError` with a variable name in it - on this side of the
  * boundary. That is the single behaviour this function exists to guarantee,
  * and the contract test throws objects built to get past every other check.
+ *
+ * The recognised set is small and is named in `asAppError` above: an
+ * `AppError` this codebase raised, a `ZodError` from a route's own schema, and
+ * a Mongoose `ValidationError` or `CastError` from a write. Each is a failure
+ * attributable to a request rather than to this process, which is the only
+ * reason any of them is allowed past the default arm.
  */
 export function toErrorPayload(error: unknown): ErrorPayload {
   const appError = asAppError(error);

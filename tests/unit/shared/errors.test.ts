@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import mongoose from "mongoose";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { SlugConflictError } from "@/db/mixins/slug";
@@ -343,6 +344,230 @@ describe("normalising anything thrown", () => {
     expect(toErrorPayload(AppError.validation([]))).not.toHaveProperty(
       "details",
     );
+  });
+});
+
+describe("the failures a mongoose write raises", async () => {
+  /**
+   * A schema to raise real failures against.
+   *
+   * Built here rather than imported from a module so that what these tests
+   * assert against is the library's own error, not a hand-built copy of it. A
+   * `new mongoose.Error.ValidationError()` constructed in a test is a fiction
+   * that agrees with the real thing only until Mongoose changes a field, and the
+   * whole value of these cases is that they are what a repository actually
+   * throws once `runValidators` is on. `validateSync` runs the same validators
+   * a write does, and needs no connection.
+   *
+   * A private `mongoose.Mongoose()` rather than the shared default instance, so
+   * registering a model here cannot collide with one a module elsewhere
+   * registered. `Error` is the same namespace either way — it hangs off the
+   * prototype — which is what `instanceof` in `app-error.ts` relies on.
+   *
+   * Every rejected value below is a canary. The point of the mapping is that
+   * the value stays on this side of the response boundary, and "the message does
+   * not contain the input" is only a real assertion if the input was something
+   * you would recognise if you saw it.
+   */
+  const isolated = new mongoose.Mongoose();
+  const Widget = isolated.model(
+    "ErrorMappingWidget",
+    new isolated.Schema({
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+        minlength: 1,
+        maxlength: 160,
+      },
+      value: { type: Number, min: 0, max: 1_000_000 },
+      probability: { type: Number, min: 0, max: 100 },
+      expectedCloseDate: { type: Date },
+      ownerId: { type: isolated.Schema.Types.ObjectId },
+      reason: {
+        type: String,
+        validate: {
+          validator: (reason: unknown) => reason !== "no good",
+          message: "Give a reason somebody can act on.",
+        },
+      },
+      stages: [{ color: { type: String, enum: ["blue", "green"] } }],
+    }),
+  );
+
+  /**
+   * The failure a write of these values would raise, or a loud test failure.
+   *
+   * `name` is filled in unless the case is about `name` itself. It is required,
+   * so leaving it out would add a second failure to every assertion below and
+   * say nothing about the one being tested.
+   *
+   * `document.validate()`, not `validateSync()`: the synchronous form is
+   * deprecated and warns on Mongoose 9, and a deprecation in the helper every
+   * case below runs through is noise printed on every run of this file. It
+   * rejects with the same `ValidationError` a save rejects with.
+   */
+  async function refused(
+    values: Record<string, unknown>,
+  ): Promise<mongoose.Error.ValidationError> {
+    try {
+      await new Widget({ name: "Widget", ...values }).validate();
+    } catch (thrown) {
+      if (thrown instanceof mongoose.Error.ValidationError) return thrown;
+      throw thrown;
+    }
+    throw new Error(
+      `expected ${JSON.stringify(values)} to be refused, and it was not`,
+    );
+  }
+
+  it("reports a value the schema refused as a 422 rather than a server fault", async () => {
+    // The bug this closes. `PATCH` wrote `probability: 999` while `POST` refused
+    // the same value, because Mongoose does not validate updates unless it is
+    // asked to — and when it did refuse one, the refusal arrived as an
+    // unrecognised throw and became a 500 with a stack trace in the log.
+    const error = await refused({ probability: 999 });
+
+    expect(toErrorStatus(error)).toBe(422);
+    expect(toErrorPayload(error)).toEqual({
+      code: "VALIDATION_FAILED",
+      message: ERROR_CATALOGUE.VALIDATION_FAILED.message,
+      details: [{ path: "probability", message: "Must be 100 or less." }],
+    });
+  });
+
+  it("names the bound the schema declared, and never the value", async () => {
+    // Mongoose's own wording is
+    // ``Path `name` (`LEAKCANARY…`, length 200) is longer than the maximum
+    // allowed length (160).`` — the bound is ours and safe to send; the value in
+    // the middle is the caller's, and it is the only part nobody here chose.
+    const canary = "LEAKCANARY".repeat(25);
+    const payload = toErrorPayload(await refused({ name: canary }));
+
+    expect(payload.details).toEqual([
+      { path: "name", message: "Must be at most 160 characters." },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain("LEAKCANARY");
+    expect(JSON.stringify(payload)).not.toContain(canary);
+  });
+
+  it("reads a missing required field without mentioning the input", async () => {
+    // An empty string, not an absent key: this schema trims, and Mongoose treats
+    // a trimmed-to-empty string on a required field as missing. That is the
+    // failure a client actually hits when a form submits a blank name, and the
+    // one `minlength: 1` alongside it never gets to report.
+    const payload = toErrorPayload(await refused({ name: "" }));
+
+    expect(payload.details).toEqual([
+      { path: "name", message: "This field is required." },
+    ]);
+    // Mongoose's wording here is "Path `name` is required." — the sentence is
+    // the library talking to a developer rather than a client.
+    expect(JSON.stringify(payload)).not.toMatch(/Path `|Validator failed/);
+  });
+
+  it("reports a value it could not cast as a 422, on the field that failed", async () => {
+    // Casting runs before validation, and whether or not validation is enabled,
+    // which is why every one of these produced a 500 with a stack before. The
+    // `CastError`'s own message is `Cast to date failed for value
+    // 'LEAKCANARY'` — the value is interpolated into it, so it is rebuilt from
+    // the schema's declared type instead.
+    const error = await refused({ expectedCloseDate: "LEAKCANARY" });
+    const payload = toErrorPayload(error);
+
+    expect(toErrorStatus(error)).toBe(422);
+    expect(payload.details).toEqual([
+      { path: "expectedCloseDate", message: "Not a valid date." },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain("LEAKCANARY");
+  });
+
+  it("reports a cast failure the driver threw on its own", () => {
+    // Not every cast failure arrives wrapped in a `ValidationError`. A bad id in
+    // a query filter — `/deals?ownerId=abc` — is thrown bare by the cast, with
+    // the value in the middle of the message. Same client's mistake, same
+    // answer, so it gets mapped by the same rule rather than by a second one
+    // somebody has to remember.
+    let thrown: unknown;
+    try {
+      Widget.find({ ownerId: "LEAKCANARY" }).cast(Widget);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(mongoose.Error.CastError);
+    expect(toErrorStatus(thrown)).toBe(422);
+    expect(toErrorPayload(thrown).details).toEqual([
+      { path: "ownerId", message: "Not a valid ObjectId." },
+    ]);
+    expect(JSON.stringify(toErrorPayload(thrown))).not.toContain("LEAKCANARY");
+  });
+
+  it("keeps a validator written in this codebase's own words", async () => {
+    // These messages were written to be read, and their authors chose not to
+    // put the caller's value in them. Replacing them with a synthesised bound
+    // would throw that away.
+    const payload = toErrorPayload(await refused({ reason: "no good" }));
+
+    expect(payload.details).toEqual([
+      { path: "reason", message: "Give a reason somebody can act on." },
+    ]);
+  });
+
+  it("keeps a nested failure on its own addressable path", async () => {
+    // `stages.0.color`, not `color` and not `stages`. A client highlighting the
+    // wrong field is worse than one told nothing, and a path is the only thing
+    // it can act on.
+    const payload = toErrorPayload(
+      await refused({ stages: [{ color: "chartreuse" }] }),
+    );
+
+    expect(payload.details).toEqual([
+      { path: "stages.0.color", message: "Not one of the allowed values." },
+    ]);
+  });
+
+  it("reports every field that failed, not only the first", async () => {
+    // A client fixing one field per round trip is a client making three round
+    // trips, and each of them is a write.
+    const payload = toErrorPayload(
+      await refused({ value: -5, probability: 999 }),
+    );
+
+    expect(payload.details).toEqual([
+      { path: "value", message: "Must be 0 or greater." },
+      { path: "probability", message: "Must be 100 or less." },
+    ]);
+  });
+
+  it("does not let a hand-built object pose as a mongoose failure", async () => {
+    // The same rule the zod arm is held to. Mapping on a name and a shape
+    // rather than on `instanceof` would let anything thrown anywhere in the tree
+    // choose its own 422 and its own detail message — and a detail message is
+    // shipped to the client verbatim.
+    const imposters = [
+      {
+        name: "ValidationError",
+        errors: { passwordHash: { message: "process.env leaked" } },
+      },
+      {
+        name: "CastError",
+        kind: "ObjectId",
+        value: "64f8b2c1d0e4a5b6c7d8e9f0",
+        message: "Cast to ObjectId failed for value 64f8b2c1d0e4a5b6c7d8e9f0",
+      },
+    ];
+
+    for (const imposter of imposters) {
+      expect(toErrorStatus(imposter)).toBe(500);
+      expect(toErrorPayload(imposter)).toEqual({
+        code: "INTERNAL",
+        message: ERROR_CATALOGUE.INTERNAL.message,
+      });
+      expect(JSON.stringify(toErrorPayload(imposter))).not.toMatch(
+        /leaked|64f8b2c1/,
+      );
+    }
   });
 });
 
