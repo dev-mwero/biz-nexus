@@ -15,7 +15,7 @@ import { AppError } from "@/shared/errors/app-error";
  */
 export const GET = withApi(async (request: Request): Promise<Response> => {
   const guards = guardsFor(request);
-  const context = await guards.requireOrg();
+  const context = await guards.requirePermission("notifications.read");
 
   await connectToDatabase();
 
