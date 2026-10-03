@@ -39,6 +39,15 @@ export class MembershipError extends AppError {
  * (`organization.transferOwnership`) and its own confirmation, not a side
  * effect of editing a role. Two owners is also how an organisation ends up
  * with nobody who can delete it, because both are busy on holiday.
+ *
+ * `invitation.service.ts` holds its own copy of this rule, which says the same
+ * thing about the same roles. Two copies of a security rule is not a position
+ * worth taking lightly, but these two services already each own a role guard
+ * that raises their own error type, and unifying them means one service
+ * importing the other through the module barrel — a cycle, in a module whose
+ * exports are evaluated at import time. If the rule ever moves it moves to a
+ * leaf module both of them can import, and the test below is the thing that
+ * notices.
  */
 async function assertAssignableRole(
   organizationId: Types.ObjectId,

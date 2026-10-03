@@ -49,7 +49,8 @@ export class InvitationError extends AppError {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Confirm a role belongs to the organisation about to reference it.
+ * Confirm a role belongs to the organisation about to reference it, and that it
+ * is one this organisation may actually hand out.
  *
  * MongoDB has no foreign keys across collections, so an Invitation or
  * Membership can point at a Role in a different tenant and the database will
@@ -57,6 +58,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * the permissions of a role this organisation does not own, which is precisely
  * the cross-tenant leak the whole design is built to prevent. Asserted on every
  * write that names a role.
+ *
+ * `OWNER` is refused for the same reason `changeMemberRole` refuses it, and the
+ * reasoning is the same: granting a second owner is an ownership transfer, which
+ * has its own permission (`organization.transferOwnership`) and its own
+ * confirmation. Without this clause an invitation is a back door around that
+ * permission — an ADMIN holds `invitations.create` and is denied
+ * `organization.transferOwnership` by design, so the cheapest escalation in the
+ * product was "invite a colleague, give them the OWNER role, accept the link
+ * yourself from a second account". `inviteMember` refuses to re-invite an
+ * existing member, which closes the self-promotion variant and leaves only the
+ * two-account one, which is enough.
  */
 async function assertRoleInOrganization(
   organizationId: Types.ObjectId,
@@ -75,6 +87,13 @@ async function assertRoleInOrganization(
       // role id that is not usable here; confirming where it *is* would answer
       // the only question somebody holding a foreign id is asking.
       "That role is not available for this organization.",
+    );
+  }
+
+  if (role.key === "OWNER") {
+    throw new InvitationError(
+      "ROLE_NOT_IN_ORGANIZATION",
+      "Ownership is transferred, not assigned. Use the transfer operation.",
     );
   }
 }
@@ -269,7 +288,9 @@ export async function acceptInvitation(
   // Re-checked here as well as at invite time, because the role can have been
   // reassigned or soft-deleted in the days between. An invitation is a stored
   // promise, and a promise made about a role that no longer exists should not
-  // be honoured.
+  // be honoured. The same call refuses OWNER, so an invitation row that reached
+  // the database by some other route — an older deploy, a hand-written row, a
+  // future caller that forgets — is stopped here as well as at the door.
   await assertRoleInOrganization(invitation.organizationId, invitation.roleId);
 
   return withTransaction(async (session) => {

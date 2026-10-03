@@ -172,6 +172,42 @@ describe("inviteMember", () => {
     ).rejects.toBeInstanceOf(InvitationError);
   });
 
+  it("refuses to hand out the OWNER role", async () => {
+    // The escalation this closes. An ADMIN holds `invitations.create` and is
+    // denied `organization.transferOwnership` by the system matrix, so an
+    // invitation that can name OWNER is a way around the one permission that
+    // role was withheld for. Two accounts are enough: invite a colleague you
+    // control as OWNER, then accept the link from the second one.
+    const { owner, organization, roleIds } = await withOrg();
+
+    await expect(
+      inviteMember({
+        organizationId: organization._id,
+        email: "successor@example.com",
+        roleId: roleIds.OWNER,
+        invitedBy: owner._id,
+      }),
+    ).rejects.toThrow(/transfer/i);
+  });
+
+  it("writes no invitation when the role was refused", async () => {
+    // The row the throw is supposed to have prevented. A refusal that still left
+    // an invitation behind would be a live link sitting in the collection,
+    // waiting for the acceptance-side check to also be wrong.
+    const { owner, organization, roleIds } = await withOrg();
+
+    await expect(
+      inviteMember({
+        organizationId: organization._id,
+        email: "successor@example.com",
+        roleId: roleIds.OWNER,
+        invitedBy: owner._id,
+      }),
+    ).rejects.toThrow();
+
+    expect(await InvitationModel.countDocuments({})).toBe(0);
+  });
+
   it("refuses to invite somebody who is already a member", async () => {
     const { owner, organization, roleIds } = await withOrg();
     const member = await makeUser("member@example.com");
@@ -456,6 +492,41 @@ describe("acceptInvitation", () => {
     );
 
     await expect(acceptInvitation(token, invitee._id)).rejects.toThrow();
+  });
+
+  it("rejects an OWNER invitation that reached the database by another route", async () => {
+    // The acceptance-side half of the OWNER refusal. `inviteMember` no longer
+    // writes one, but the row is the thing that grants the role, and the row can
+    // arrive from somewhere the service does not control: a deploy predating the
+    // fix, a hand-written insert, a future caller that forgets the rule. The
+    // check at the door is the primary defence; this one is what makes the
+    // invariant hold rather than merely being enforced on the usual path.
+    const { owner, organization, roleIds } = await withOrg();
+    const invitee = await makeUser("successor@example.com");
+
+    // Written past `inviteMember` on purpose. Going through the service would
+    // test the door again, not the window.
+    const token = "a-token-this-test-generated";
+    await InvitationModel.create({
+      organizationId: organization._id,
+      email: invitee.email,
+      roleId: roleIds.OWNER,
+      tokenHash: hashToken(token),
+      invitedBy: owner._id,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      acceptedAt: null,
+      revokedAt: null,
+    } as never);
+
+    await expect(acceptInvitation(token, invitee._id)).rejects.toThrow(
+      /transfer/i,
+    );
+    expect(
+      await MembershipModel.countDocuments({
+        organizationId: organization._id,
+        userId: invitee._id,
+      }),
+    ).toBe(0);
   });
 
   it("restores a removed member rather than duplicating them", async () => {
