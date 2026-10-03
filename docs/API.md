@@ -121,8 +121,10 @@ There is no opt-out and no per-route exemption list. `GET`, `HEAD` and `OPTIONS`
 are exempt because they are not mutating; a preflight carries no cookie.
 
 **There is no `organizationId` parameter anywhere in this API.** The active
-organisation is read from the session. The only way to change it is
-`POST /organizations/active`, which verifies membership first.
+organisation is read from the session. The only ways to change it are
+`POST /organizations/active`, which verifies membership first, and
+`POST /auth/accept-invitation`, which moves it to the organisation the redeemed
+token belongs to.
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
@@ -135,6 +137,7 @@ organisation is read from the session. The only way to change it is
 | `POST` | `/auth/reset-password` | — | Consume a single-use token. Revokes all sessions. |
 | `POST` | `/auth/verify-email` | — | Consume a verification token. |
 | `POST` | `/auth/resend-verification` | authenticated | Reissue verification token. **Not yet rate limited** — see §10. |
+| `POST` | `/auth/accept-invitation` | authenticated | Redeem an invitation token. Body: `{ token }`. See §3.1. |
 
 ```http
 POST /api/v1/auth/login
@@ -153,6 +156,53 @@ Content-Type: application/json
 
 These are deliberately outside the active-organisation requirement: onboarding
 exists precisely for the caller who has no active organisation yet.
+
+### 3.1 Invitations
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `POST` | `/organizations/current/members/invitations` | `invitations.create` | Invite an address. Body: `{ email, roleKey? }`, where `roleKey` is `OWNER`, `ADMIN`, `MEMBER` or `VIEWER` and defaults to `MEMBER`. `201` with `{ invitation, token, replaced }`. |
+| `GET` | `/organizations/current/invitations` | `invitations.read` | Open invitations for the active organisation. `?includeExpired=true` also lists expired-but-unaccepted ones. |
+| `DELETE` | `/organizations/current/invitations/:id` | `invitations.revoke` | Revoke an open invitation. |
+
+```http
+POST /api/v1/organizations/current/members/invitations
+Content-Type: application/json
+Origin: https://app.example.com
+Cookie: bn_session=…
+
+{ "email": "new-hire@acme.com", "roleKey": "MEMBER" }
+```
+
+Four things about that contract are worth stating, because each is a decision
+rather than an accident:
+
+- **`roleKey`, not `roleId`.** There is no roles endpoint in this API, so a
+  client cannot learn a role id, and a system role key is a complete reference
+  in its own right. `OWNER` is accepted by the schema and refused by the
+  service with `422 ROLE_NOT_IN_ORGANIZATION`: granting a second owner is an
+  ownership transfer, which has its own permission.
+- **`token` is in the response, once.** It is the value the invitation email
+  needs, and the mailer is not built — `docs/DISCOVERY.md` leaves the
+  transactional provider undecided. The stored value is a SHA-256 digest, so a
+  resend is the only way to obtain the token again, and a resend invalidates the
+  link it replaces. When a mailer exists this field should go away.
+- **`replaced: true`** means an open invitation for that address existed and was
+  superseded, which is the normal result of inviting somebody twice rather than
+  an error.
+- **`DELETE` answers `404` for everything it will not do** — unknown id, another
+  organisation's id, or one already accepted. Distinguishing them would be an
+  oracle over ids belonging to other tenants.
+
+`POST /auth/accept-invitation` is the other half. It takes `{ token }`, requires
+a signed-in account, and is **not** organisation-scoped: the usual reason somebody
+holds an invitation is that they have no organisation yet. It moves the session to
+the organisation it joins and returns `{ membership, organization,
+activeOrganizationId }`.
+
+A token that was never real, has expired, was revoked, or has been spent answers
+`INVITATION_INVALID` / `INVITATION_EXPIRED` / `INVITATION_REVOKED` and never says
+which condition applied to a token that was never real.
 
 ---
 
@@ -605,13 +655,9 @@ are **not implemented** in the current codebase:
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `POST /auth/accept-invitation` | Not implemented | Invitation acceptance not built |
 | `GET /organizations/current` | Not implemented | Organisation management not built |
 | `PATCH /organizations/current` | Not implemented | Organisation settings not built |
 | `GET /organizations/current/members` | Not implemented | Member management not built |
-| `POST /organizations/current/members/invitations` | Not implemented | Invitation management not built |
-| `GET /organizations/current/invitations` | Not implemented | |
-| `DELETE /organizations/current/invitations/:id` | Not implemented | |
 | `PATCH /organizations/current/members/:id` | Not implemented | |
 | `DELETE /organizations/current/members/:id` | Not implemented | |
 | `POST /organizations/current/leave` | Not implemented | |

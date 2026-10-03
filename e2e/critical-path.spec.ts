@@ -19,6 +19,8 @@ test.describe("Critical Path - Full User Journey", () => {
   let organizationId: string;
   let ownerUserId: string;
   let invitedUserEmail: string;
+  let invitedUserCookie: string;
+  let invitationToken: string;
   let contactId: string;
   let companyId: string;
   let leadId: string;
@@ -93,15 +95,53 @@ test.describe("Critical Path - Full User Journey", () => {
     expect(organizationId).toBeDefined();
   });
 
-  test("2. Invite member to organization", async ({ request }) => {
+  test("2a. Register the account that will be invited", async ({
+    playwright,
+  }) => {
+    // A real account, not just an address. The invitation service refuses to
+    // invite somebody who already holds a membership but happily invites a
+    // registered user with none, which is the state this puts them in.
+    invitedUserEmail = `invited-${Date.now()}@example.com`;
+
+    // A worker-scoped context for the same reason as `beforeAll`: `request` here
+    // is test-scoped, and the cookie has to outlive this test for the acceptance
+    // two steps down.
+    const context = await playwright.request.newContext({
+      baseURL: BASE_URL,
+      extraHTTPHeaders: { Origin: BASE_URL },
+    });
+
+    try {
+      const response = await context.post(`${BASE_URL}/api/v1/auth/register`, {
+        data: {
+          email: invitedUserEmail,
+          name: "Invited Member",
+          password: "TestPassword123!",
+        },
+      });
+
+      expect(response.status()).toBe(201);
+      const cookies = response.headers()["set-cookie"];
+      const sessionMatch = cookies?.match(/bn_session=([^;]+)/);
+      if (!sessionMatch) {
+        throw new Error("registration set no session cookie");
+      }
+      invitedUserCookie = `bn_session=${sessionMatch[1]}`;
+    } finally {
+      await context.dispose();
+    }
+  });
+
+  test("2b. Invite member to organization", async ({ request }) => {
     if (!organizationId) {
       test.skip(true, "Organization not created");
     }
 
-    invitedUserEmail = `invited-${Date.now()}@example.com`;
-
+    // `/current` rather than `/{organizationId}`: the active organisation is read
+    // from the session, and an organisation id in the path would be an input this
+    // API does not take. The path is the one docs/API.md §3.1 states.
     const response = await request.post(
-      `${BASE_URL}/api/v1/organizations/${organizationId}/invitations`,
+      `${BASE_URL}/api/v1/organizations/current/members/invitations`,
       {
         headers: { Cookie: authCookie },
         data: {
@@ -111,14 +151,44 @@ test.describe("Critical Path - Full User Journey", () => {
       },
     );
 
-    if (response.status() === 404) {
-      test.skip(true, "Invitation endpoint not implemented");
-    }
-
     expect(response.status()).toBe(201);
     const data = await response.json();
     expect(data.data.invitation).toBeDefined();
-    expect(data.data.token).toBeDefined();
+    expect(data.data.token).toBeTruthy();
+    // The stored digest is never in a response, only the raw token.
+    expect(JSON.stringify(data)).not.toContain("tokenHash");
+    invitationToken = data.data.token;
+  });
+
+  test("2c. The invitee accepts the invitation", async ({ request }) => {
+    if (!invitationToken) {
+      test.skip(true, "Invitation not created");
+    }
+
+    const response = await request.post(
+      `${BASE_URL}/api/v1/auth/accept-invitation`,
+      {
+        headers: { Cookie: invitedUserCookie },
+        data: { token: invitationToken },
+      },
+    );
+
+    expect(response.status()).toBe(200);
+    const data = await response.json();
+    expect(data.data.membership.status).toBe("ACTIVE");
+    // The session moved to the organisation that was just joined, which is what
+    // makes the next request act in that tenant without a second call.
+    expect(data.data.activeOrganizationId).toBe(organizationId);
+
+    // A replayed token is refused, so this journey is not quietly idempotent.
+    const replay = await request.post(
+      `${BASE_URL}/api/v1/auth/accept-invitation`,
+      {
+        headers: { Cookie: invitedUserCookie },
+        data: { token: invitationToken },
+      },
+    );
+    expect(replay.status()).toBe(404);
   });
 
   test.describe("CRM Operations", () => {
