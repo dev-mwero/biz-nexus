@@ -508,6 +508,18 @@ function buildSort(
 }
 
 /**
+ * Renders a `SortSpec` back into the comma-separated string form the CRM
+ * repositories accept (`-createdAt,_id`). The new list-query layer produces the
+ * spec directly; the repositories that predate it still parse a string, and
+ * this is the one place the two representations meet.
+ */
+export function serializeSort(spec: SortSpec): string {
+  return Object.entries(spec)
+    .map(([field, direction]) => (direction === -1 ? `-${field}` : field))
+    .join(",");
+}
+
+/**
  * Flattens a Zod error into the `details` shape the API already returns.
  *
  * The issue `path` is joined rather than nested so a client can highlight the

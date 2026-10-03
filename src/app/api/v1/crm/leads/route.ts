@@ -1,11 +1,11 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
-import { queryFromSearchParams } from "@/shared/api/search-params";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
-import { ok, pageMeta } from "@/shared/responses/envelope";
+import { listQuery, serializeSort } from "@/shared/query/list-query";
+import { ok } from "@/shared/responses/envelope";
 
 const LEAD_STATUSES = [
   "NEW",
@@ -44,18 +44,25 @@ const createLeadSchema = z.object({
   customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
-  sort: z.string().default("-createdAt"),
+const leadFiltersSchema = z.object({
   status: z.enum(LEAD_STATUSES).optional(),
-  source: z.string().optional(),
-  ownerId: z.string().optional(),
+  source: z.string().max(100).optional(),
+  ownerId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
   scoreMin: z.coerce.number().int().min(0).max(100).optional(),
   scoreMax: z.coerce.number().int().min(0).max(100).optional(),
-  q: z.string().max(200).optional(),
   createdFrom: z.string().datetime().optional(),
   createdTo: z.string().datetime().optional(),
+});
+
+const { parse, meta } = listQuery({
+  filters: leadFiltersSchema,
+  sortable: ["createdAt", "updatedAt", "score", "title", "status"],
+  defaultSort: "-createdAt",
+  searchable: true,
+  orderedPairs: [["scoreMin", "scoreMax"]],
 });
 
 /**
@@ -67,36 +74,34 @@ export const GET = withApi(async (request: Request) => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("leads.read");
 
-  const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
+  const parsed = parse(new URL(request.url).searchParams);
 
   const service = new LeadService(context.organization._id, context.user._id);
 
   const filters = {
-    status: query.status,
-    source: query.source,
-    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
-    scoreMin: query.scoreMin,
-    scoreMax: query.scoreMax,
-    q: query.q,
-    createdFrom: query.createdFrom ? new Date(query.createdFrom) : undefined,
-    createdTo: query.createdTo ? new Date(query.createdTo) : undefined,
+    status: parsed.filters.status,
+    source: parsed.filters.source,
+    ownerId: parsed.filters.ownerId
+      ? new Types.ObjectId(parsed.filters.ownerId)
+      : undefined,
+    scoreMin: parsed.filters.scoreMin,
+    scoreMax: parsed.filters.scoreMax,
+    q: parsed.q,
+    createdFrom: parsed.filters.createdFrom
+      ? new Date(parsed.filters.createdFrom)
+      : undefined,
+    createdTo: parsed.filters.createdTo
+      ? new Date(parsed.filters.createdTo)
+      : undefined,
   };
 
   const result = await service.list(filters, {
-    sort: query.sort,
-    page: query.page,
-    pageSize: query.pageSize,
+    sort: serializeSort(parsed.sort),
+    page: parsed.page,
+    pageSize: parsed.pageSize,
   });
 
-  return ok(
-    result.items,
-    pageMeta({
-      page: query.page,
-      pageSize: query.pageSize,
-      total: result.total,
-    }),
-  );
+  return ok(result.items, meta(parsed, result.total));
 });
 
 /**

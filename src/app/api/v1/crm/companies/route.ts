@@ -5,11 +5,11 @@ import {
   CompanyService,
   type CreateCompanyInput,
 } from "@/modules/crm";
-import { queryFromSearchParams } from "@/shared/api/search-params";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
-import { ok, pageMeta } from "@/shared/responses/envelope";
+import { listQuery, serializeSort } from "@/shared/query/list-query";
+import { ok } from "@/shared/responses/envelope";
 
 /**
  * Read an id that a query string may express as absent.
@@ -74,15 +74,16 @@ const createCompanySchema = z.object({
   domain: z.string().max(255).optional().nullable(),
 });
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
-  sort: z.string().default("-createdAt"),
+const companyFiltersSchema = z.object({
   status: z.enum(COMPANY_STATUSES).optional(),
-  ownerId: z.string().optional(),
-  tag: z.array(z.string()).default([]),
-  q: z.string().max(200).optional(),
-  parentId: z.string().optional().nullable(),
+  ownerId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  tag: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).default([]),
+  parentId: z
+    .union([z.string().regex(/^[0-9a-fA-F]{24}$/), z.literal("null")])
+    .optional(),
 });
 
 /**
@@ -94,10 +95,14 @@ export const GET = withApi(async (request: Request) => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("companies.read");
 
-  const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(
-    queryFromSearchParams(searchParams, ["tag"]),
-  );
+  const { parse, meta } = listQuery({
+    filters: companyFiltersSchema,
+    sortable: ["name", "status", "createdAt", "updatedAt"],
+    defaultSort: "-createdAt",
+    searchable: true,
+  });
+
+  const parsed = parse(new URL(request.url).searchParams);
 
   const service = new CompanyService(
     context.organization._id,
@@ -105,33 +110,24 @@ export const GET = withApi(async (request: Request) => {
   );
 
   const filters = {
-    status: query.status,
-    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
-    tagIds: query.tag.map((id) => new Types.ObjectId(id)),
-    q: query.q,
-    // A query string has no null, so `parentId=null` is how a client asks for
-    // root companies — the filter is "has no parent", and `undefined` means
-    // "no filter at all". The two are different and conflating them makes the
-    // tree view unfilterable. Validated rather than handed to
-    // `new Types.ObjectId`, which throws a BSON error that surfaces as a 500
-    // for what is a malformed query.
-    parentId: parseNullableId(query.parentId),
+    status: parsed.filters.status,
+    ownerId: parsed.filters.ownerId
+      ? new Types.ObjectId(parsed.filters.ownerId)
+      : undefined,
+    tagIds: (parsed.filters.tag ?? []).map(
+      (id: string) => new Types.ObjectId(id),
+    ),
+    q: parsed.q,
+    parentId: parseNullableId(parsed.filters.parentId as string | undefined),
   };
 
   const result = await service.list(filters, {
-    sort: query.sort,
-    page: query.page,
-    pageSize: query.pageSize,
+    sort: serializeSort(parsed.sort),
+    page: parsed.page,
+    pageSize: parsed.pageSize,
   });
 
-  return ok(
-    result.items,
-    pageMeta({
-      page: query.page,
-      pageSize: query.pageSize,
-      total: result.total,
-    }),
-  );
+  return ok(result.items, meta(parsed, result.total));
 });
 
 /**

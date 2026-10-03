@@ -5,11 +5,11 @@ import {
   ContactService,
   type CreateContactInput,
 } from "@/modules/crm";
-import { queryFromSearchParams } from "@/shared/api/search-params";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
-import { ok, pageMeta } from "@/shared/responses/envelope";
+import { listQuery, serializeSort } from "@/shared/query/list-query";
+import { ok } from "@/shared/responses/envelope";
 
 const CONTACT_STATUSES = ["LEAD", "PROSPECT", "CUSTOMER", "INACTIVE"] as const;
 
@@ -40,18 +40,26 @@ const createContactSchema = z.object({
   customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
-  sort: z.string().default("lastName,firstName"),
+const contactFiltersSchema = z.object({
   status: z.enum(CONTACT_STATUSES).optional(),
-  companyId: z.string().optional().nullable(),
-  ownerId: z.string().optional(),
-  tag: z.array(z.string()).default([]),
-  q: z.string().max(200).optional(),
+  companyId: z
+    .union([z.string().regex(/^[0-9a-fA-F]{24}$/), z.literal("null")])
+    .optional(),
+  ownerId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  tag: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).default([]),
   createdFrom: z.string().datetime().optional(),
   createdTo: z.string().datetime().optional(),
   hasEmail: z.coerce.boolean().optional(),
+});
+
+const { parse, meta } = listQuery({
+  filters: contactFiltersSchema,
+  sortable: ["lastName", "firstName", "createdAt", "updatedAt", "status"],
+  defaultSort: "lastName,firstName",
+  searchable: true,
 });
 
 /**
@@ -63,10 +71,7 @@ export const GET = withApi(async (request: Request) => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("contacts.read");
 
-  const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(
-    queryFromSearchParams(searchParams, ["tag"]),
-  );
+  const parsed = parse(new URL(request.url).searchParams);
 
   const service = new ContactService(
     context.organization._id,
@@ -74,32 +79,34 @@ export const GET = withApi(async (request: Request) => {
   );
 
   const filters = {
-    status: query.status,
-    companyId: query.companyId
-      ? new Types.ObjectId(query.companyId)
+    status: parsed.filters.status,
+    companyId:
+      parsed.filters.companyId === "null"
+        ? null
+        : parsed.filters.companyId
+          ? new Types.ObjectId(parsed.filters.companyId)
+          : undefined,
+    ownerId: parsed.filters.ownerId
+      ? new Types.ObjectId(parsed.filters.ownerId)
       : undefined,
-    ownerId: query.ownerId ? new Types.ObjectId(query.ownerId) : undefined,
-    tagIds: query.tag.map((id) => new Types.ObjectId(id)),
-    q: query.q,
-    createdFrom: query.createdFrom ? new Date(query.createdFrom) : undefined,
-    createdTo: query.createdTo ? new Date(query.createdTo) : undefined,
-    hasEmail: query.hasEmail,
+    tagIds: parsed.filters.tag.map((id: string) => new Types.ObjectId(id)),
+    q: parsed.q,
+    createdFrom: parsed.filters.createdFrom
+      ? new Date(parsed.filters.createdFrom)
+      : undefined,
+    createdTo: parsed.filters.createdTo
+      ? new Date(parsed.filters.createdTo)
+      : undefined,
+    hasEmail: parsed.filters.hasEmail,
   };
 
   const result = await service.list(filters, {
-    sort: query.sort,
-    page: query.page,
-    pageSize: query.pageSize,
+    sort: serializeSort(parsed.sort),
+    page: parsed.page,
+    pageSize: parsed.pageSize,
   });
 
-  return ok(
-    result.items,
-    pageMeta({
-      page: query.page,
-      pageSize: query.pageSize,
-      total: result.total,
-    }),
-  );
+  return ok(result.items, meta(parsed, result.total));
 });
 
 /**

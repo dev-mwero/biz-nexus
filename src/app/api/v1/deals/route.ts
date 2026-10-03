@@ -1,87 +1,95 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
+import { z } from "zod";
+import { DEAL_STATUSES } from "@/modules/deals";
 import { DealRepository } from "@/modules/deals/deal.repository";
 import { DealService } from "@/modules/deals/deal.service";
 import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
-import { ok, pageMeta } from "@/shared/responses/envelope";
+import { listQuery } from "@/shared/query/list-query";
+import { ok } from "@/shared/responses/envelope";
+
+const dealFiltersSchema = z.object({
+  status: z.enum(DEAL_STATUSES).optional(),
+  pipelineId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  stageId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  companyId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  contactId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  ownerId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .optional(),
+  valueMin: z.coerce.number().nonnegative().optional(),
+  valueMax: z.coerce.number().nonnegative().optional(),
+  closingFrom: z.coerce.date().optional(),
+  closingTo: z.coerce.date().optional(),
+  tag: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).default([]),
+});
+
+const { parse, meta } = listQuery({
+  filters: dealFiltersSchema,
+  sortable: ["createdAt", "updatedAt", "value", "expectedCloseDate", "name"],
+  defaultSort: "-createdAt",
+  searchable: true,
+  orderedPairs: [
+    ["valueMin", "valueMax"],
+    ["closingFrom", "closingTo"],
+  ],
+});
 
 /**
  * GET /api/v1/deals
  * List deals with filters, pagination, and sorting.
  * Query params: page, pageSize, sort, q, status, pipelineId, stageId, companyId, contactId, ownerId, valueMin, valueMax, closingFrom, closingTo, tag[]
  */
-export const GET = withApi(async (request, context) => {
+export const GET = withApi(async (request) => {
   const guards = guardsFor(request);
   const ctx = await guards.requirePermission("deals.read");
 
-  const url = new URL(request.url);
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
-  const pageSize = Math.min(
-    100,
-    Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "20", 10)),
-  );
-  const sort = url.searchParams.get("sort") ?? "-createdAt";
-  const search = url.searchParams.get("q")?.trim();
+  const parsed = parse(new URL(request.url).searchParams);
+  const f = parsed.filters;
 
-  // Build filter
   const filter: Record<string, unknown> = {};
 
-  const status = url.searchParams.get("status");
-  if (status) filter.status = status;
+  if (f.status) filter.status = f.status;
+  if (f.pipelineId) filter.pipelineId = new Types.ObjectId(f.pipelineId);
+  if (f.stageId) filter.stageId = new Types.ObjectId(f.stageId);
+  if (f.companyId) filter.companyId = new Types.ObjectId(f.companyId);
+  if (f.contactId) filter.contactId = new Types.ObjectId(f.contactId);
+  if (f.ownerId) filter.ownerId = new Types.ObjectId(f.ownerId);
 
-  const pipelineId = url.searchParams.get("pipelineId");
-  if (pipelineId) filter.pipelineId = pipelineId;
-
-  const stageId = url.searchParams.get("stageId");
-  if (stageId) filter.stageId = stageId;
-
-  const companyId = url.searchParams.get("companyId");
-  if (companyId) filter.companyId = companyId;
-
-  const contactId = url.searchParams.get("contactId");
-  if (contactId) filter.contactId = contactId;
-
-  const ownerId = url.searchParams.get("ownerId");
-  if (ownerId) filter.ownerId = ownerId;
-
-  // Range operators accumulate, so each bound is kept in its own local rather
-  // than read back out of the loosely-typed filter it is being written into.
-  const valueMin = url.searchParams.get("valueMin");
-  const valueMax = url.searchParams.get("valueMax");
-  if (valueMin || valueMax) {
+  if (f.valueMin !== undefined || f.valueMax !== undefined) {
     const value: Record<string, number> = {};
-    if (valueMin) value.$gte = parseFloat(valueMin);
-    if (valueMax) value.$lte = parseFloat(valueMax);
+    if (f.valueMin !== undefined) value.$gte = f.valueMin;
+    if (f.valueMax !== undefined) value.$lte = f.valueMax;
     filter.value = value;
   }
 
-  const closingFrom = url.searchParams.get("closingFrom");
-  const closingTo = url.searchParams.get("closingTo");
-  if (closingFrom || closingTo) {
+  if (f.closingFrom || f.closingTo) {
     const expectedCloseDate: Record<string, Date> = {};
-    if (closingFrom) expectedCloseDate.$gte = new Date(closingFrom);
-    if (closingTo) expectedCloseDate.$lte = new Date(closingTo);
+    if (f.closingFrom) expectedCloseDate.$gte = f.closingFrom;
+    if (f.closingTo) expectedCloseDate.$lte = f.closingTo;
     filter.expectedCloseDate = expectedCloseDate;
   }
 
-  const tags = url.searchParams.getAll("tag");
-  if (tags.length > 0) filter.tags = { $in: tags };
-
-  // Text search
-  if (search) {
-    filter.$text = { $search: search };
+  if (f.tag.length > 0) {
+    filter.tags = { $in: f.tag.map((id: string) => new Types.ObjectId(id)) };
   }
 
-  // Parse sort
-  const sortObj: Record<string, 1 | -1> = {};
-  const sortFields = sort.split(",");
-  for (const field of sortFields) {
-    if (field.startsWith("-")) {
-      sortObj[field.slice(1)] = -1;
-    } else {
-      sortObj[field] = 1;
-    }
+  if (parsed.q) {
+    filter.$text = { $search: parsed.q };
   }
 
   const repo = new DealRepository(ctx.organization._id, ctx.user._id);
@@ -93,14 +101,14 @@ export const GET = withApi(async (request, context) => {
 
   const [deals, total] = await Promise.all([
     service.list(filter, {
-      sort: sortObj,
-      limit: pageSize,
-      skip: (page - 1) * pageSize,
+      sort: parsed.sort,
+      limit: parsed.limit,
+      skip: parsed.skip,
     }),
     service.count(filter),
   ]);
 
-  return ok(deals, pageMeta({ page, pageSize, total }));
+  return ok(deals, meta(parsed, total));
 });
 
 /**

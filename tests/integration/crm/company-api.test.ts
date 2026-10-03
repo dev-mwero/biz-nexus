@@ -341,6 +341,40 @@ describe("Company API Integration", () => {
       );
       expect(res.status).toBe(403);
     });
+
+    it("rejects a sort field that is not on this resource's allow-list", async () => {
+      // Sorting is a query the client controls, and a free-form field name is
+      // how `$where` or a slug reaches the database. The allow-list is the
+      // whole defence, so it has to be exercised through the route and not
+      // only through the shared parser's unit tests.
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/companies?sort=__proto__",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
+
+    it("rejects a pageSize above the hard cap", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/companies?pageSize=500",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
+
+    it("rejects a malformed ownerId instead of letting Mongo throw", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/companies?ownerId=not-an-id",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
   });
 
   describe("POST /api/v1/crm/companies", () => {

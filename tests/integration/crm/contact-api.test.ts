@@ -221,6 +221,36 @@ describe("Contact API Integration", () => {
       );
       expect(res.status).toBe(403);
     });
+
+    it("rejects a sort field that is not on this resource's allow-list", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?sort=passwordHash",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
+
+    it("rejects a pageSize above the hard cap", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?pageSize=500",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
+
+    it("rejects a malformed ownerId instead of letting Mongo throw", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?ownerId=not-an-id",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(422);
+    });
   });
 
   describe("POST /api/v1/crm/contacts", () => {

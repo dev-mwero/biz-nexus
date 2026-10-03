@@ -1,16 +1,17 @@
 import { z } from "zod";
 import { CompanyService, ContactService } from "@/modules/crm";
-import { queryFromSearchParams } from "@/shared/api/search-params";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
-import { ok, pageMeta } from "@/shared/responses/envelope";
+import { listQuery, serializeSort } from "@/shared/query/list-query";
+import { ok } from "@/shared/responses/envelope";
 import { pathParam } from "../../../../../_lib/path-param";
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
-  sort: z.string().default("lastName,firstName"),
+const { parse, meta } = listQuery({
+  filters: z.object({}),
+  sortable: ["lastName", "firstName", "createdAt", "updatedAt"],
+  defaultSort: "lastName,firstName",
+  searchable: false,
 });
 
 /**
@@ -23,8 +24,7 @@ export const GET = withApi(async (request: Request) => {
   const context = await guards.requirePermission("contacts.read");
 
   const id = pathParam(request, 2);
-  const { searchParams } = new URL(request.url);
-  const query = listQuerySchema.parse(queryFromSearchParams(searchParams, []));
+  const parsed = parse(new URL(request.url).searchParams);
 
   // Verify company exists
   const companyService = new CompanyService(
@@ -41,16 +41,9 @@ export const GET = withApi(async (request: Request) => {
     context.user._id,
   );
   const contacts = await contactService.getByCompany(id, {
-    sort: query.sort,
-    limit: query.pageSize,
+    sort: serializeSort(parsed.sort),
+    limit: parsed.pageSize,
   });
 
-  return ok(
-    contacts,
-    pageMeta({
-      page: query.page,
-      pageSize: query.pageSize,
-      total: contacts.length,
-    }),
-  );
+  return ok(contacts, meta(parsed, contacts.length));
 });
