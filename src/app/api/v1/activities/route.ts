@@ -6,12 +6,34 @@ import {
   recordActivity,
   timelineForEntity,
 } from "@/modules/activities";
+import {
+  CompanyRepository,
+  ContactRepository,
+  LeadRepository,
+} from "@/modules/crm";
+import { DealRepository } from "@/modules/deals/deal.repository";
+import { findById as findTaskById } from "@/modules/tasks";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { listQuery } from "@/shared/query/list-query";
 import { ok } from "@/shared/responses/envelope";
 import { fieldDetails } from "../../_lib/zod-details";
+
+/**
+ * The record types an activity may be attached to.
+ *
+ * Lowercase because that is what the event subscribers write (`deal`, `task`)
+ * and what the composer sends. Accepting any string meant an unknown type was
+ * stored and then never matched by a per-record timeline.
+ */
+const SUBJECT_ENTITY_TYPES = [
+  "contact",
+  "company",
+  "lead",
+  "deal",
+  "task",
+] as const;
 
 const activityFiltersSchema = z.object({
   entityType: z.string().optional(),
@@ -54,7 +76,7 @@ const { parse, meta } = listQuery({
 });
 
 const createActivitySchema = z.object({
-  entityType: z.string().min(1),
+  entityType: z.enum(SUBJECT_ENTITY_TYPES),
   entityId: z.string().regex(/^[0-9a-fA-F]{24}$/),
   type: z.enum(["NOTE", "CALL", "MEETING"]),
   title: z.string().min(1).max(255),
@@ -65,6 +87,44 @@ const createActivitySchema = z.object({
     .union([z.iso.datetime({ offset: true }), z.iso.date()])
     .optional(),
 });
+
+/**
+ * Whether `entityId` names a record of `entityType` that this organisation owns.
+ *
+ * Activities carry free-form `subjects` so one row can sit on several records,
+ * and the id was written straight through without a lookup. That let a caller
+ * attach an activity to an id from another tenant — the row is only ever read
+ * back by id, so it surfaces as a timeline on somebody else's record. Every
+ * lookup below goes through a tenant-scoped repository, so a foreign or
+ * soft-deleted id returns false.
+ */
+async function subjectExists(
+  organizationId: Types.ObjectId,
+  actorId: Types.ObjectId,
+  entityType: (typeof SUBJECT_ENTITY_TYPES)[number],
+  entityId: Types.ObjectId,
+): Promise<boolean> {
+  switch (entityType) {
+    case "contact":
+      return new ContactRepository(organizationId, actorId).exists({
+        _id: entityId,
+      });
+    case "company":
+      return new CompanyRepository(organizationId, actorId).exists({
+        _id: entityId,
+      });
+    case "lead":
+      return new LeadRepository(organizationId, actorId).exists({
+        _id: entityId,
+      });
+    case "deal":
+      return new DealRepository(organizationId, actorId).exists({
+        _id: entityId,
+      });
+    case "task":
+      return (await findTaskById(organizationId, entityId)) !== null;
+  }
+}
 
 export const GET = withApi(async (request) => {
   const guards = guardsFor(request);
@@ -133,10 +193,22 @@ export const POST = withApi(
 
     const data = parsed.data;
 
-    // Validate that the user has read access to the parent entity
-    // This is a simplified check - in a full implementation, this would
-    // verify permissions on the specific entity type
-    // For now, we trust the organization-level permission
+    const subjectId = new Types.ObjectId(data.entityId);
+    const subjectFound = await subjectExists(
+      organization._id,
+      user._id,
+      data.entityType,
+      subjectId,
+    );
+    if (!subjectFound) {
+      throw AppError.validation([
+        {
+          path: "entityId",
+          message:
+            "No matching record of that type in this organisation, or you cannot read it.",
+        },
+      ]);
+    }
 
     const input: RecordActivityInput = {
       organizationId: organization._id,
@@ -151,7 +223,7 @@ export const POST = withApi(
       subjects: [
         {
           entityType: data.entityType,
-          entityId: new Types.ObjectId(data.entityId),
+          entityId: subjectId,
         },
       ],
       metadata: {},
