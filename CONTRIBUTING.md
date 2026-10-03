@@ -35,11 +35,37 @@ mongosh --eval "rs.initiate()"
 | `npm run lint` | Biome — lint and format check |
 | `npm run lint:fix` | Biome — apply fixes |
 | `npm run format` | Biome — format only |
-| `npm run typecheck` | `next typegen` then `tsc --noEmit` |
+| `npm run typecheck` | `next typegen` then `tsc --noEmit --incremental false` |
 | `npm run validate` | Lint, typecheck, and tests. **Run before every commit.** |
 | `npm test` | Unit and integration tests |
 | `npm run test:e2e` | Playwright end-to-end tests |
 | `npm run verify:ui` | Computed-style and contrast checks against a running server |
+
+### Why `--incremental false`
+
+Not a preference. `tsconfig.json` sets `"incremental": true`, Next 16 puts it
+there itself and will put it back if it is removed, and `tsconfig.json`'s
+`include` spans four generated type trees that three different scripts own —
+`next dev` writes `.next/dev/types`, `next build` writes `.next/types`, and
+`npm run test:e2e` builds into `.next-e2e` and writes `.next-e2e/types`. Each
+deletes and regenerates its own directory wholesale.
+
+An incremental `tsc` keeps one build state spanning all four. When a script
+deletes a file that state knows about, the file leaves the program and the
+cached verdicts for everything else are reused — so `npm run validate` can
+return green over a type error it has never actually checked.
+
+It did. A commit went in behind a green `validate` carrying a `tsc` error that
+appeared only once `tsconfig.tsbuildinfo` was deleted, and CI would have failed
+on it, because a clean checkout has no build state to trust. The CLI flag
+overrides the option without editing a file Next rewrites, and costs 67s
+against 13s on a hook that already spends five minutes in the test suite.
+
+If you are ever unsure whether a green `typecheck` checked anything:
+
+```bash
+rm -f tsconfig.tsbuildinfo && npm run typecheck
+```
 
 ### `npm run verify:ui`
 

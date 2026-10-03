@@ -9,7 +9,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write",
     "format": "biome format --write",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
