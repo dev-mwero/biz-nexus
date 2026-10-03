@@ -92,6 +92,41 @@ describe("inviteMember", () => {
     expect(JSON.stringify(invitation)).not.toContain(token);
   });
 
+  it("keeps the token digest out of anything serialised", async () => {
+    const { owner, organization, roleIds } = await withOrg();
+
+    const { token, invitation } = await inviteMember({
+      organizationId: organization._id,
+      email: "new@example.com",
+      roleId: roleIds.MEMBER,
+      invitedBy: owner._id,
+    });
+
+    // The digest is the lookup key `acceptInvitation` resolves a token with, so
+    // a response carrying it would be a response carrying the ability to accept
+    // every outstanding invitation. Asserted on the digest, not the raw token:
+    // the raw token is already covered above, and only one of the two is the
+    // thing the redaction exists for.
+    //
+    // Through `JSON.stringify` rather than `invitation.toJSON()`. The service
+    // returns the document it created but types it as the lean `Invitation`
+    // interface, so the transform is not visible in the type — only in what
+    // reaches a socket, which is also the thing being asserted.
+    expect(JSON.stringify(invitation)).not.toContain(token);
+    expect(JSON.stringify(invitation)).not.toContain(hashToken(token));
+
+    // On a document read back from the database too, not only on the one the
+    // insert returned — the transform belongs to the schema, not to a call site.
+    const stored = await InvitationModel.findById(invitation._id);
+    expect(JSON.stringify(stored)).not.toContain(hashToken(token));
+    expect(
+      JSON.stringify(await listInvitations(organization._id)),
+    ).not.toContain(hashToken(token));
+
+    // The field itself is untouched, so acceptance still resolves by hash.
+    expect(stored?.tokenHash).toBe(hashToken(token));
+  });
+
   it("issues a distinct token every time", async () => {
     const { owner, organization, roleIds } = await withOrg();
 

@@ -31,6 +31,36 @@ export interface Invitation extends AuditFields, SoftDeleteFields {
   updatedAt: Date;
 }
 
+/**
+ * Drop `tokenHash` on the way out of the process.
+ *
+ * The digest is what makes a leaked database useless for accepting invitations,
+ * so its value has no business in a response body, a log line, or an event
+ * payload — but `inviteMember` returns the document it just created, and
+ * `listInvitations` returns documents, so every caller that serialises one
+ * would carry the digest with it. `withApi` redacts sensitive keys from log
+ * lines, which covers the log; it does not cover a JSON response, where the
+ * key has to be absent rather than masked, because `hashToken` is one-way: a
+ * masked digest in a payload is a digest an attacker can still confirm guesses
+ * against.
+ *
+ * A schema transform rather than a projection at each call site, so the field is
+ * removed once and stays removed for the endpoint that nobody remembered. The
+ * key is deleted rather than set to a placeholder, so a client cannot mistake a
+ * redacted value for a real one.
+ *
+ * Property access is unaffected: the service reads and writes `tokenHash` on
+ * documents, and `invitations.test.ts` asserts on it directly. Only `toJSON` —
+ * and therefore `JSON.stringify`, `res.json()`, and event payloads — is affected.
+ */
+function redactTokenHash(
+  _document: unknown,
+  ret: Record<string, unknown>,
+): Record<string, unknown> {
+  delete ret.tokenHash;
+  return ret;
+}
+
 const invitationSchema = new Schema<Invitation>(
   {
     organizationId: { type: Schema.Types.ObjectId, required: true },
@@ -48,7 +78,11 @@ const invitationSchema = new Schema<Invitation>(
     acceptedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },
   },
-  { timestamps: true, collection: "invitations" },
+  {
+    timestamps: true,
+    collection: "invitations",
+    toJSON: { transform: redactTokenHash },
+  },
 );
 
 invitationSchema.plugin(auditFields());
