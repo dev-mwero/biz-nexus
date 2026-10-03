@@ -127,6 +127,38 @@ function toObjectId(
   }
 }
 
+/**
+ * Schema validation, on for every update this class issues.
+ *
+ * Mongoose validates a document on `create` and on `save`, and validates
+ * nothing on an update unless it is asked to. The result is that every
+ * constraint declared on every schema in this application — `value: { min: 0 }`,
+ * `probability: { max: 100 }`, `name: { minlength: 1, maxlength: 160 }` — is
+ * enforced the first time a record comes in and silently ignored the second time
+ * it comes in through a different door. `PATCH /api/v1/deals/:id` took
+ * `value: -5` and `probability: 999` while `POST` refused both, and the 999 then
+ * went on to `getOpenDealsForForecast` and the dashboard, weighting a forecast
+ * beyond anything the schema permits. Nothing fails, so nothing is noticed.
+ *
+ * Forced on rather than offered as an option. An option is one omission away
+ * from being off again, and the omission is invisible in review because an
+ * unvalidated write looks exactly like a validated one. The three update
+ * methods spread this *after* the caller's options for the same reason: a
+ * caller passing `runValidators: false` must not be able to reopen the hole this
+ * closes.
+ *
+ * A caller that genuinely cannot satisfy its own schema is a bug to report, not
+ * a reason to add an escape hatch — the alternative is a flag whose one known
+ * user would be the bug being fixed.
+ *
+ * This does constrain one existing write: `TagRepository.incrementUsage` sends a
+ * server-computed `$inc`, and Mongoose 9 runs update validators over `$set` and
+ * `$push` but not over the target path of an `$inc`, so the count it maintains
+ * is unaffected. That was checked against
+ * `mongoose/lib/helpers/updateValidators.js` rather than assumed.
+ */
+const VALIDATE_UPDATES = { runValidators: true } as const;
+
 export abstract class TenantRepository<T extends TenantDocument> {
   readonly organizationId: Types.ObjectId;
 
@@ -291,7 +323,7 @@ export abstract class TenantRepository<T extends TenantDocument> {
     return this.model.updateOne(
       this.scope(filter),
       { ...update, ...this.stamps("update") },
-      options,
+      { ...options, ...VALIDATE_UPDATES },
     );
   }
 
@@ -303,7 +335,7 @@ export abstract class TenantRepository<T extends TenantDocument> {
     return this.model.updateMany(
       this.scope(filter),
       { ...update, ...this.stamps("update") },
-      options,
+      { ...options, ...VALIDATE_UPDATES },
     );
   }
 
@@ -322,6 +354,11 @@ export abstract class TenantRepository<T extends TenantDocument> {
    *
    * `findOneAndUpdate` takes a filter and honours all of it, so the scope
    * actually reaches MongoDB.
+   *
+   * This is also the method most of the application's client-supplied updates
+   * arrive through, which is why `runValidators` matters most here. Validation
+   * covers the paths an update touches and nothing else, so a partial update is
+   * not made to satisfy `required` on fields it never mentions.
    */
   findByIdAndUpdate(
     id: Types.ObjectId | string,
@@ -333,7 +370,11 @@ export abstract class TenantRepository<T extends TenantDocument> {
     return this.model.findOneAndUpdate(
       this.scope({ _id: id } as ScopedFilter<T>),
       { ...update, ...this.actorStamps() },
-      { returnDocument: "after", ...options },
+      {
+        returnDocument: "after",
+        ...options,
+        ...VALIDATE_UPDATES,
+      },
     );
   }
 
