@@ -488,9 +488,15 @@ describe("the failures a mongoose write raises", async () => {
     // the value in the middle of the message. Same client's mistake, same
     // answer, so it gets mapped by the same rule rather than by a second one
     // somebody has to remember.
+    // `cast()` with no argument rather than `cast(Widget)`. The query already
+    // knows its model, and the overload that takes one is typed
+    // `Model<any, TQueryHelpers>` — which a model built on a private
+    // `new mongoose.Mongoose()` instance does not satisfy, because that
+    // instance's `Schema` type carries no `id` virtual. Passing the model
+    // explicitly bought nothing and cost a cast to `any` to silence.
     let thrown: unknown;
     try {
-      Widget.find({ ownerId: "LEAKCANARY" }).cast(Widget);
+      Widget.find({ ownerId: "LEAKCANARY" }).cast();
     } catch (error) {
       thrown = error;
     }
