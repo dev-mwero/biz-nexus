@@ -1,5 +1,6 @@
 import type { ClientSession, Types } from "mongoose";
 import { withTransaction } from "@/db/transaction";
+import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
 import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 import { CompanyModel } from "./company.model";
@@ -77,6 +78,7 @@ export class LeadService {
   private contactRepo: ContactRepository;
   private companyRepo: CompanyRepository;
   private fieldDefService: FieldDefinitionService;
+  private pipelineRepo: PipelineRepository;
 
   constructor(
     organizationId: Types.ObjectId | string,
@@ -86,6 +88,7 @@ export class LeadService {
     this.contactRepo = new ContactRepository(organizationId, actorId);
     this.companyRepo = new CompanyRepository(organizationId, actorId);
     this.fieldDefService = new FieldDefinitionService(organizationId, actorId);
+    this.pipelineRepo = new PipelineRepository(organizationId, actorId);
   }
 
   /** Create a new lead. */
@@ -392,7 +395,23 @@ export class LeadService {
             "Deal requires pipelineId and stageId.",
           );
         }
-        // Validate pipeline/stage exist and match (deferred to deal service in full impl)
+        // The stage has to belong to the pipeline, checked through the same
+        // tenant-scoped repository `POST /deals` uses, so the two paths cannot
+        // disagree about what a valid pair is. It used to be a comment saying
+        // this was deferred, which meant conversion accepted ids that
+        // `POST /deals` refuses and wrote a deal pointing at a pipeline in
+        // another tenant — invisible on the caller's own board, and a dangling
+        // reference for anything that later resolves those ids.
+        const stage = await this.pipelineRepo.getStage(
+          input.deal.pipelineId,
+          input.deal.stageId,
+        );
+        if (!stage) {
+          throw new LeadError(
+            "VALIDATION_FAILED",
+            "The selected stage does not belong to the specified pipeline.",
+          );
+        }
       }
 
       let contactId: Types.ObjectId;
@@ -424,8 +443,14 @@ export class LeadService {
           session,
         );
         companyId = company._id;
-        // Link contact to company
-        await ContactModel.updateOne(
+        // Through the tenant-scoped repository, not `ContactModel` directly.
+        // `contactId` came off the lead and is therefore only as trustworthy as
+        // whatever wrote the lead — and the raw model call put no
+        // `organizationId` in the filter, so a lead holding a stale or forged
+        // contact id would have had that contact updated in whichever tenant
+        // owns the id. The scope is applied in the constructor and cannot be
+        // overridden by the filter, which is the property worth having here.
+        await this.contactRepo.updateOne(
           { _id: contactId },
           { $set: { companyId } },
           { session },
