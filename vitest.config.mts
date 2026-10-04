@@ -16,7 +16,7 @@ export default defineConfig({
       // and working; the warning is emitted before any test code runs.
       VITE_CONFIG_NATIVE_IGNORE_WARNING: "true",
     },
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     exclude: ["node_modules/**", ".next/**", "e2e/**"],
     globalSetup: ["./tests/global-setup.ts"],
     setupFiles: ["./tests/setup-env.ts"],
@@ -45,23 +45,27 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "./coverage",
       include: ["src/**/*.{ts,tsx}"],
-      // Components are excluded deliberately, and the debt is real: they are
-      // 1014 lines and 362 functions at 0%. They are also the part of the tree
-      // the project's own testing strategy assigns to e2e rather than unit
-      // tests (CONTRIBUTING.md, "Testing"), and there is no DOM test
-      // environment here to cover them with — this suite runs in `node` and
-      // there is no jsdom or @testing-library/react installed.
+      // Components are still excluded, and the reason has changed: this is now a
+      // deliberate, measured line rather than the absence of a way to test them.
       //
-      // Measuring them anyway only produced a gate that could never go green,
-      // which is worse than no gate: it blocks every commit while reporting a
-      // number nobody decided to require. What the remaining thresholds do
-      // describe is the business logic — services, guards, repositories — and
-      // they hold at 81.8% lines and 82.1% functions.
+      // jsdom and @testing-library/react are installed and `tests/components/**`
+      // runs under them, with `// @vitest-environment jsdom` per file. The first
+      // suite through it — `pipeline-list.test.tsx` — found two defects the other
+      // 73 files could not see, because both lived between a rendered button and a
+      // callback that was correctly typed and correctly implemented: the inline
+      // rename's "Save" discarded the edit, and its name field had no accessible
+      // name at all.
       //
-      // To bring components back, add jsdom and @testing-library/react, a
-      // per-file `// @vitest-environment jsdom`, then drop the first entry
-      // below and watch what the gate actually says. The Kanban board, the
-      // notification bell, and the pipeline list are the largest three.
+      // The exclusion stays because the remaining surface does not fit under the
+      // existing thresholds yet. Measured with it removed: 63% lines against a 70%
+      // threshold, with `src/components/ui` at 29.77% and twenty-two files at 0%.
+      // Closing that is 251 covered lines, which is the Kanban board, the task
+      // list, the task form, the notification bell, the command palette and the
+      // activity timeline between them — real work, not a threshold to be
+      // negotiated downwards to make the number go green.
+      //
+      // What the remaining thresholds do describe is the business logic — services,
+      // guards, repositories — and they hold at 84% lines and 83% functions.
       exclude: [
         "src/**/*.d.ts",
         "src/**/index.ts",

@@ -216,7 +216,8 @@ interface PipelineCardProps {
   editName: string;
   editDescription: string;
   onEditClick: () => void;
-  onEditSubmit: () => void;
+  /** Awaited by the save button, which is why this is a promise and not void. */
+  onEditSubmit: () => void | Promise<void>;
   onEditCancel: () => void;
   onEditNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onEditDescriptionChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -284,9 +285,24 @@ function PipelineCard({
     setDraggingStageId(null);
   };
 
-  const handleSaveStages = () => {
-    onReorderStages(localStages);
-    onEditCancel();
+  /**
+   * Save both halves of what the editor holds: the name and description, and the
+   * stage order.
+   *
+   * It used to save only the stages and then close the editor, which silently threw
+   * the rename away. `onEditSubmit` was reachable only by pressing Enter in the
+   * name field, so the one gesture a person would try — clicking the button marked
+   * "Save" — discarded their edit, and the keyboard gesture that committed it was
+   * undocumented and invisible. `onUpdate` was effectively unreachable from the UI.
+   *
+   * Both halves are awaited before closing, so a failed rename does not leave the
+   * editor open over a stage save that did land. The stages go first because that
+   * is the part that was already working, and losing a reorder is the cheaper of the
+   * two mistakes if the second call fails.
+   */
+  const handleSave = async () => {
+    await onReorderStages(localStages);
+    await onEditSubmit();
   };
 
   return (
@@ -297,13 +313,40 @@ function PipelineCard({
         <div className="flex items-center justify-between gap-4">
           {isEditing ? (
             <div className="flex-1 space-y-2">
+              {/* These two had a `placeholder` and no label, which is not a
+                  label: it disappears as soon as the field holds a value, and
+                  it is not reliably announced. Two inputs side by side reading
+                  only "Description" and nothing at all is a form a screen
+                  reader cannot fill in — the name field had no accessible name
+                  whatsoever.
+
+                  `sr-only` rather than visible text because this is an inline
+                  edit of a card whose heading is already the pipeline's name;
+                  repeating it above the field would be noise for everyone and
+                  the card title does not move. The association is still explicit
+                  through `htmlFor`, which is what `Label` requires for exactly
+                  this reason. */}
+              <Label
+                htmlFor={`pipeline-name-${pipeline.id}`}
+                className="sr-only"
+              >
+                Pipeline name
+              </Label>
               <Input
+                id={`pipeline-name-${pipeline.id}`}
                 value={editName}
                 onChange={onEditNameChange}
                 onKeyDown={(e) => e.key === "Enter" && onEditSubmit()}
                 autoFocus
               />
+              <Label
+                htmlFor={`pipeline-description-${pipeline.id}`}
+                className="sr-only"
+              >
+                Pipeline description
+              </Label>
               <Textarea
+                id={`pipeline-description-${pipeline.id}`}
                 value={editDescription}
                 onChange={onEditDescriptionChange}
                 rows={2}
@@ -314,7 +357,7 @@ function PipelineCard({
                 <Button variant="ghost" size="sm" onClick={onEditCancel}>
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleSaveStages}>
+                <Button size="sm" onClick={handleSave}>
                   Save
                 </Button>
               </div>
