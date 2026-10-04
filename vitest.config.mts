@@ -26,9 +26,10 @@ export default defineConfig({
     //
     // 60s rather than 30s, and for a second reason. The identity and auth suites
     // are CPU-bound, not I/O-bound: bcryptjs is a pure-JavaScript implementation
-    // and a cost-12 hash measures ~2.1s on ordinary hardware (see the note in
+    // and a cost-12 hash measures 616ms on an idle core but ~2.2s once three
+    // other workers are hashing too (see the note in
     // src/modules/identity/password.ts), so a single test that builds a fixture
-    // hash and then makes five sequential verifications is over 12s of pure
+    // hash and then makes five sequential verifications is over 13s of pure
     // computation before any contention at all. Vitest runs one worker per test
     // file, this suite is 35 files, and on a 4-core machine those workers divide
     // the same four cores. 30s sat on that boundary and failed intermittently for

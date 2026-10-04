@@ -26,7 +26,8 @@
     "bench:k6:dashboard": "k6 run scripts/bench-dashboard.mjs",
     "bench:k6:search": "k6 run scripts/bench-search.mjs",
     "bench:k6:api-list": "k6 run scripts/bench-api-list.mjs",
-    "bench:k6": "npm run bench:k6:dashboard && npm run bench:k6:search && npm run bench:k6:api-list"
+    "bench:k6": "npm run bench:k6:dashboard && npm run bench:k6:search && npm run bench:k6:api-list",
+    "bench:bcrypt": "node scripts/bench-bcrypt.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -56,6 +57,7 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^5.0.2",
     "babel-plugin-react-compiler": "1.0.0",
+    "bcrypt": "^6.0.0",
     "mongodb-memory-server": "^11.3.0",
     "tailwindcss": "^4",
     "typescript": "^5",

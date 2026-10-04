@@ -181,14 +181,24 @@ system is provably incapable of leaking data across organisation boundaries.
 `docs/DATABASE.md` §2 pin bcrypt at cost 12, and that pin is a correctness
 decision: it is the number that makes an offline attack expensive, and it is
 revisited only by a decision to change it, not by a decision to make hashing
-faster. What 1.78 evaluates is the *implementation* — `bcryptjs` is pure
-JavaScript and measures roughly **1.8s per hash / 1.9s per verify** on an i5-7200U,
-against the ~250ms the documentation previously described for a native bcrypt on
-modern server CPU. That is not a security finding; it is a **>7x discrepancy**
-between what the docs said a sign-in costs and what it costs, and it has a
-consequence that is a security concern: 1.31 sizes a rate limiter, and a limiter
-configured against 250ms on a machine that spends 1.8s hashing does not bound
-the attack it exists to bound.
+faster. What 1.78 evaluates is the *implementation*.
+
+**Measured, not asserted.** `npm run bench:bcrypt`, cost 12 on both sides, median
+of 12, on the i5-7200U this note used to attribute 1.8s to:
+
+| | `bcryptjs` 3.0.3 | `bcrypt` 6.0.0 native |
+|---|---|---|
+| hash, idle | 616 ms | 334 ms |
+| hash, four concurrent | 2255 ms | 442 ms |
+
+The 1.8s figure was never the hardware's cost. `bcryptjs` is single-threaded
+JavaScript that yields between rounds, so a fixture hash in each of Vitest's four
+workers takes about as long again as one alone; measured idle, the same hash is
+616ms. The ~250ms the documentation quoted was sound for a *native* bcrypt on a
+current server CPU, which is not what this codebase ran. Full reasoning and the
+one decision it leaves open — whether the deploying environment will run
+`bcrypt`'s install script — are in
+[ADR-0007](./decisions/0007-native-bcrypt-binding.md).
 
 **Exit criteria (Gate 1):**
 

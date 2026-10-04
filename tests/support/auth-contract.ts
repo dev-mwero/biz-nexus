@@ -201,11 +201,14 @@ export interface TestUser {
 /**
  * A password hash made once per file.
  *
- * bcryptjs at cost 12 is ~2.1s of pure CPU per hash on ordinary hardware. The
- * suites are CPU-bound rather than I/O-bound and Vitest divides one set of cores
- * across one worker per file, so hashing per test turns a 10s file into a 2min
- * one and then into a timeout. The hash is verified against the plaintext on
- * every use, so a stale fixture fails loudly rather than passing everything.
+ * bcryptjs at cost 12 is 616ms of pure CPU per hash on an idle core, and about
+ * 2.2s once three other workers are hashing at the same time — it is
+ * single-threaded JavaScript that yields between rounds, so concurrency
+ * multiplies the latency rather than the throughput (ADR-0007). The suites are
+ * CPU-bound rather than I/O-bound and Vitest divides one set of cores across one
+ * worker per file, so hashing per test turns a 10s file into a 2min one and then
+ * into a timeout. The hash is verified against the plaintext on every use, so a
+ * stale fixture fails loudly rather than passing everything.
  */
 export const PASSWORD = "correct horse battery staple";
 

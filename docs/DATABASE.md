@@ -76,7 +76,7 @@ organisation.
 |---|---|---|
 | `email` | `String` | Lower-cased and trimmed on write. **Unique.** |
 | `name` | `String` | Required, 1–120 |
-| `passwordHash` | `String` | bcrypt, cost 12 (~1.8s/hash on i5-7200U; ~250ms on modern server CPU). Never selected by default. |
+| `passwordHash` | `String` | bcrypt, cost 12, via `bcryptjs` 3.0.3. Measured 616 ms per hash idle on an i5-7200U, ~2.2 s alongside three others. Never selected by default. See [ADR-0007](./decisions/0007-native-bcrypt-binding.md). |
 | `avatarUrl` | `String?` | |
 | `emailVerifiedAt` | `Date?` | Null means unverified |
 | `lastLoginAt` | `Date?` | |
