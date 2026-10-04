@@ -198,7 +198,7 @@ export default async function PipelineDetailPage({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={handleDelete} destructive>
+              <DropdownMenuItem onClick={handleDelete} destructive>
                 <Trash2 className="h-4 w-4 mr-2" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

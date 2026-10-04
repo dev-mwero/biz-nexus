@@ -285,7 +285,7 @@ export function NotificationBell() {
                   !notification.readAt &&
                     "bg-info-surface/50 dark:bg-info-surface/30",
                 )}
-                onSelect={() =>
+                onClick={() =>
                   !notification.readAt && markRead(notification._id)
                 }
                 // Already-read notifications cannot be marked again; the
@@ -326,7 +326,7 @@ export function NotificationBell() {
 
         <DropdownMenuItem
           className="text-center text-info hover:bg-info-surface dark:hover:bg-info-surface"
-          onSelect={() => (window.location.href = "/notifications")}
+          onClick={() => (window.location.href = "/notifications")}
         >
           View all notifications
         </DropdownMenuItem>

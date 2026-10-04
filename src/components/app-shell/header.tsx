@@ -130,7 +130,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 {organizations.map((org) => (
                   <DropdownMenuItem
                     key={org.id}
-                    onSelect={() => handleSwitchOrg(org.id)}
+                    onClick={() => handleSwitchOrg(org.id)}
                     className={cn(
                       activeOrgId === org.id &&
                         "bg-info-surface text-info dark:bg-info-surface/30",
@@ -210,12 +210,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => router.push("/settings")}>
+              <DropdownMenuItem onClick={() => router.push("/settings")}>
                 <Settings className="size-4 mr-2" aria-hidden="true" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={handleSignOut} destructive>
+              <DropdownMenuItem onClick={handleSignOut} destructive>
                 <LogOut className="size-4 mr-2" aria-hidden="true" />
                 Sign out
               </DropdownMenuItem>
