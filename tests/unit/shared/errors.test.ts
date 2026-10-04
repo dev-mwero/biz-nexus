@@ -546,6 +546,100 @@ describe("the failures a mongoose write raises", async () => {
     ]);
   });
 
+  /**
+   * An id that never became an `ObjectId`.
+   *
+   * Finding S9 was closed on the list endpoints by giving their filter schemas a
+   * 24-hex regex, and its own write-up noted that a global backstop was still
+   * missing for "any route that still constructs ids by hand". Then
+   * `PATCH /api/v1/crm/contacts/:id` turned out to be exactly that route, with
+   * three unvalidated string fields, and each one produced a 500 for a caller
+   * typo.
+   *
+   * Every value below is a real throw from the `bson` constructor, not a
+   * hand-built stand-in — same reasoning as the mongoose failures above.
+   */
+  describe("an ObjectId that could not be constructed", () => {
+    it.each([
+      ["garbage", "an unparseable string"],
+      ["123", "a 12-character string"],
+      ["", "an empty string"],
+      ["z".repeat(24), "24 characters that are not hex"],
+      ["0".repeat(25), "25 hex characters"],
+    ])("maps %o (%s) to a 422", (value) => {
+      let thrown: unknown;
+      try {
+        new mongoose.Types.ObjectId(value);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(mongoose.mongo.BSON.BSONError);
+      expect(toErrorStatus(thrown)).toBe(422);
+
+      const payload = toErrorPayload(thrown);
+      expect(payload.code).toBe("VALIDATION_FAILED");
+      expect(payload.message).toBe("Not a valid identifier.");
+    });
+
+    it("keeps the rejected value out of the response", () => {
+      // The `bson` message is "input must be a 24 character hex string..." and
+      // for other inputs it can quote what was passed. The caller sent it, so it
+      // is not a disclosure to the caller — but the detail is also what ends up
+      // in a log line keyed by someone else's request, and the codebase's rule
+      // for these two arms is that the message is rebuilt from schema data, not
+      // taken from the failure.
+      let thrown: unknown;
+      try {
+        new mongoose.Types.ObjectId("leaked-secret-value");
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(JSON.stringify(toErrorPayload(thrown))).not.toMatch(/leaked/);
+    });
+
+    it("carries no field detail, because there is no field to name", () => {
+      // The value could have arrived as a path segment, a query parameter or a
+      // body field. Guessing which would be worse than admitting there isn't
+      // one, and a wrong `path` sends a client to highlight the wrong input.
+      let thrown: unknown;
+      try {
+        new mongoose.Types.ObjectId("garbage");
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(toErrorPayload(thrown).details).toBeUndefined();
+    });
+
+    it("leaves a driver version mismatch as a 500", () => {
+      // `BSONVersionError` extends `BSONError`, so a plain `instanceof
+      // BSONError` arm would catch it. It must not: a driver that cannot speak
+      // to the server it is connected to is this process's problem, and reporting
+      // it as a validation failure points the reader of the log at the request
+      // instead of at the deployment.
+      const { BSONVersionError } = mongoose.mongo.BSON;
+      // Constructed with no arguments: this class carries a fixed message, and
+      // the point of the case is the class, not its text.
+      const thrown: unknown = new BSONVersionError();
+
+      expect(thrown).toBeInstanceOf(mongoose.mongo.BSON.BSONError);
+      expect(toErrorStatus(thrown)).toBe(500);
+      expect(toErrorPayload(thrown).code).toBe("INTERNAL");
+    });
+
+    it("does not let a hand-built object pose as a BSON failure", () => {
+      const imposter = {
+        name: "BSONError",
+        message: 'expected "true" or "false"',
+      };
+
+      expect(toErrorStatus(imposter)).toBe(500);
+      expect(toErrorPayload(imposter).code).toBe("INTERNAL");
+    });
+  });
+
   it("does not let a hand-built object pose as a mongoose failure", async () => {
     // The same rule the zod arm is held to. Mapping on a name and a shape
     // rather than on `instanceof` would let anything thrown anywhere in the tree

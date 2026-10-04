@@ -462,7 +462,10 @@ describe("Company API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400: `parseBody` reports a schema failure as
+      // VALIDATION_FAILED, which is what `docs/API.md` §Errors documents.
+
+      expect(res.status).toBe(422);
     });
 
     it("rejects duplicate domain", async () => {
@@ -497,7 +500,10 @@ describe("Company API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400: `parseBody` reports a schema failure as
+      // VALIDATION_FAILED, which is what `docs/API.md` §Errors documents.
+
+      expect(res.status).toBe(422);
     });
 
     it("creates company with parent", async () => {

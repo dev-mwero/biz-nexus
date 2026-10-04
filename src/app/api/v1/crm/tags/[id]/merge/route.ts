@@ -1,7 +1,8 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { type MergeTagsInput, TagError, TagService } from "@/modules/crm";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -31,8 +32,7 @@ export const POST = withApi(async (request: Request) => {
   // `fromEnd: 2` — this path ends in a static segment (`route.ts`), so the
   // default of 1 would read that literal as the record id.
   const id = pathParam(request, 2);
-  const body = await readJson(request);
-  const input = mergeTagsSchema.parse(body);
+  const input = await parseBody(request, mergeTagsSchema);
 
   // The :id in the path is the source tag being merged
   if (input.sourceTagId !== id) {

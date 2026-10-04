@@ -402,7 +402,10 @@ describe("Contact API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400: `parseBody` reports a schema failure as
+      // VALIDATION_FAILED, which is what `docs/API.md` §Errors documents.
+
+      expect(res.status).toBe(422);
     });
 
     it("rejects duplicate primary email", async () => {
@@ -501,6 +504,128 @@ describe("Contact API Integration", () => {
   });
 
   describe("PATCH /api/v1/crm/contacts/:id", () => {
+    /**
+     * Malformed ids in the body, which is the other half of finding S9.
+     *
+     * The list endpoints were given a 24-hex regex when S9 was fixed, but this
+     * update schema still declared `companyId`, `ownerId` and `tags` as plain
+     * strings and the handler then did `new Types.ObjectId(...)` on them. A body
+     * of `{"ownerId": "garbage"}` therefore threw a `BSONError`, which is not a
+     * Mongoose `ValidationError`, so the error mapper's default arm claimed it
+     * and the caller got a 500 for their own typo.
+     *
+     * Each field is checked separately because they are three separate schema
+     * entries, and `tags` is checked with two entries because the array is
+     * mapped element-wise — a valid id beside an invalid one still has to be
+     * refused.
+     */
+    it.each([
+      ["ownerId", "garbage"],
+      ["companyId", "garbage"],
+      ["companyId", ""],
+      ["ownerId", "123"],
+      ["ownerId", "g".repeat(24)],
+      ["ownerId", "0".repeat(23)],
+      ["ownerId", "0".repeat(25)],
+    ])("refuses a malformed %s of %o with a 422", async (field, value) => {
+      const contact = await createContact(org.organization._id, org.user._id);
+
+      const res = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { [field]: value },
+        org.token,
+      );
+
+      expect(res.status).toBe(422);
+      const data = await res.json();
+      expect(data.error.code).toBe("VALIDATION_FAILED");
+    });
+
+    it("refuses a tag list holding one malformed id", async () => {
+      const contact = await createContact(org.organization._id, org.user._id);
+
+      const res = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { tags: [new Types.ObjectId().toString(), "garbage"] },
+        org.token,
+      );
+
+      expect(res.status).toBe(422);
+    });
+
+    it("leaves the contact untouched when an id is malformed", async () => {
+      // A 422 is only worth having if the write did not happen on the way to
+      // discovering the field was bad.
+      const contact = await createContact(org.organization._id, org.user._id);
+
+      await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { firstName: "Applied", ownerId: "garbage" },
+        org.token,
+      );
+
+      const reread = await ContactModel.findById(contact._id);
+      expect(reread?.firstName).toBe("John");
+    });
+
+    it("still accepts a well formed id in each id field", async () => {
+      // The refusal above is only correct if it is a shape check and not a
+      // blanket one. These are the values the endpoint is for.
+      const contact = await createContact(org.organization._id, org.user._id);
+      const company = await CompanyModel.create({
+        organizationId: org.organization._id,
+        name: "Acme",
+        ownerId: org.user._id,
+        createdBy: org.user._id,
+        updatedBy: org.user._id,
+      });
+
+      const byOwner = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { ownerId: org.user._id.toString() },
+        org.token,
+      );
+      expect(byOwner.status).toBe(200);
+
+      const byCompany = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { companyId: company._id.toString() },
+        org.token,
+      );
+      expect(byCompany.status).toBe(200);
+
+      const byTags = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { tags: [new Types.ObjectId().toString()] },
+        org.token,
+      );
+      expect(byTags.status).toBe(200);
+    });
+
+    it("accepts an explicit null companyId as a clear", async () => {
+      // `null` is not a malformed id. It is how a client says "unassign this",
+      // which the handler distinguishes from an absent key, so the schema must
+      // keep letting it through.
+      const contact = await createContact(org.organization._id, org.user._id);
+
+      const res = await createRequest(
+        "PATCH",
+        `/api/v1/crm/contacts/${contact._id}`,
+        { companyId: null },
+        org.token,
+      );
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.data.companyId).toBeNull();
+    });
+
     it("updates a contact", async () => {
       const contact = await createContact(org.organization._id, org.user._id);
 
@@ -676,7 +801,10 @@ describe("Contact API Integration", () => {
         org.token,
       );
 
-      expect(res.status).toBe(400);
+      // 422, not 400: `parseBody` reports a schema failure as
+      // VALIDATION_FAILED, which is what `docs/API.md` §Errors documents.
+
+      expect(res.status).toBe(422);
     });
 
     it("returns 403 without contacts.update permission", async () => {

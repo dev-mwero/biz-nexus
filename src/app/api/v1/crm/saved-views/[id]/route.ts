@@ -4,7 +4,8 @@ import {
   SavedViewService,
   type UpdateSavedViewInput,
 } from "@/modules/crm";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -66,8 +67,7 @@ export const PATCH = withApi(async (request: Request) => {
   const context = await guards.requirePermission("savedViews.update");
 
   const id = pathParam(request);
-  const body = await readJson(request);
-  const input = updateSavedViewSchema.parse(body);
+  const input = await parseBody(request, updateSavedViewSchema);
 
   const service = new SavedViewService(
     context.organization._id,

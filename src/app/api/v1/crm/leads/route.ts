@@ -1,7 +1,8 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { LeadError, LeadService } from "@/modules/crm";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { listQuery, serializeSort } from "@/shared/query/list-query";
@@ -114,8 +115,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("leads.create");
 
-    const body = await readJson(request);
-    const input = createLeadSchema.parse(body);
+    const input = await parseBody(request, createLeadSchema);
 
     const service = new LeadService(context.organization._id, context.user._id);
 

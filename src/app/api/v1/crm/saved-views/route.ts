@@ -4,8 +4,9 @@ import {
   SavedViewError,
   SavedViewService,
 } from "@/modules/crm";
+import { parseBody } from "@/shared/api/parse-body";
 import { queryFromSearchParams } from "@/shared/api/search-params";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok, pageMeta } from "@/shared/responses/envelope";
@@ -95,8 +96,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("savedViews.create");
 
-    const body = await readJson(request);
-    const input = createSavedViewSchema.parse(body);
+    const input = await parseBody(request, createSavedViewSchema);
 
     const service = new SavedViewService(
       context.organization._id,

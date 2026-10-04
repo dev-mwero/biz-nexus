@@ -7,8 +7,9 @@ import {
   TagService,
   type UpdateTagInput,
 } from "@/modules/crm";
+import { parseBody } from "@/shared/api/parse-body";
 import { queryFromSearchParams } from "@/shared/api/search-params";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { fail, ok, pageMeta } from "@/shared/responses/envelope";
@@ -144,8 +145,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("tags.create");
 
-    const body = await readJson(request);
-    const input = createTagSchema.parse(body);
+    const input = await parseBody(request, createTagSchema);
 
     const service = new TagService(context.organization._id, context.user._id);
 

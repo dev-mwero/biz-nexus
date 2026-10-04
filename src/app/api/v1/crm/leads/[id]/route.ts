@@ -6,7 +6,8 @@ import {
   LeadService,
   type UpdateLeadInput,
 } from "@/modules/crm";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -69,8 +70,7 @@ export const PATCH = withApi(async (request: Request) => {
   const context = await guards.requirePermission("leads.update");
 
   const id = pathParam(request);
-  const body = await readJson(request);
-  const input = updateLeadSchema.parse(body);
+  const input = await parseBody(request, updateLeadSchema);
 
   const service = new LeadService(context.organization._id, context.user._id);
 

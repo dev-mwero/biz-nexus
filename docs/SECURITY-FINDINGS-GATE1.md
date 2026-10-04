@@ -64,11 +64,12 @@ This document is the artifact for task 1.75.
 - Fix: requirePermission("notifications.read"). Only the refusal path is covered by a test, because a permitted request opens a change stream and never ends.
 - Commit: 617952b
 
-### S9 — Malformed ObjectId query params return 500 (Medium) — FIXED (list endpoints)
-- Locations: crm/companies/route.ts (ownerId, tag), crm/contacts/route.ts, crm/leads/route.ts, deals/route.ts
+### S9 — Malformed ObjectId query params return 500 (Medium) — FIXED
+- Locations: crm/companies/route.ts (ownerId, tag), crm/contacts/route.ts, crm/leads/route.ts, deals/route.ts, and later crm/contacts/[id]/route.ts (companyId, ownerId, tags)
 - Evidence: new Types.ObjectId() on unvalidated strings throws BSONError, which was mapped to 500
-- Fix: The filter schemas on the migrated list endpoints validate ids with a 24-hex regex and reject malformed values with a 422. `companyId=null` is handled explicitly. A global BSONError -> 4xx mapping in asMongooseError is not added yet and remains a backstop worth having for any route that still constructs ids by hand.
-- Commit: 7558870
+- Fix, in three parts. The filter schemas on the migrated list endpoints validate ids with a 24-hex regex and reject malformed values with a 422, and `companyId=null` is handled explicitly. The contact update endpoint was then found to be the route that "constructs ids by hand" its own write-up warned about: `companyId`, `ownerId` and `tags` were plain strings, so `{"ownerId": "garbage"}` was a 500 for a caller's typo. Those three fields now carry the same regex. Finally the backstop is in place — `asMongooseError` maps a `BSONError` to `VALIDATION_FAILED`, so any route that constructs an id from unvalidated input is covered without having been audited. `BSONVersionError` is excluded from that arm, since a driver that cannot speak to its server is a deployment fault and must stay a 500.
+- Commits: 7558870 (list endpoints), 27dc3ba / see git log (contact update + global backstop)
+- Tests: `tests/unit/shared/errors.test.ts` covers the mapping, the exclusion, the absence of a field detail, and that the rejected value stays out of the response; `tests/integration/crm/contact-api.test.ts` covers the endpoint.
 
 ## Conclusion
 High-severity, exploitable write-surface defects (S1, S2) are remediated and S3 is hardened. The Medium defects (S5, S6, S9) and the Low defects (S7, S8) are remediated. S4 is accepted by design with the rationale recorded above. No finding remains open. Task 1.75 can be marked complete.

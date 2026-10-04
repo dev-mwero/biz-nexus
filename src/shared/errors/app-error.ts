@@ -410,6 +410,44 @@ function asMongooseError(error: unknown): AppError | null {
     });
   }
 
+  return asBsonError(error);
+}
+
+/**
+ * The backstop for an id that never became an `ObjectId`.
+ *
+ * `new Types.ObjectId("garbage")` throws a `BSONError` from the `bson` package,
+ * which is not a Mongoose `ValidationError` and not a `CastError`, so the two
+ * arms above let it fall to the default and the caller got a 500 for their own
+ * typo. This is finding S9's residual: fixing it per-endpoint meant every route
+ * that constructs an id by hand had to remember, and the route that forgot was
+ * `PATCH /api/v1/crm/contacts/:id` — three unvalidated string fields, a 500 each.
+ * A mapping at the boundary covers the ones nobody has found yet.
+ *
+ * Reached through `mongoose.mongo.BSON` rather than a direct `bson` import, since
+ * `bson` is not a declared dependency here and would be reaching into a
+ * transitive one for a single class name.
+ *
+ * `BSONVersionError` extends `BSONError` and is excluded on purpose: a driver
+ * that cannot talk to the server it is connected to is this process's problem,
+ * not a caller's typo, and dressing it as `VALIDATION_FAILED` would point the
+ * person reading the log at the request instead of the deployment. It stays a
+ * 500.
+ */
+function asBsonError(error: unknown): AppError | null {
+  const { BSONError, BSONVersionError } = mongoose.mongo.BSON;
+
+  if (error instanceof BSONError && !(error instanceof BSONVersionError)) {
+    return new AppError("VALIDATION_FAILED", {
+      // No `details`. The message is not built from the schema the way a
+      // `CastError`'s is, and there is no field name to point at — the value
+      // could have been a path segment, a query parameter or a body field, and
+      // guessing which would be worse than saying the id was not valid.
+      message: "Not a valid identifier.",
+      cause: error,
+    });
+  }
+
   return null;
 }
 

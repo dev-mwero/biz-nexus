@@ -3,7 +3,8 @@ import {
   createOrganization,
   listOrganizationsForUser,
 } from "@/modules/organizations";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -48,7 +49,7 @@ export const POST = withApi(async (request: Request): Promise<Response> => {
   // caller is very often the owner of no organisation yet.
   const user = await guards.requireUser();
 
-  const body = createOrganizationBody.parse(await readJson(request));
+  const body = await parseBody(request, createOrganizationBody);
 
   // The session id is passed so the new organisation becomes the active one in
   // the same transaction that creates it. Without it the founder would hold a

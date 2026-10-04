@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { setActiveOrganization } from "@/modules/organizations";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -28,7 +29,7 @@ export const POST = withApi(async (request: Request): Promise<Response> => {
     throw new AppError("UNAUTHENTICATED", { message: "Sign in to continue." });
   }
 
-  const body = switchOrganizationBody.parse(await readJson(request));
+  const body = await parseBody(request, switchOrganizationBody);
 
   // Writes the session row, not the cookie. The token is an opaque handle stored
   // hashed, so the active organisation is read from the database on every

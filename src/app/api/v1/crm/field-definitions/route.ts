@@ -4,8 +4,9 @@ import {
   FieldDefinitionError,
   FieldDefinitionService,
 } from "@/modules/crm";
+import { parseBody } from "@/shared/api/parse-body";
 import { queryFromSearchParams } from "@/shared/api/search-params";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok, pageMeta } from "@/shared/responses/envelope";
@@ -85,8 +86,7 @@ export const POST = withApi(
     const guards = guardsFor(request);
     const context = await guards.requirePermission("fieldDefinitions.create");
 
-    const body = await readJson(request);
-    const input = createFieldDefinitionSchema.parse(body);
+    const input = await parseBody(request, createFieldDefinitionSchema);
 
     const service = new FieldDefinitionService(
       context.organization._id,

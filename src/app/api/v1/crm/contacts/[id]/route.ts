@@ -6,7 +6,8 @@ import {
   ContactService,
   type UpdateContactInput,
 } from "@/modules/crm";
-import { readJson, withApi } from "@/shared/api/with-api";
+import { parseBody } from "@/shared/api/parse-body";
+import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
 import { ok } from "@/shared/responses/envelope";
@@ -26,18 +27,35 @@ const phoneSchema = z.object({
   isPrimary: z.boolean().default(false),
 });
 
+/**
+ * A 24-character hex id, as a string.
+ *
+ * Every field the handler translates with `new Types.ObjectId(...)` has to be
+ * checked first, and `Types.ObjectId.isValid` is not the check — it accepts
+ * 12-character strings and any 12-byte `Buffer`, so "valid" and "safe to
+ * construct from a JSON string" are not the same question. The regex is the
+ * question that was actually being asked.
+ *
+ * Without this, `{"ownerId": "garbage"}` reached `new Types.ObjectId` and threw
+ * a `BSONError`, which is not a Mongoose `ValidationError`, so the error mapper's
+ * default arm claimed it and the caller got a 500 for their own typo.
+ */
+const objectIdString = z.string().regex(/^[0-9a-fA-F]{24}$/);
+
 const updateContactSchema = z
   .object({
     firstName: z.string().min(1).max(80).optional(),
     lastName: z.string().min(1).max(80).optional(),
     salutation: z.string().max(20).optional().nullable(),
     jobTitle: z.string().max(100).optional().nullable(),
-    companyId: z.string().optional().nullable(),
-    ownerId: z.string().optional(),
+    // `null` survives on purpose: an update distinguishes "clear this" from
+    // "leave this alone", so the union has to accept both a real id and nothing.
+    companyId: objectIdString.optional().nullable(),
+    ownerId: objectIdString.optional(),
     emails: z.array(emailSchema).optional(),
     phones: z.array(phoneSchema).optional(),
     status: z.enum(CONTACT_STATUSES).optional(),
-    tags: z.array(z.string()).optional(),
+    tags: z.array(objectIdString).optional(),
     notes: z.string().max(2000).optional().nullable(),
     customFields: z.record(z.string(), z.unknown()).optional(),
   })
@@ -79,8 +97,7 @@ export const PATCH = withApi(async (request: Request) => {
   const context = await guards.requirePermission("contacts.update");
 
   const id = pathParam(request);
-  const body = await readJson(request);
-  const input = updateContactSchema.parse(body);
+  const input = await parseBody(request, updateContactSchema);
 
   const service = new ContactService(
     context.organization._id,
