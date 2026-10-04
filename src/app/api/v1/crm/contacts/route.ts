@@ -5,6 +5,7 @@ import {
   ContactService,
   type CreateContactInput,
 } from "@/modules/crm";
+import { queryBoolean } from "@/shared/api/search-params";
 import { readJson, withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
 import { AppError } from "@/shared/errors/app-error";
@@ -52,7 +53,9 @@ const contactFiltersSchema = z.object({
   tag: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).default([]),
   createdFrom: z.string().datetime().optional(),
   createdTo: z.string().datetime().optional(),
-  hasEmail: z.coerce.boolean().optional(),
+  // `queryBoolean`, not `z.coerce.boolean()`: coercion reads "false" as
+  // true, so this filter answered the opposite of the question.
+  hasEmail: queryBoolean().optional(),
 });
 
 const { parse, meta } = listQuery({

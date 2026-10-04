@@ -163,6 +163,122 @@ describe("Contact API Integration", () => {
       expect(data.data[0].status).toBe("PROSPECT");
     });
 
+    /**
+     * `?hasEmail=false` used to return the contacts *with* an email.
+     *
+     * The filter is the one a caller writes when they are looking for records
+     * that need a follow-up address, so answering with the opposite set is worse
+     * than answering with nothing: the result is a populated page and a
+     * conclusion drawn from it.
+     *
+     * Both directions are asserted because the coercion was wrong in a way that
+     * only ever showed up on one of them. `Boolean("false")` is `true`, so the
+     * `false` request was the broken one and `true` kept working — a test that
+     * only asked for `true` would have passed against the broken schema.
+     */
+    it("filters by hasEmail in both directions", async () => {
+      await createContact(org.organization._id, org.user._id, {
+        firstName: "HasEmail",
+        lastName: "Contact",
+      });
+      await createContact(org.organization._id, org.user._id, {
+        firstName: "NoEmail",
+        lastName: "Contact",
+        emails: [],
+        // `createContact` seeds a primary email by default, and the filter reads
+        // the denormalised `primaryEmail` field, so clearing the array alone
+        // would have left this contact matching `hasEmail=true`.
+        primaryEmail: null,
+      });
+
+      const withoutEmail = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?hasEmail=false",
+        undefined,
+        org.token,
+      );
+      expect(withoutEmail.status).toBe(200);
+      const withoutData = await withoutEmail.json();
+      expect(withoutData.data).toHaveLength(1);
+      expect(withoutData.data[0].firstName).toBe("NoEmail");
+
+      const withEmail = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?hasEmail=true",
+        undefined,
+        org.token,
+      );
+      const withData = await withEmail.json();
+      expect(withData.data).toHaveLength(1);
+      expect(withData.data[0].firstName).toBe("HasEmail");
+    });
+
+    /**
+     * The spellings a boolean query string is written in.
+     *
+     * `"false"`, `"0"` and `"no"` are all empty of nothing — every one of them is
+     * a non-empty string, and coercion reads all three as `true`. Accepting them
+     * as `false` instead would just move the bug, so they are refused and the
+     * response says which values are allowed.
+     */
+    it.each([
+      "1",
+      "0",
+      "no",
+      "yes",
+      "",
+    ])("refuses hasEmail=%o rather than guessing", async (value) => {
+      const res = await createRequest(
+        "GET",
+        `/api/v1/crm/contacts?hasEmail=${encodeURIComponent(value)}`,
+        undefined,
+        org.token,
+      );
+
+      expect(res.status).toBe(422);
+      const data = await res.json();
+      // Read the detail out of the envelope rather than matching the raw text, so
+      // this asserts the message a caller is shown rather than the JSON escaping
+      // of it.
+      expect(data.error.code).toBe("VALIDATION_FAILED");
+      expect(data.error.details).toEqual([
+        { path: "hasEmail", message: 'expected "true" or "false"' },
+      ]);
+    });
+
+    it("accepts hasEmail in any case", async () => {
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts?hasEmail=FALSE",
+        undefined,
+        org.token,
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it("treats hasEmail as absent when omitted", async () => {
+      // Both kinds of contact, so "absent" is distinguishable from "filtered".
+      await createContact(org.organization._id, org.user._id, {
+        firstName: "HasEmail",
+        lastName: "Contact",
+      });
+      await createContact(org.organization._id, org.user._id, {
+        firstName: "NoEmail",
+        lastName: "Contact",
+        emails: [],
+        primaryEmail: null,
+      });
+
+      const res = await createRequest(
+        "GET",
+        "/api/v1/crm/contacts",
+        undefined,
+        org.token,
+      );
+      const data = await res.json();
+      expect(data.meta.total).toBe(2);
+    });
+
     it("filters by q (text search)", async () => {
       await createContact(org.organization._id, org.user._id, {
         firstName: "Searchable",

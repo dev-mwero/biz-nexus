@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Read query parameters into the shape a Zod schema expects.
  *
@@ -52,4 +54,37 @@ export function queryFromSearchParams(
   }
 
   return result;
+}
+
+/**
+ * A boolean that arrives in a query string, which is always a string.
+ *
+ * `z.coerce.boolean()` is the obvious tool here and it is wrong in the direction
+ * that does not announce itself. Coercion is `Boolean(value)`, so on a string
+ * that means *any* non-empty string is `true`: `?hasEmail=false` is `true`,
+ * `?hasEmail=0` is `true`, `?hasEmail=no` is `true`. `GET /api/v1/crm/contacts`
+ * passed this schema to `hasEmail`, so the one query that asked for contacts
+ * *without* an email address returned the ones with them — and the filter is
+ * applied, so nothing about the response says the parameter was ignored.
+ *
+ * There is no lenient reading to fall back on, either. `Boolean("false")` being
+ * true is a language quirk, not a convention anyone could be expected to know, so
+ * a filter that quietly does the opposite of what was asked for is not a
+ * trade-off worth making — especially on a query whose whole job is to decide
+ * which records you are allowed to see.
+ *
+ * The literals are explicit, case-insensitive, and anything else is a 422 with a
+ * message that says which values are accepted. Refusing `?hasEmail=1` is a better
+ * outcome than answering it as `true`: the caller learns their spelling is wrong
+ * instead of trusting a filter they did not get.
+ */
+export function queryBoolean(): z.ZodType<boolean> {
+  return z
+    .string()
+    .trim()
+    .toLowerCase()
+    .refine((value) => value === "true" || value === "false", {
+      message: 'expected "true" or "false"',
+    })
+    .transform((value) => value === "true");
 }
