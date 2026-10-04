@@ -2,7 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `dev` is not optional. Work lands on `dev` and is merged into `main`, so a
+    # trigger on `main` alone means the branch every change actually passes
+    # through is the one branch CI never sees — `docs/SECURITY.md` §11 calls these
+    # controls "automated on every push", and with `main` alone that was false
+    # for the branch in active use. Verified red on `dev`: a push here produced
+    # no run at all.
+    branches: [main, dev]
   pull_request:
     branches: [main]
 
