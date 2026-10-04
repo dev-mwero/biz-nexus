@@ -2,6 +2,17 @@
 
 > Status: complete. Phase 1 (MVP Foundation) is **not** started; it begins on approval.
 > Date: 2026-09-29
+>
+> **This is a snapshot taken before any code was written, and it is kept
+> unedited on purpose.** Line 3 above still says Phase 1 is not started, and by
+> the end of Phase 1 that will be false. It was written on 2026-09-29 about a
+> repository that contained no application code, and rewriting it now would
+> destroy the only record of what the team believed before it built anything —
+> which is the thing a discovery report is for and the reason it is worth having.
+>
+> Where a finding below has since been overtaken, the row says so rather than
+> being quietly deleted. For what exists now, read [`PLAN.md`](./PLAN.md) and
+> [`ROADMAP.md`](./ROADMAP.md).
 
 ---
 
@@ -78,7 +89,7 @@ that will shape the implementation:
 | Docker available (29.7.2) | Not required for the MVP, since MongoDB is already up. |
 | Node **v24.15.0**, npm **11.16.0** | Satisfies Next 16 requirements. |
 | No `.env` file exists | `.env*` is gitignored, so `.env.example` must be committed explicitly. |
-| No CI configuration | No `.github/`. To be added in Phase 1. |
+| No CI configuration | No `.github/`. To be added in Phase 1. **Since overtaken:** task 1.76 added `.github/workflows/ci.yml` (lint, typecheck, unit, integration, build, e2e). |
 
 ### Sibling-project conventions
 
@@ -202,7 +213,7 @@ Phase 1.
 
 | # | Question | Needed by |
 |---|---|---|
-| A | Transactional email provider for password reset (Resend vs Postmark vs SES). Default in code: a `console` driver in development. | Phase 1, before password reset ships |
+| A | Transactional email provider for password reset (Resend vs Postmark vs SES). Default in code: a `console` driver in development. | Phase 1, before password reset ships — **partly overtaken:** `MAIL_DRIVER` now selects `console`, `resend`, or `smtp` (`src/env.ts`), so the abstraction is built and a provider is a config choice. Which provider production uses is still undecided and still worth an ADR, because Resend versus SES is a deliverability and lock-in decision, not a default. |
 | B | Multi-currency rules and tax jurisdictions for the Finance domain. | Gate 2, before Stage 3 |
 | C | Cash vs accrual accounting, and whether full bookkeeping is ever in scope. | Gate 2, before Stage 3 |
 | D | Public API-key authentication for third-party integrations. | Stage 11 |

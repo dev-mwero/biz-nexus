@@ -389,9 +389,29 @@ rediscover them:
 Performed at Gate 1 and again at each subsequent gate, using the
 `security-review` skill and the `security-expert` subagent.
 
-**Automated, on every push:** cross-tenant isolation suite · full permission
-matrix · Zod strict-mode regression · dependency audit · secret scanning ·
-`npm audit` · Biome.
+**Automated, on every push** — this list is what `.github/workflows/ci.yml`
+actually runs:
+
+| Job | Runs | Covers |
+|---|---|---|
+| Lint & Typecheck | `npm run lint`, `npm run typecheck` | Biome; `tsc --noEmit` under `strict` |
+| Unit & Integration Tests | `npm run test:coverage` | the cross-tenant isolation suite and the full permission matrix, plus everything else |
+| Dependency Audit | `npm audit --audit-level=high` | advisories at high and critical |
+| Secret Scan | `gitleaks --redact` over the full history | committed secrets, including ones since deleted |
+| Build | `npm run build` | the production build compiles |
+| E2E Tests | `npm run test:e2e` | critical path and isolation path, against a throwaway replica set |
+
+Build and E2E are gated on the other four, so a high-severity advisory or a
+committed secret stops the pipeline before the build rather than as a red X
+somewhere in a list nobody reads.
+
+**This list was previously wrong.** An earlier version of this section claimed
+dependency auditing and secret scanning were automated on every push. Neither step
+existed in the workflow — `docs/SECURITY.md` was the only place they were
+recorded. Both jobs now exist. The reason it is worth stating rather than quietly
+fixing: a documented control that is not running is worse than an absent one,
+because the document is what a reviewer trusts, so a missing control written down
+as present does not read as a gap at all.
 
 **Manual, at each gate:** authorisation review of every new endpoint · IDOR
 enumeration · mass-assignment check · error message leakage · session fixation ·
@@ -399,7 +419,7 @@ rate-limit effectiveness · audit completeness.
 
 **Definition of "secure" for a release:** no open high or critical finding, every
 new endpoint covered by a permission test, and the cross-tenant suite green
-against a seeded second organisation.
+against a second organisation in the same run.
 
 ---
 

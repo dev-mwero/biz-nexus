@@ -172,7 +172,7 @@ system is provably incapable of leaking data across organisation boundaries.
 |---|---|---|---|
 | 1.73 | Playwright e2e for the critical path | `test(e2e): cover mvp critical path` | the full flow passes from a clean database |
 | 1.74 | Playwright e2e for the isolation path | `test(e2e): prove cross tenant access is denied` | organisation A cannot reach B by URL or API |
-| 1.75 | Security review against `docs/SECURITY.md` | `fix(security): remediate phase 1 security findings` | no open high or critical finding |
+| 1.75 | Security review against `docs/SECURITY.md` | landed as one commit per finding, not the single named one — see the note below | no open high or critical finding |
 | 1.76 | CI: lint, typecheck, unit, integration, build | `ci: add continuous integration workflow` | green on a clean checkout |
 | 1.77 | Update documentation to match reality | `docs: update documentation for mvp completion` | docs describe what exists, not what was planned |
 | 1.78 | Evaluate a native bcrypt binding (`bcrypt`/`argon2`) against `bcryptjs`, cost 12 held constant | `deps(auth): evaluate native password hashing binding` | the choice is measured on this codebase, and the ~250ms figure in `SECURITY.md`/`DATABASE.md` is corrected to whatever was actually observed |
@@ -203,16 +203,45 @@ one decision it leaves open — whether the deploying environment will run
 **Exit criteria (Gate 1):**
 
 ```
-[ ] Critical path passes end to end from a clean database
+[x] Critical path passes end to end from a clean database
 [ ] Isolation path fails closed for every route, by URL and by API
-[ ] Every endpoint covered by a permission test
-[ ] No open high or critical security finding
+[x] Every endpoint covered by a permission test
+[x] No open high or critical security finding
 [ ] CI green
 [ ] Every feature meets the ten-part definition of done
 [ ] Documentation matches the code
 ```
 
 **Gate 1 is not passed by compiling. It is passed by the evidence above.**
+
+**A note on 1.75's commit.** The table names one commit,
+`fix(security): remediate phase 1 security findings`, and that is not what
+happened, so the name has been struck through rather than left to be believed.
+The review found nine issues and each was fixed in its own commit —
+`fix(security): refuse an oversized body before it is buffered`,
+`fix(identity): verify the address in the same transaction as the claim`,
+`fix(deals): a PATCH must not be able to write fields it does not name`, and so
+on — with `docs(security): record Gate 1 findings and remediations` as the index
+and `docs/SECURITY-FINDINGS-GATE1.md` as the artefact it wrote.
+
+Squashing them into the one named commit would have satisfied the table and
+violated working rule 1. A body-size limit and an email-verification race share
+no logic, so a commit containing both could only be reverted as a unit, and the
+one time that matters is when a fix has to come back out. The table records what
+was asked for; this paragraph records what was actually done, which is the
+difference the whole document exists to prevent.
+
+What each tick is standing on, so the next reader does not have to re-derive it:
+
+| Criterion | Evidence | Still open |
+|---|---|---|
+| Critical path from a clean database | `e2e/critical-path.spec.ts`, 47 tests. Every run gets a throwaway in-memory replica set from `scripts/e2e-server.mjs`, so the database is empty by construction rather than by a cleanup step somebody has to remember. | — |
+| Isolation path fails closed | `e2e/isolation-path.spec.ts`. | Cross-tenant `PATCH`/`DELETE` are asserted as "not 2xx"; the contract is `404`, and the exact-status assertion is not written for every route. `by inference` — what a second tenant can learn from a count, an aggregate, or an export — has no systematic coverage. |
+| Every endpoint has a permission test | `tests/unit/architecture/route-permissions.test.ts` compares all 88 handler guards against `docs/API.md` and the permission catalogue; `tests/integration/rbac/route-permission-enforcement.test.ts` asserts the refusal each one actually returns. | — |
+| No open high or critical finding | `docs/SECURITY-FINDINGS-GATE1.md`, all of S1–S9 closed, S4 accepted by design. | — |
+| CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit, integration, build, e2e. | The workflow has never been observed on a remote run, so "green" is currently a claim about a local `npm run validate` and a local `npm run test:e2e`. |
+| Ten-part definition of done | Working agreement §1K. | Four screens are deliberate placeholders — `notifications`, `deals/new`, `tasks/new`, `settings`. There is no audit-log UI. Component coverage is excluded from the gate (`vitest.config.mts`). |
+| Documentation matches the code | This task. | ADR-0007's bcrypt swap is decided but not implemented, so §2 of `SECURITY.md` describes `bcryptjs` correctly and `bcrypt` is a benchmark-only dependency. |
 
 ### Open: components have no unit coverage
 

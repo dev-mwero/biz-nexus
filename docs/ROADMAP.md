@@ -38,13 +38,21 @@ value, not by dependency.
 ### Gate 1 — after Stage 1
 
 ```
-[ ] The critical path passes end to end from a clean database
+[x] The critical path passes end to end from a clean database
 [ ] Organisation A cannot reach Organisation B by URL, API, or inference
-[ ] Every endpoint has a permission test
-[ ] No open high or critical security finding
+[x] Every endpoint has a permission test
+[x] No open high or critical security finding
 [ ] CI green on a clean checkout
 [ ] Every feature meets the ten-part definition of done
 ```
+
+Three of six. The permission criterion is closed on evidence rather than on a
+sample: all 88 endpoints are compared guard-to-documentation in
+`tests/unit/architecture/route-permissions.test.ts` and asserted to refuse in
+`tests/integration/rbac/route-permission-enforcement.test.ts`. The three open
+criteria, and what each is still missing, are tracked in
+[`PLAN.md`](./PLAN.md) §1K. `by inference` is the one to read closely — it is the
+only criterion here that no amount of per-route assertion will satisfy on its own.
 
 ### Gate 2 — after Stage 2
 

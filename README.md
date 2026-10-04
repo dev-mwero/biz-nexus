@@ -4,9 +4,12 @@ A multi-tenant **Business Operating System** for small and medium-sized B2B
 organisations. CRM is the first domain shipped; the architecture is a modular
 business platform, not a CRM with extra screens.
 
-> **Status: Phase 0 — Discovery complete. Phase 1 has not started.**
-> No application code exists yet. This repository currently contains
-> documentation, decisions, and a validated build toolchain.
+> **Status: Phase 1 (MVP Foundation) in progress, approaching Gate 1.**
+> The CRM path is built and wired end to end: 11 domain modules, 88 documented
+> endpoints, 41 app screens, ~44k lines under `src`, and 73 test files. What is
+> *not* done is stated plainly in [`docs/PLAN.md`](./docs/PLAN.md) — Gate 1 still
+> has open criteria, and four screens are deliberate placeholders rather than
+> finished ones.
 
 ---
 
@@ -40,7 +43,10 @@ Business OS
 ```
 
 Only the first row is built now. See [`docs/ROADMAP.md`](./docs/ROADMAP.md) for
-the fourteen stages and the seven gates that guard them.
+the fourteen stages and the seven gates that guard them, and
+[`docs/PLAN.md`](./docs/PLAN.md) for the Phase 1 task list. The two documents
+count the same units — `docs/ROADMAP.md` calls them stages, `docs/PLAN.md` calls
+them phases, and Gate 1 is the gate between them.
 
 ---
 

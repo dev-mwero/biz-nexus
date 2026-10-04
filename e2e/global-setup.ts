@@ -2,10 +2,22 @@ import { existsSync, mkdirSync } from "node:fs";
 import type { FullConfig } from "@playwright/test";
 
 /**
- * Global setup for E2E tests.
- * - Ensures test database is clean
- * - Creates necessary directories for auth state
- * - Verifies the application is running
+ * Global setup for E2E tests: creates the auth-state directory and waits for the
+ * server to answer.
+ *
+ * **It does not clean the database, and nothing here needs it to.** The clean
+ * database comes from `scripts/e2e-server.mjs`, which boots a throwaway
+ * in-memory MongoDB replica set for the web server to use. That replica set is
+ * created fresh for every run and destroyed on shutdown, so "from a clean
+ * database" is a property of the harness rather than a step somebody has to
+ * remember. An earlier version of this file carried a "Cleaning test database"
+ * block whose body was a comment saying the cleaning happened elsewhere — the
+ * sort of thing that reads as a step someone skipped until the day a run fails
+ * on leftover state and nobody can tell which.
+ *
+ * The replica set is a single node rather than a standalone `mongod` because
+ * services use multi-document transactions, which MongoDB only offers on a
+ * replica set.
  */
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL =
@@ -42,16 +54,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-
-  // Clean test database by dropping all test collections
-  // This is done via a direct database command to ensure clean state
-  try {
-    console.log("[Global Setup] Cleaning test database...");
-    // The actual database cleaning will happen in the test fixtures
-    // This is just a placeholder for any additional global setup needed
-  } catch (error) {
-    console.warn("[Global Setup] Database cleanup warning:", error);
   }
 
   console.log("[Global Setup] E2E test environment ready");
