@@ -131,7 +131,7 @@ token belongs to.
 |---|---|---|---|
 | `POST` | `/auth/register` | — | Create an account. Returns the user, sets a session. |
 | `POST` | `/auth/login` | — | Email and password. Sets a session. |
-| `POST` | `/auth/logout` | authenticated | Revoke the current session. |
+| `POST` | `/auth/logout` | session optional — always `200`; revokes the presented session if there is one |
 | `POST` | `/auth/logout-all` | authenticated | Revoke every session for the user. |
 | `GET` | `/auth/me` | authenticated | Current user, active organisation, role, permissions. |
 | `POST` | `/auth/forgot-password` | — | Always `200`, whether or not the account exists. |
@@ -236,7 +236,7 @@ Returns:
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/audit-logs` | `audit.read` |
+| `GET` | `/audit-logs` | `auditLogs.read` |
 
 ---
 
@@ -368,7 +368,7 @@ Base path: `/crm/saved-views`
 | `POST` | `/crm/saved-views` | `savedViews.create` |
 | `GET` | `/crm/saved-views/:id` | `savedViews.read` |
 | `PATCH` | `/crm/saved-views/:id` | owner only, or `isShared` and `savedViews.update` |
-| `DELETE` | `/crm/saved-views/:id` | owner only |
+| `DELETE` | `/crm/saved-views/:id` | `savedViews.delete` — owner only |
 
 Filters are stored as validated data, never as a raw query string. This is both a
 safety property and the reason `NoSQL injection` cannot reach a saved view.
@@ -479,7 +479,7 @@ Base path: `/pipelines`
 
 | Method | Path | Permission |
 |---|---|---|
-| `GET` | `/search` | authenticated — contacts, companies, deals, tasks |
+| `GET` | `/search` | `search.read` — contacts, companies, deals, tasks |
 
 `/search` returns only what the caller may read, and always only within the
 active organisation. It does not accept a type filter that reaches a collection
