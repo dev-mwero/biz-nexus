@@ -402,8 +402,25 @@ export class DealService {
 
   /**
    * Soft delete a deal.
+   *
+   * The existence check is not decoration. `softDeleteById` is scoped, so a deal
+   * in another organisation matches nothing and is not deleted — the tenancy
+   * boundary holds either way. What was missing was the *report*: this method
+   * returned `void`, the route answered `204` unconditionally, and a caller
+   * deleting a deal that does not exist for them, or that never existed at all,
+   * was told it had succeeded.
+   *
+   * That is a false success on a destructive verb, and it is the reason
+   * `ContactService.delete` and its five siblings check first. `findById` is
+   * scoped, so "not found" covers both cases and neither can be told from the
+   * other — which is the point: `docs/SECURITY.md` §6 wants them to look alike.
    */
   async delete(id: Types.ObjectId | string): Promise<void> {
+    const existing = await this.dealRepo.findById(id);
+    if (!existing) {
+      throw new DealError("RECORD_NOT_FOUND", "Deal not found.");
+    }
+
     await this.dealRepo.softDeleteById(id);
   }
 

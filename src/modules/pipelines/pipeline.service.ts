@@ -7,12 +7,20 @@ import {
   type PipelineStage,
 } from "@/modules/pipelines/pipeline.model";
 import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
-import { AppError } from "@/shared/errors/app-error";
+import { AppError, type ErrorCode } from "@/shared/errors/app-error";
 import { events } from "@/shared/events/bus";
 
 export class PipelineError extends AppError {
-  constructor(message: string) {
-    super("VALIDATION_FAILED", { message });
+  /**
+   * `VALIDATION_FAILED` by default, because most of what goes wrong with a
+   * pipeline is a bad request: duplicate stage keys, duplicate orders, a missing
+   * field. The operations that can fail with "there is no such pipeline in this
+   * organisation" pass `RECORD_NOT_FOUND` so they surface as a 404 — the
+   * distinction `docs/SECURITY.md` §6 asks for, where a missing record and a
+   * forbidden one must not be told apart.
+   */
+  constructor(message: string, code: ErrorCode = "VALIDATION_FAILED") {
+    super(code, { message });
     this.name = "PipelineError";
   }
 }
@@ -176,7 +184,7 @@ export class PipelineService {
   ): Promise<Pipeline> {
     const pipeline = await this.repository.findById(pipelineId);
     if (!pipeline) {
-      throw new PipelineError("Pipeline not found.");
+      throw new PipelineError("Pipeline not found.", "RECORD_NOT_FOUND");
     }
 
     // Validate: at most one won, one lost
@@ -202,7 +210,10 @@ export class PipelineService {
 
     const updated = await this.repository.replaceStages(pipelineId, stages);
     if (!updated) {
-      throw new PipelineError("Pipeline not found after update.");
+      throw new PipelineError(
+        "Pipeline not found after update.",
+        "RECORD_NOT_FOUND",
+      );
     }
 
     return updated;
@@ -210,10 +221,28 @@ export class PipelineService {
 
   /**
    * Delete a pipeline. Only allowed if no deals reference it.
+   *
+   * The existence check comes first, and it has to. `softDeleteIfUnused` answers
+   * `deleted: false` for two different situations — "no such pipeline in this
+   * organisation" and "this pipeline still has deals" — and collapses them into one
+   * `{ deleted: false, dealCount: 0 }`. The route read that as a conflict and
+   * answered `409 Cannot delete pipeline: 0 deal(s) reference it`, which is how a
+   * cross-tenant delete came to report that a pipeline the caller cannot see has no
+   * deals attached to it. Both cases must be distinguishable, and neither may be
+   * reported in terms of the other.
    */
   async delete(
     pipelineId: Types.ObjectId | string,
   ): Promise<{ deleted: boolean; dealCount: number }> {
+    const existing = await this.repository
+      .findById(pipelineId, {
+        projection: { _id: 1 },
+      })
+      .lean();
+    if (!existing) {
+      throw new PipelineError("Pipeline not found.", "RECORD_NOT_FOUND");
+    }
+
     return this.repository.softDeleteIfUnused(pipelineId);
   }
 

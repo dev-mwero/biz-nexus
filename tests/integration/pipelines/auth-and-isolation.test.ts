@@ -8,7 +8,10 @@ import { OrganizationModel } from "@/modules/organizations/organization.model";
 import { RoleModel } from "@/modules/organizations/role.model";
 import { PipelineModel } from "@/modules/pipelines/pipeline.model";
 import { PipelineRepository } from "@/modules/pipelines/pipeline.repository";
-import { PipelineService } from "@/modules/pipelines/pipeline.service";
+import {
+  PipelineError,
+  PipelineService,
+} from "@/modules/pipelines/pipeline.service";
 
 describe("Pipelines integration: tenant isolation + service logic", () => {
   let org1: Types.ObjectId;
@@ -211,9 +214,17 @@ describe("Pipelines integration: tenant isolation + service logic", () => {
       const repo1 = new PipelineRepository(org1, user1);
       const service1 = new PipelineService(repo1, user1);
 
-      const result = await service1.delete(p2._id);
-      expect(result.deleted).toBe(false);
-      expect(result.dealCount).toBe(0);
+      // A refusal, not a `{ deleted: false }`. The repository's
+      // `softDeleteIfUnused` answers `deleted: false` both for "no such pipeline
+      // in this organisation" and for "this pipeline still has deals", and the
+      // route used to read that as a conflict — so a cross-tenant delete came
+      // back as `409 Cannot delete pipeline: 0 deal(s) reference it`, reporting
+      // on the deals of a pipeline the caller cannot see. The two cases are now
+      // separated, and this is the not-found one.
+      await expect(service1.delete(p2._id)).rejects.toThrow(PipelineError);
+
+      const reread = await PipelineModel.findById(p2._id);
+      expect(reread?.deletedAt).toBeNull();
     });
 
     it("should not allow org1 user to reorder org2 pipeline stages", async () => {
