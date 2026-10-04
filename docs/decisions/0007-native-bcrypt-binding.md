@@ -1,7 +1,8 @@
 # ADR-0007 — Password hashing should use the native bcrypt binding
 
-- **Status:** proposed — the measurement is settled, the swap is not
-- **Date:** 2026-10-04
+- **Status:** accepted — the recommendation is adopted; the swap is gated on the
+  install-script condition below, and the runtime still hashes with `bcryptjs`
+- **Date:** 2026-10-04 (resolved 2026-10-05)
 - **Affects:** `src/modules/identity/password.ts`, `docs/SECURITY.md` §2, `docs/DATABASE.md` §2, the auth rate limiter, the test fixtures that hash a password
 
 ## Context
@@ -61,8 +62,8 @@ bcrypt and wrong about what the product used.
 
 ## Recommendation
 
-`hashPassword` and `verifyPassword` should move to the native `bcrypt` binding. The
-cost factor stays at 12 and the algorithm stays bcrypt.
+Accepted: `hashPassword` and `verifyPassword` should move to the native `bcrypt`
+binding. The cost factor stays at 12 and the algorithm stays bcrypt.
 
 The argument is not the 1.8x on an idle machine; a sign-in that takes 334ms rather
 than 616ms is not a security property. It is what the number does to everything
@@ -73,20 +74,41 @@ all three are wrong by a factor that varies with load rather than being a consta
 they can be pinned to. A cost that is stable under concurrency is worth more than a
 smaller one that is not.
 
-**What is still open.** The swap makes `bcrypt` a runtime dependency of the auth
-path, and `bcrypt` ships its work through an install script (`node-gyp-build`)
-that npm 11 flagged on install here and that some deployment policies skip. No
-compiler is needed — prebuilt binaries cover linux-x64, linux-arm64, darwin and
-win32, so Vercel is covered — but a deploy that skips install scripts gets a
-module that throws on first import rather than a build failure at build time, which
-is a worse failure than a build failure and is why this is written down rather
-than discovered. Whether that is acceptable depends on how the deploying
-environment handles `allowScripts`, which is a decision for whoever owns the
-deploy, not for a benchmark. Until it is made, `src/modules/identity/password.ts`
-still uses `bcryptjs` and every figure quoted in `docs/SECURITY.md` §2 is measured
-on `bcryptjs`.
+## The gate
 
-Two further notes for whoever decides:
+The swap makes `bcrypt` a runtime dependency of the auth path, and `bcrypt` ships
+its work through an install script (`node-gyp-build`). That is the only thing
+standing between the recommendation and the code, so it is stated as a condition
+that can be checked rather than as an open question.
+
+**Verified on 2026-10-05.** `bcrypt@6.0.0` bundles seven prebuilds — `darwin-arm64`,
+`darwin-x64`, `linux-arm`, `linux-arm64`, `linux-x64`, `win32-arm64`, `win32-x64`
+— and `require("bcrypt")` resolves and hashes successfully with the install script
+never having run. `node-gyp-build` is a *fallback* that compiles from source only
+when no prebuild matches. So a target with a bundled prebuild needs no compiler and
+no script, and every platform this project plausibly deploys to has one.
+
+`package.json` sets `allowScripts` to `{"mongodb-memory-server@11.3.0": true}`, so
+npm skips `bcrypt`'s script. That is correct and it is not the blocker: the
+prebuilds mean it does not need to run.
+
+**The condition on making the swap:** every deployment target resolves to one of the
+seven prebuilds above. Verified for this repository's own install and for Vercel,
+whose builders are `linux-x64`. If a target is ever added that is not on that list,
+the swap needs `allowScripts` to include `bcrypt`, or it needs to be reverted to
+`bcryptjs` — otherwise the module throws on first import in production, which is a
+worse failure than a build failure and is why it is written down rather than
+discovered.
+
+**Why the code still says `bcryptjs`.** The gate is checkable but has not been
+checked against every environment this might ever be deployed to, and the swap
+touches the sign-in path for everyone. An auth change of that kind wants its own
+commit with the suite run against it, not to be folded into whatever else happens
+to be open when the decision is recorded. `src/modules/identity/password.ts`
+therefore still uses `bcryptjs`, and every figure quoted in `docs/SECURITY.md` §2 is
+measured on `bcryptjs` — which remains true, and remains worth saying.
+
+Two further notes for whoever makes the swap:
 
 - **argon2 was not evaluated and is probably the better primitive.** It is what a
   new system should reach for, but adopting it changes the cost parameter's
