@@ -15,6 +15,23 @@ import { BASE_URL, expect, test } from "./fixtures";
  */
 
 test.describe("Critical Path - Full User Journey", () => {
+  /**
+   * Serial, and not by preference.
+   *
+   * This suite is built on module state: `beforeAll` registers a user and an
+   * organisation, each numbered step creates a record and keeps its id in a
+   * closure variable, and every later step reads them. It only works if the whole
+   * file runs in declaration order inside one worker, and `fullyParallel: false`
+   * in `playwright.config.ts` does not guarantee that — see the identical note in
+   * `isolation-path.spec.ts`, where the absence of this line put tests in four
+   * different workers with four different copies of the module.
+   *
+   * `mode: "serial"` also means a failed step stops the ones after it, which is
+   * what a user journey wants: a registration that failed should not be followed
+   * by seventeen assertions about records that were never created.
+   */
+  test.describe.configure({ mode: "serial" });
+
   let authCookie: string;
   let organizationId: string;
   let ownerUserId: string;

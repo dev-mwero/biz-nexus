@@ -1,3 +1,5 @@
+import type { APIRequestContext } from "@playwright/test";
+
 import { BASE_URL, expect, test } from "./fixtures";
 
 /**
@@ -13,6 +15,29 @@ import { BASE_URL, expect, test } from "./fixtures";
  */
 
 test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
+  /**
+   * Serial, and not by preference.
+   *
+   * This suite is built on module state: `beforeAll` registers two users and two
+   * organisations, tests 2 to 7 create Org A's records and keep their ids in
+   * closure variables, and every later test reads them. That design only works if
+   * the whole file runs in declaration order inside one worker.
+   *
+   * `fullyParallel: false` in `playwright.config.ts` is not enough to guarantee
+   * that, and it demonstrably did not: with `mode` left at its default, these
+   * tests were distributed across four workers, each with its own copy of the
+   * module and therefore its own `beforeAll` — so Org A's session cookie in a
+   * mutation test belonged to a different user than the id it was posting
+   * against, and the suite failed with 403s that looked like authorisation bugs.
+   * In CI `workers` is 2, so this was always one place a scheduling change could
+   * turn into a red pipeline and a misleading failure.
+   *
+   * `mode: "serial"` pins the guarantee to the suite that depends on it: one
+   * worker, declaration order, and a failure stops the rest rather than letting
+   * later tests run against fixtures that were never created.
+   */
+  test.describe.configure({ mode: "serial" });
+
   let orgAAuthCookie: string;
   let orgBUserAuthCookie: string;
   let orgAId: string;
@@ -309,9 +334,13 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      // Should return 404 (not found) or 403 (forbidden)
-      // 404 is preferred as it doesn't leak existence
-      expect([403, 404]).toContain(response.status());
+      // Exactly 404, not [403, 404]. Org B is the Owner of Org B and holds
+      // `contacts.read`, so the permission guard passes and the refusal can only
+      // come from the scope finding nothing — which is the thing being tested. A
+      // 403 would mean the guard answered first and the record's existence was
+      // never actually established as hidden. See §6 of docs/SECURITY.md: a 403
+      // confirms the record exists, which is itself a disclosure.
+      expect(response.status()).toBe(404);
     });
 
     test("9. Org B cannot access Org A's company via direct URL", async ({
@@ -326,7 +355,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      expect([403, 404]).toContain(response.status());
+      expect(response.status()).toBe(404);
     });
 
     test("10. Org B cannot access Org A's lead via direct URL", async ({
@@ -341,7 +370,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      expect([403, 404]).toContain(response.status());
+      expect(response.status()).toBe(404);
     });
 
     test("11. Org B cannot access Org A's deal via direct URL", async ({
@@ -356,7 +385,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      expect([403, 404]).toContain(response.status());
+      expect(response.status()).toBe(404);
     });
 
     test("12. Org B cannot access Org A's task via direct URL", async ({
@@ -371,7 +400,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      expect([403, 404]).toContain(response.status());
+      expect(response.status()).toBe(404);
     });
 
     test("13. Org B cannot access Org A's pipeline via direct URL", async ({
@@ -386,7 +415,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         },
       );
 
-      expect([403, 404]).toContain(response.status());
+      expect(response.status()).toBe(404);
     });
 
     test("14. Org B's contact list does not include Org A's contact", async ({
@@ -610,5 +639,220 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
       const data = await response.json();
       expect(data.data._id).toBe(orgAPipelineId);
     });
+  });
+
+  // Cross-tenant *mutation*, which the suite above does not cover at all. It
+  // covers reads: a guessed id through a GET, and a list, a search, a dashboard
+  // aggregate. Reads are the easier half. A write is refused by the tenancy
+  // layer having found nothing, and a write refused by the *permission* layer
+  // would look identical from outside while proving nothing about isolation — so
+  // these assert `404` and never `403`. Org B is the Owner of Org B and holds
+  // every one of these permissions for its own organisation, so the guard at the
+  // top of each handler passes. Anything but a 404 means the record was resolved
+  // outside the caller's scope, and a 403 would mean the guard answered first
+  // and the record's non-existence was never actually established.
+  //
+  // Each test builds its own record and then asserts two things about the
+  // refusal: the status Org B sees, and that Org A's record is unchanged. The
+  // second is the one that matters — a refused mutation that still wrote
+  // something satisfies a status assertion perfectly, and the status is all the
+  // API said. `docs/SECURITY.md` §6 is also why 404 and not 403: a 403 confirms
+  // the record exists, which is a disclosure on its own.
+  //
+  // Self-contained on purpose. The block above threads ids between tests through
+  // module state, which assumes one worker for the file; Playwright did not
+  // honour that here and ran the outer `beforeAll` three times, so later tests
+  // saw `undefined` for ids earlier tests had set. A test that creates what it
+  // needs has nothing to inherit and cannot rot that way.
+  test.describe("Org B - Attempt Cross-Organization Mutation", () => {
+    const MUTATIONS: {
+      entity: string;
+      path: string;
+      /**
+       * Builds the payload Org A needs to create this entity. Async, and given
+       * the request context, because a deal cannot be created without a pipeline
+       * and one of its stages — so the deal's factory provisions those first
+       * rather than depending on a fixture some earlier test left lying around.
+       */
+      create: (ctx: {
+        request: APIRequestContext;
+        cookie: string;
+        userId: string;
+      }) => Promise<Record<string, unknown>>;
+      /** The field the cross-tenant PATCH tries to change, and its original. */
+      patch: Record<string, unknown>;
+      field: string;
+      original: unknown;
+    }[] = [
+      {
+        entity: "contact",
+        path: "/api/v1/crm/contacts",
+        create: async () => ({
+          firstName: "Mut",
+          lastName: "Probe",
+          ownerId: orgAUserId,
+          status: "CUSTOMER",
+        }),
+        patch: { firstName: "Pwned" },
+        field: "firstName",
+        original: "Mut",
+      },
+      {
+        entity: "company",
+        path: "/api/v1/crm/companies",
+        create: async () => ({
+          name: "Probe Corp",
+          ownerId: orgAUserId,
+          status: "CUSTOMER",
+        }),
+        patch: { name: "Pwned Inc" },
+        field: "name",
+        original: "Probe Corp",
+      },
+      {
+        entity: "lead",
+        path: "/api/v1/crm/leads",
+        create: async () => ({
+          title: "Probe Lead",
+          ownerId: orgAUserId,
+          source: "Referral",
+          status: "QUALIFIED",
+          // Required by the schema, not optional: a lead keeps its own record of
+          // the person it came from, and conversion needs an address to build a
+          // contact from.
+          contactSnapshot: {
+            firstName: "Probe",
+            lastName: "Lead",
+            email: "probe.lead@orga.example.com",
+          },
+        }),
+        patch: { title: "Pwned Lead" },
+        field: "title",
+        original: "Probe Lead",
+      },
+      {
+        entity: "deal",
+        path: "/api/v1/deals",
+        create: async ({ request, cookie }) => {
+          // A deal belongs to a stage, and a stage belongs to a pipeline, so
+          // this factory provisions both rather than borrowing the pipeline some
+          // earlier test created.
+          const pipeline = await request.post(`${BASE_URL}/api/v1/pipelines`, {
+            headers: { Cookie: cookie },
+            data: {
+              name: "Probe Deal Pipeline",
+              isDefault: false,
+              stages: [{ key: "NEW", name: "New", order: 1, probability: 10 }],
+            },
+          });
+          expect(pipeline.status()).toBe(201);
+          const created = await pipeline.json();
+          const stages = created.data.stages as { _id: string }[];
+          return {
+            name: "Probe Deal",
+            pipelineId: created.data._id as string,
+            stageId: stages[0]._id,
+            value: 1000,
+            currency: "USD",
+          };
+        },
+        // `name`, not `title`: a deal has no `title` field, and `strictObject`
+        // rejects an unrecognised key with 422 before the scope check runs. That
+        // is the schema working, and it is also why a wrong field name makes
+        // this test silently prove nothing — it would go on to assert a 422
+        // path, not a tenancy one.
+        patch: { name: "Pwned Deal" },
+        field: "name",
+        original: "Probe Deal",
+      },
+      {
+        entity: "task",
+        path: "/api/v1/tasks",
+        create: async () => ({
+          title: "Probe Task",
+          status: "TODO",
+          priority: "URGENT",
+        }),
+        patch: { title: "Pwned Task" },
+        field: "title",
+        original: "Probe Task",
+      },
+      {
+        entity: "pipeline",
+        path: "/api/v1/pipelines",
+        create: async () => ({
+          name: "Probe Pipeline",
+          isDefault: false,
+          stages: [
+            { key: "NEW", name: "New", order: 1, probability: 10 },
+            {
+              key: "WON",
+              name: "Won",
+              order: 2,
+              probability: 100,
+              isWon: true,
+            },
+          ],
+        }),
+        patch: { name: "Pwned Pipeline" },
+        field: "name",
+        original: "Probe Pipeline",
+      },
+    ];
+
+    for (const mutation of MUTATIONS) {
+      test(`Org B cannot PATCH or DELETE Org A's ${mutation.entity}`, async ({
+        request,
+      }) => {
+        if (!orgAUserId) test.skip(true, "Org A user not created");
+
+        const created = await request.post(`${BASE_URL}${mutation.path}`, {
+          headers: { Cookie: orgAAuthCookie },
+          data: await mutation.create({
+            request,
+            cookie: orgAAuthCookie,
+            userId: orgAUserId,
+          }),
+        });
+        expect(
+          created.status(),
+          `Org A should be able to create its own ${mutation.entity}`,
+        ).toBe(201);
+        const id = (await created.json()).data._id as string;
+        expect(id).toBeDefined();
+
+        const patch = await request.patch(`${BASE_URL}${mutation.path}/${id}`, {
+          headers: { Cookie: orgBUserAuthCookie },
+          data: mutation.patch,
+        });
+        expect(
+          patch.status(),
+          `cross-tenant PATCH of Org A's ${mutation.entity}`,
+        ).toBe(404);
+
+        const del = await request.delete(`${BASE_URL}${mutation.path}/${id}`, {
+          headers: { Cookie: orgBUserAuthCookie },
+        });
+        expect(
+          del.status(),
+          `cross-tenant DELETE of Org A's ${mutation.entity}`,
+        ).toBe(404);
+
+        // Both refusals were only worth anything if nothing was written. Org B
+        // cannot detect a write that happened anyway — it got the same two
+        // statuses either way — so the check has to come from Org A's side.
+        const reread = await request.get(`${BASE_URL}${mutation.path}/${id}`, {
+          headers: { Cookie: orgAAuthCookie },
+        });
+        expect(
+          reread.status(),
+          `Org A's ${mutation.entity} survived two refused cross-tenant mutations`,
+        ).toBe(200);
+        expect(
+          (await reread.json()).data[mutation.field],
+          `${mutation.entity}.${mutation.field} was changed by a refused cross-tenant mutation`,
+        ).toEqual(mutation.original);
+      });
+    }
   });
 });
