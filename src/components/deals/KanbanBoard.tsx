@@ -172,7 +172,23 @@ export function KanbanBoard({
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
   const pipelineStages = selectedPipeline?.stages ?? [];
 
-  // Filter columns based on search
+  /**
+   * The columns as the filter bar wants them shown.
+   *
+   * This was computed and then thrown away. The render loop below looked deals up
+   * in `columns`, so the search box, the owner filter and the status filter all
+   * did nothing at all: three controls, wired to a state object and a predicate
+   * that were both correct, feeding nothing. Nobody noticed because the predicate
+   * is right and the controls look right — nothing about this shows up in a
+   * screenshot either, since the board genuinely contains the deals you searched
+   * for. It took a DOM test that typed into the search box and then asked the
+   * screen what it was showing.
+   *
+   * Note that `handleDrop` still reads `columns`, deliberately. Appending a deal
+   * to a column has to sit after every deal in it, including the ones the filter
+   * is currently hiding; sizing the new `sortOrder` against the visible subset
+   * would collide with the hidden ones and make two cards share a position.
+   */
   const filteredColumns = columns.map((col) => ({
     ...col,
     deals: col.deals.filter((deal) => {
@@ -337,7 +353,9 @@ export function KanbanBoard({
           style={{ minWidth: `${pipelineStages.length * 320}px` }}
         >
           {pipelineStages.map((stage) => {
-            const column = columns.find((c) => c.stage.id === stage.id);
+            // `filteredColumns`, not `columns`: this is the lookup the filter
+            // bar exists to affect.
+            const column = filteredColumns.find((c) => c.stage.id === stage.id);
             const deals = column?.deals ?? [];
             const stageColorClass =
               STAGE_COLORS[stage.color as keyof typeof STAGE_COLORS] ??
