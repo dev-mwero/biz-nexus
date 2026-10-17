@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { registerSubsystems } from "@/instrumentation.node";
+import { registeredChannels } from "@/modules/notifications";
 import { events } from "@/shared/events/bus";
 
 /**
@@ -31,7 +32,18 @@ describe("registerSubsystems", () => {
 
     expect(events.count("deal.stage_changed")).toBe(stageChanged + 1);
     expect(events.count("task.completed")).toBe(completed + 1);
-    expect(events.count("task.assigned")).toBe(assigned + 1);
+    // Two subscribers: the timeline records the assignment, and the bell
+    // notifies the assignee. They are independent and both must be present.
+    expect(events.count("task.assigned")).toBe(assigned + 2);
+  });
+
+  it("installs the channel the bell is delivered through", () => {
+    // Without this the subscribers run and every `notify()` throws
+    // `unsupportedChannel`, which the bus reports and swallows -- so the
+    // failure would be a log line, not a missing notification anyone notices.
+    cleanups.push(registerSubsystems());
+
+    expect(registeredChannels()).toContain("IN_APP");
   });
 
   it("is idempotent, so a double startup does not double the timeline", () => {

@@ -1,4 +1,5 @@
 import { registerActivitySubscribers } from "@/modules/activities";
+import { registerNotifications } from "@/modules/notifications";
 
 /**
  * The composition root for in-process subsystems.
@@ -7,9 +8,10 @@ import { registerActivitySubscribers } from "@/modules/activities";
  * module says so, and every domain event this application emits -- a deal
  * changing stage, a task being assigned -- is emitted into it by a service that
  * does not know, and must not know, who is listening. For the life of the
- * project the only caller of `registerActivitySubscribers()` was a test, so in
- * production the activity timeline was written by nobody and every event went
- * nowhere. The write side existed; the wiring did not.
+ * project the only caller of the registration functions below was a test, so in
+ * production the activity timeline was written by nobody, the bell was addressed
+ * by nobody, and every event went nowhere. The write side existed; the wiring
+ * did not.
  *
  * This is where the subscribers are attached: once, at server startup. Next
  * calls `register()` in `instrumentation.ts` exactly once per server instance
@@ -24,7 +26,10 @@ import { registerActivitySubscribers } from "@/modules/activities";
  * again without leaking a subscription into the next test.
  */
 export function registerSubsystems(): () => void {
-  const stops: Array<() => void> = [registerActivitySubscribers()];
+  const stops: Array<() => void> = [
+    registerActivitySubscribers(),
+    registerNotifications(),
+  ];
 
   return () => {
     for (const stop of stops) stop();
