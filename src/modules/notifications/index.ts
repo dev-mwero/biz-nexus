@@ -24,3 +24,4 @@ export type {
   NotificationChannel,
   NotificationToDeliver,
 } from "./notification-channel";
+export { inAppChannel } from "./notification-in-app.channel";
