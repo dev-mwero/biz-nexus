@@ -152,23 +152,46 @@ export function createEventBus(options: EventBusOptions = {}): EventBus {
 }
 
 /**
- * The application bus.
+ * The application bus, cached on `globalThis`.
  *
  * A factory so that tests can build an isolated one, and a singleton because
  * modules register their subscribers at import time and need the same instance
  * the services emit on.
+ *
+ * Cached on `globalThis` rather than held in a module binding, for the same
+ * reason the database connection is (`src/db/connection.ts`). The subscribers
+ * are attached once at server startup, from `instrumentation.ts`, and a service
+ * that emits an event is reached through a route handler. Those two are not
+ * guaranteed to be the same module instance: Next may evaluate the startup entry
+ * in its own graph, and in development a reload rebuilds the module graph
+ * outright. A module-level binding then yields two buses — subscribers on one,
+ * emitters on the other — and every event is delivered to nobody, silently. That
+ * is precisely the failure this change exists to remove for the activity
+ * timeline, so it would be a poor fix that reintroduced it one layer down. A
+ * property on `globalThis` outlives both the graph rebuild and the graph split.
  */
-export const events: EventBus = createEventBus({
-  onSubscriberFailure: ({ event, index, error }) => {
-    const reason = error instanceof Error ? error.message : String(error);
-    // Server-side only, and deliberately minimal: this is a subscriber failing
-    // after the request has already succeeded, so the line exists to tell
-    // someone that a subsystem is not keeping up, not to describe the event.
-    console.error(
-      `[events] subscriber ${index} for "${event}" failed and was skipped: ${reason}`,
-    );
-  },
-});
+const globalForEvents = globalThis as typeof globalThis & {
+  __bizNexusEvents?: EventBus;
+};
+
+function createApplicationBus(): EventBus {
+  return createEventBus({
+    onSubscriberFailure: ({ event, index, error }) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      // Server-side only, and deliberately minimal: this is a subscriber failing
+      // after the request has already succeeded, so the line exists to tell
+      // someone that a subsystem is not keeping up, not to describe the event.
+      console.error(
+        `[events] subscriber ${index} for "${event}" failed and was skipped: ${reason}`,
+      );
+    },
+  });
+}
+
+export const events: EventBus =
+  globalForEvents.__bizNexusEvents ?? createApplicationBus();
+
+globalForEvents.__bizNexusEvents = events;
 
 /**
  * A test helper: records every emission of `name` and cleans up after itself.
