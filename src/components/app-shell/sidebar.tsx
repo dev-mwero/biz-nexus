@@ -3,21 +3,20 @@
 import {
   Building2,
   CheckSquare,
-  ChevronRight,
   Clock,
   Kanban,
   LayoutDashboard,
   Menu,
+  ScrollText,
   Settings,
   Target,
   User,
-  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
 
 const navigation = [
@@ -31,6 +30,19 @@ const navigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
+/**
+ * The audit screen is listed only for a session that can read it.
+ *
+ * The page and the API both refuse a non-owner, so this is not the gate — but a
+ * navigation entry that leads to "not available" is worse than no entry at all,
+ * and the permission is already in the session payload.
+ */
+const auditNavigation = {
+  name: "Audit log",
+  href: "/audit-logs",
+  icon: ScrollText,
+};
+
 export function Sidebar({
   isOpen,
   onClose,
@@ -39,6 +51,10 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const canReadAudit = session?.permissions.includes("auditLogs.read") ?? false;
+  const items = canReadAudit ? [...navigation, auditNavigation] : navigation;
 
   return (
     <>
@@ -93,7 +109,7 @@ export function Sidebar({
             aria-label="Main navigation"
           >
             <ul className="space-y-1">
-              {navigation.map((item) => {
+              {items.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/");
