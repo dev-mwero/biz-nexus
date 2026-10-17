@@ -3,16 +3,14 @@ import type { Types } from "mongoose";
 /**
  * Events the deals module emits.
  *
- * A declaration only, for now: no deals service exists yet, so nothing
- * implements this contract. It is here because events are declared by the
- * module that emits them, and the activity timeline needs to know the shape of
- * `deal.stage_changed` before anything emits it. Putting the declaration in
- * the subscriber instead would let the two drift - the timeline would be
- * written against a shape only it believes in, and the first deals service to
- * emit would compile against a different one.
+ * A declaration only: the emitting service is elsewhere, and it compiles against
+ * this contract rather than defining it. Events are declared by the module that
+ * emits them so that subscribers - the activity timeline, the notification bell
+ * - can be written against a shape only this module owns, and the two cannot
+ * drift.
  *
- * If the deals module turns out not to need this event, delete this file and
- * the subscriber with it. That is the intended way this goes away.
+ * If the deals module stops emitting one of these, delete it here and the
+ * subscriber with it. That is the intended way one goes away.
  */
 declare module "@/shared/events/registry" {
   interface DomainEventMap {
@@ -48,6 +46,28 @@ declare module "@/shared/events/registry" {
       dealName: string;
       lostReason: string | null;
       closedAt: Date;
+      occurredAt: Date;
+    };
+    /**
+     * Ownership of a deal was set or changed.
+     *
+     * Emitted on creation - a deal is always created with an owner, so creating
+     * one is the first assignment - and on any later change of owner. It is not
+     * emitted for an edit that leaves the owner alone, so a subscriber may treat
+     * every one of these as a real assignment.
+     *
+     * The actor and the owner are separate fields for a reason: assigning a deal
+     * to yourself is still an assignment, and it is the subscriber's job - not
+     * the emitter's - to decide nobody needs to be told about their own action.
+     */
+    "deal.assigned": {
+      organizationId: Types.ObjectId;
+      /** Who did the assigning. */
+      assignedBy: Types.ObjectId;
+      dealId: Types.ObjectId;
+      dealName: string;
+      /** The person the deal now belongs to. */
+      ownerId: Types.ObjectId;
       occurredAt: Date;
     };
   }
