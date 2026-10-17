@@ -432,6 +432,10 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         (c: { _id: string }) => c._id === orgAContactId,
       );
       expect(orgAContactInOrgB).toBeUndefined();
+      // The list is not just missing the row; its own count is Org B's, not
+      // Org A's. A `total` left unscoped reports how many contacts another
+      // tenant holds without ever returning one.
+      expect(data.meta.total).toBe(0);
     });
 
     test("15. Org B's company list does not include Org A's company", async ({
@@ -448,6 +452,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         (c: { _id: string }) => c._id === orgACompanyId,
       );
       expect(orgACompanyInOrgB).toBeUndefined();
+      expect(data.meta.total).toBe(0);
     });
 
     test("16. Org B's lead list does not include Org A's lead", async ({
@@ -464,6 +469,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         (l: { _id: string }) => l._id === orgALeadId,
       );
       expect(orgALeadInOrgB).toBeUndefined();
+      expect(data.meta.total).toBe(0);
     });
 
     test("17. Org B's deal list does not include Org A's deal", async ({
@@ -480,6 +486,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         (d: { _id: string }) => d._id === orgADealId,
       );
       expect(orgADealInOrgB).toBeUndefined();
+      expect(data.meta.total).toBe(0);
     });
 
     test("18. Org B's task list does not include Org A's task", async ({
@@ -496,6 +503,7 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         (t: { _id: string }) => t._id === orgATaskId,
       );
       expect(orgATaskInOrgB).toBeUndefined();
+      expect(data.meta.total).toBe(0);
     });
 
     test("19. Org B's pipeline list does not include Org A's pipeline", async ({
@@ -543,9 +551,19 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
 
       expect(response.status()).toBe(200);
       const data = await response.json();
-      // Dashboard should only show Org B's data (which should be empty)
-      // This is a soft check - the structure should exist but with zero/empty values
-      expect(data.data).toBeDefined();
+      // Hard values, not "the shape exists". Org A has seeded a lead, a deal, a
+      // task and — through the activity subscriber — activity rows; each of
+      // these numbers would be non-zero here if one facet dropped its tenant
+      // match. A count is a disclosure even when the documents themselves stay
+      // hidden, which is why this is the assertion and not `toBeDefined()`.
+      expect(data.data.metricCards.dealsWonThisMonth).toBe(0);
+      expect(data.data.metricCards.dealsLostThisMonth).toBe(0);
+      expect(data.data.metricCards.pipelineValue).toBe(0);
+      expect(data.data.metricCards.leadConversionRate).toBe(0);
+      expect(data.data.metricCards.winRate).toBe(0);
+      expect(data.data.overdueTasks).toBe(0);
+      expect(data.data.recentActivity).toEqual([]);
+      expect(data.data.pipelineSummary).toEqual([]);
     });
   });
 
@@ -798,6 +816,40 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         field: "name",
         original: "Probe Pipeline",
       },
+      {
+        entity: "tag",
+        path: "/api/v1/crm/tags",
+        create: async () => ({ name: "Probe Tag", color: "slate" }),
+        patch: { name: "Pwned Tag" },
+        field: "name",
+        original: "Probe Tag",
+      },
+      {
+        entity: "saved view",
+        path: "/api/v1/crm/saved-views",
+        // `filters`, `sort` and `columns` default in the schema, so only the
+        // two fields the API actually requires are sent.
+        create: async () => ({ entityType: "CONTACT", name: "Probe View" }),
+        patch: { name: "Pwned View" },
+        field: "name",
+        original: "Probe View",
+      },
+      {
+        entity: "field definition",
+        path: "/api/v1/crm/field-definitions",
+        // `key` must match `^[a-z][a-z0-9_]*$`; a value that fails the regex is
+        // a 422 the scope check never sees, which would make this case pass
+        // while proving nothing about tenancy.
+        create: async () => ({
+          entityType: "CONTACT",
+          key: "probe_field",
+          label: "Probe Field",
+          type: "TEXT",
+        }),
+        patch: { label: "Pwned Field" },
+        field: "label",
+        original: "Probe Field",
+      },
     ];
 
     for (const mutation of MUTATIONS) {
@@ -854,5 +906,48 @@ test.describe("Isolation Path - Cross-Organization Data Isolation", () => {
         ).toEqual(mutation.original);
       });
     }
+
+    // Invitations are the one collection-CRUD entity the loop cannot take:
+    // there is no PATCH, and the revoke lives at a different path from the
+    // create. It is also the highest-stakes entry in the matrix — a revoked
+    // invitation is an access grant withdrawn, and Org B reaching it would let
+    // one tenant end another's onboarding.
+    test("Org B cannot revoke Org A's invitation", async ({ request }) => {
+      const created = await request.post(
+        `${BASE_URL}/api/v1/organizations/current/members/invitations`,
+        {
+          headers: { Cookie: orgAAuthCookie },
+          data: {
+            email: `probe-invite-${Date.now()}@example.com`,
+            roleKey: "MEMBER",
+          },
+        },
+      );
+      expect(created.status()).toBe(201);
+      const invitationId = (await created.json()).data.invitation._id as string;
+      expect(invitationId).toBeDefined();
+
+      const revoked = await request.delete(
+        `${BASE_URL}/api/v1/organizations/current/invitations/${invitationId}`,
+        { headers: { Cookie: orgBUserAuthCookie } },
+      );
+      // 404, not 403: Org B's Owner role carries `invitations.delete`, so the
+      // guard passes and the refusal can only come from the scope finding
+      // nothing. See the mutation block's note and docs/SECURITY.md §6.
+      expect(revoked.status()).toBe(404);
+
+      // The refusal only means something if the invitation is still open. Org B
+      // cannot see that it survived — it got a 404 either way — so the check
+      // has to come from Org A.
+      const list = await request.get(
+        `${BASE_URL}/api/v1/organizations/current/invitations`,
+        { headers: { Cookie: orgAAuthCookie } },
+      );
+      expect(list.status()).toBe(200);
+      const openIds = ((await list.json()).data as { _id: string }[]).map(
+        (invitation) => invitation._id,
+      );
+      expect(openIds).toContain(invitationId);
+    });
   });
 });
