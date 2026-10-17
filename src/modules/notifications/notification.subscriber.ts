@@ -7,8 +7,9 @@ import { events } from "@/shared/events/bus";
  *
  * A notification is addressed to a person, and this is the only place that
  * decides which domain events are worth telling someone about. The task service
- * emits `task.assigned` and returns; it does not know a bell exists. That
- * separation is the entire reason the bus is here.
+ * emits `task.assigned`, the deals service emits `deal.assigned`, and both then
+ * return; neither knows a bell exists. That separation is the entire reason the
+ * bus is here.
  *
  * The mapping is one subscriber per event, so a new notification is a new
  * function and a new push below, not a branch inside a shared handler.
@@ -54,6 +55,25 @@ export function registerNotificationSubscribers(): () => void {
         title: "A task was assigned to you",
         body: event.taskTitle,
         data: { url: `/tasks/${event.taskId.toString()}` },
+      });
+    }),
+  );
+
+  unsubscribes.push(
+    events.subscribe("deal.assigned", async (event) => {
+      // Same reasoning as a task: a creator who takes ownership of their own
+      // deal does not need the bell to confirm what they just did. The deals
+      // service emits on every assignment, including the self-assignment on
+      // create, so this skip is what keeps the common case quiet.
+      if (sameId(event.ownerId, event.assignedBy)) return;
+
+      await notify({
+        organizationId: event.organizationId,
+        userId: event.ownerId,
+        type: "DEAL_ASSIGNED",
+        title: "A deal was assigned to you",
+        body: event.dealName,
+        data: { url: `/deals/${event.dealId.toString()}` },
       });
     }),
   );

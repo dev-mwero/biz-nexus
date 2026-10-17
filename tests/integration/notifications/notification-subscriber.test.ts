@@ -12,11 +12,11 @@ import { events } from "@/shared/events/bus";
 /**
  * The bell, driven by events.
  *
- * The service that assigns a task emits `task.assigned` and returns; this is the
- * subscriber that decides a person should hear about it. The test runs the real
- * registration -- channel and subscriber together -- so it fails if either half
- * is missing, which is the failure the whole change exists to fix: in production
- * both halves were absent and the bell was silent.
+ * A service assigns a task or a deal, emits the matching event, and returns;
+ * this is the subscriber that decides a person should hear about it. The test
+ * runs the real registration -- channel and subscriber together -- so it fails
+ * if either half is missing, which is the failure the whole change exists to
+ * fix: in production both halves were absent and the bell was silent.
  */
 
 const org = new Types.ObjectId();
@@ -122,6 +122,62 @@ describe("task.assigned", () => {
 
     expect(await NotificationModel.countDocuments({ userId: assignee })).toBe(
       2,
+    );
+  });
+});
+
+describe("deal.assigned", () => {
+  const dealId = new Types.ObjectId();
+  const dealOwner = new Types.ObjectId();
+
+  function assignedDeal(overrides: Record<string, unknown> = {}) {
+    return {
+      organizationId: org,
+      dealId,
+      dealName: "Big Deal",
+      ownerId: dealOwner,
+      assignedBy: assigner,
+      occurredAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  it("rings the new owner's bell, deep-linking to the deal", async () => {
+    await events.emit("deal.assigned", assignedDeal());
+
+    const rows = await listNotifications({
+      organizationId: org,
+      userId: dealOwner,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("DEAL_ASSIGNED");
+    expect(rows[0].body).toBe("Big Deal");
+    expect(rows[0].data.url).toBe(`/deals/${dealId.toString()}`);
+  });
+
+  it("stays quiet when someone assigns a deal to themselves", async () => {
+    // Creation emits an assignment even when the creator is the owner, so this
+    // is the everyday path -- a person creating their own deal -- and it must
+    // not ring their bell.
+    await events.emit(
+      "deal.assigned",
+      assignedDeal({ ownerId: assigner, assignedBy: assigner }),
+    );
+
+    expect(await NotificationModel.countDocuments({})).toBe(0);
+  });
+
+  it("addresses the notification to the new owner and no one else", async () => {
+    await events.emit("deal.assigned", assignedDeal());
+
+    expect(await NotificationModel.countDocuments({ userId: dealOwner })).toBe(
+      1,
+    );
+    expect(await NotificationModel.countDocuments({ userId: assigner })).toBe(
+      0,
+    );
+    expect(await NotificationModel.countDocuments({ userId: assignee })).toBe(
+      0,
     );
   });
 });
