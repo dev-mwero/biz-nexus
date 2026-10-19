@@ -16,6 +16,7 @@ import {
   RoleModel,
 } from "@/modules/organizations";
 import { PipelineModel } from "@/modules/pipelines";
+import { ProductModel } from "@/modules/products";
 import { ALL_PERMISSIONS } from "@/modules/rbac/permissions";
 import { TaskModel } from "@/modules/tasks";
 
@@ -128,6 +129,7 @@ export interface TenantSeeders {
   ): Promise<Types.ObjectId>;
   deal(org: Types.ObjectId, user: Types.ObjectId): Promise<Types.ObjectId>;
   pipeline(org: Types.ObjectId, user: Types.ObjectId): Promise<Types.ObjectId>;
+  product(org: Types.ObjectId, user: Types.ObjectId): Promise<Types.ObjectId>;
   task(org: Types.ObjectId, user: Types.ObjectId): Promise<Types.ObjectId>;
   activity(org: Types.ObjectId, user: Types.ObjectId): Promise<Types.ObjectId>;
   notification(
@@ -242,6 +244,23 @@ export const seed: TenantSeeders = {
           isLost: false,
         },
       ],
+      createdBy: user,
+      updatedBy: user,
+    });
+    return doc._id;
+  },
+
+  async product(org, user) {
+    const doc = await ProductModel.create({
+      organizationId: org,
+      name: "Widget",
+      type: "PRODUCT",
+      status: "ACTIVE",
+      unitPriceMinor: 1000,
+      currency: "USD",
+      sku: null,
+      skuNormalized: null,
+      unitLabel: null,
       createdBy: user,
       updatedBy: user,
     });
