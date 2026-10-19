@@ -1,7 +1,7 @@
 # Master Implementation Plan
 
 > This is **the** plan file. Every unit of work below is one commit.
-> Phase 0 is complete. Phase 1 begins on approval. Phases 2+ are gated.
+> Phases 0 and 1 are complete; **Gate 1 is passed** (§1K). Phases 2+ are gated.
 
 See also: [`DISCOVERY.md`](./DISCOVERY.md) · [`PRODUCT.md`](./PRODUCT.md) ·
 [`ROADMAP.md`](./ROADMAP.md) · [`ARCHITECTURE.md`](./ARCHITECTURE.md) ·
@@ -39,7 +39,7 @@ scope agreed, architecture documented, open questions listed. — met.
 
 ---
 
-# Phase 1 — MVP Foundation
+# Phase 1 — MVP Foundation — COMPLETE
 
 Goal: a signed-in user can create an organisation, invite a colleague, and the
 system is provably incapable of leaking data across organisation boundaries.
@@ -207,7 +207,7 @@ one decision it leaves open — whether the deploying environment will run
 [x] Isolation path fails closed for every route, by URL and by API
 [x] Every endpoint covered by a permission test
 [x] No open high or critical security finding
-[ ] CI green
+[x] CI green
 [x] Every feature meets the ten-part definition of done
 [x] Documentation matches the code
 ```
@@ -216,17 +216,30 @@ one decision it leaves open — whether the deploying environment will run
 
 ### Gate 1 declaration
 
-Six of the seven criteria are met and are evidenced in the table below. The
-seventh — CI green — is configured and green on `dev`, but **this branch has not
-been pushed**, so CI has not run on it, and a local `npm run validate` is not
-what CI executes. That box stays unticked until the first push, and the
-declaration is deliberately short of "passed" by one item rather than rounding
-it up.
+**Gate 1 is passed.** All seven criteria are met, and each one's evidence is the
+table below.
 
-What has been run on this branch, on a clean checkout: `npm run validate` (lint,
-typecheck, 93 test files / 1987 tests with coverage thresholds enforced),
-`npm run build`, and `npm run test:e2e` against the throwaway in-memory replica
-set. The push is the same evidence set on the runner that Gate 1 names.
+The last criterion to close was CI, and it closed the way it was supposed to: the
+branch was pushed to `dev` as a fast-forward (`5777362..892e735`) and CI ran on
+the pushed commit rather than on the author's machine. Run
+[`39253669262`](https://github.com/dev-mwero/biz-nexus/actions/runs/39253669262)
+at `892e735`, success, all six jobs green:
+
+| Job | Result |
+|---|---|
+| Secret Scan | success |
+| Dependency Audit | success |
+| Lint & Typecheck | success |
+| Unit & Integration Tests | success |
+| Build | success |
+| E2E Tests | success |
+
+Earlier on this branch, before the push, the same evidence set was run locally on
+a clean checkout: `npm run validate` (lint, typecheck, 93 test files / 1987 tests
+with coverage thresholds enforced), `npm run build`, and `npm run test:e2e` (57
+tests) against the throwaway in-memory replica set. The local run was not accepted
+as evidence for this criterion — the box stayed unticked until the runner had
+produced it — which is the whole point of the criterion.
 
 **A note on 1.75's commit.** The table names one commit,
 `fix(security): remediate phase 1 security findings`, and that is not what
@@ -253,7 +266,7 @@ What each tick is standing on, so the next reader does not have to re-derive it:
 | Isolation path fails closed | Three integration suites and one e2e suite. `tests/integration/security/cross-tenant-404-sweep.test.ts` drives every dynamic route with a foreign id and asserts the exact `404 RECORD_NOT_FOUND` — not "not 2xx" — for `GET`, `PATCH`, `DELETE` and the new member routes, and asserts that the foreign answer is byte-for-byte the absent answer. `cross-tenant-inference.test.ts` covers what a second tenant can learn from a count or an aggregate rather than a row. `cross-tenant-isolation.test.ts` covers URL-addressable reads, and `e2e/isolation-path.spec.ts` re-asserts the two-organisation path through the browser. | Export paths are covered by the route suites rather than by a dedicated sweep, and a new dynamic route is only covered once it is added to the sweep's table — the table is asserted against the route tree, so a route that is missing fails the suite. |
 | Every endpoint has a permission test | `tests/unit/architecture/route-permissions.test.ts` compares all 94 handler guards across 63 route files against `docs/API.md` and the permission catalogue, and fails on a route that declares a permission ahead of an endpoint or a doc row; `tests/integration/rbac/route-permission-enforcement.test.ts` asserts the refusal each one actually returns; `permission-matrix.test.ts` and `system-role-enforcement.test.ts` pin the role-to-permission sets. | `DECLARED_AHEAD_OF_THE_ENDPOINT` still names nine permissions whose routes are Phase 2 work (`roles.*`, `organization.delete`, `organization.transferOwnership`, `organization.settings`, `users.invite`) with `activities.update`. The list is asserted, so it can only shrink. |
 | No open high or critical finding | `docs/SECURITY-FINDINGS-GATE1.md`, all of S1–S9 closed, S4 accepted by design, plus the delta section for the settings and membership surface: no High, one Medium accepted with its mitigation recorded, four Low accepted. | — |
-| CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit + integration with coverage, dependency audit, secret scan, build and e2e. It triggers on pushes to `main` and `dev` and on pull requests into either, so the branch work actually lands on is covered as a push and as a target. | This branch has not been pushed, so CI has not run on it. The widened trigger and the final evidence run are the same event: the first push. Until then this box stays unticked rather than being ticked on a local run that is not what CI executes. |
+| CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit + integration with coverage, dependency audit, secret scan, build and e2e. It triggers on pushes to `main` and `dev` and on pull requests into either, so the branch work actually lands on is covered as a push and as a target. Run `39253669262` at `892e735`, all six jobs green. | — |
 | Ten-part definition of done | Working agreement §1K, walked screen by screen. The four placeholders are gone: `notifications` is the inbox (`d927bba`), `deals/new` is a creation form (`8f75a98`), `tasks/new` creates a task (`3e1afeb`), and `settings` is the organisation, member and invitation screens (`3498d87`). The audit log has a screen with its own read service (`1b77c1a`), the notification producers are wired (`1307894`, `a1eff17`, `13dc3c6`), and the component layer is inside the coverage gate (`879df11`). | — |
 | Documentation matches the code | This task. `docs/API.md` documents the settings and member endpoints (§3.2), the audit-log filters (§5) and the two envelopes the new routes answer with; ADR-0007's bcrypt swap landed with §2 of `SECURITY.md` and §2 of `DATABASE.md` carrying re-measured figures; `CONTRIBUTING.md`'s component row now describes the suites that exist; `vitest.config.mts` records the coverage the component layer actually holds. | — |
 

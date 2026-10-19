@@ -4,14 +4,13 @@ A multi-tenant **Business Operating System** for small and medium-sized B2B
 organisations. CRM is the first domain shipped; the architecture is a modular
 business platform, not a CRM with extra screens.
 
-> **Status: Phase 1 (MVP Foundation) complete — Gate 1 met on evidence, pending
-> the first push.**
+> **Status: Phase 1 (MVP Foundation) complete — Gate 1 passed.**
 > The CRM path is built and wired end to end: 11 domain modules, 94 documented
 > endpoints across 63 route files, 41 app screens, ~47k lines under `src`, and 93
-> test files. Every criterion Gate 1 names is evidenced in
-> [`docs/PLAN.md`](./docs/PLAN.md) §1K except CI itself, which is green on `dev`
-> and simply has not run on this branch — it needs a push, not more work. The
-> four screens that used to be placeholders are finished.
+> test files. All seven Gate 1 criteria are met and each one's evidence is in
+> [`docs/PLAN.md`](./docs/PLAN.md) §1K — including CI, green on `dev` at
+> `892e735` (run `39253669262`). The four screens that used to be placeholders are
+> finished.
 
 ---
 

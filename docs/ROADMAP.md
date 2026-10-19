@@ -42,23 +42,22 @@ value, not by dependency.
 [x] Organisation A cannot reach Organisation B by URL, API, or inference
 [x] Every endpoint has a permission test
 [x] No open high or critical security finding
-[ ] CI green on a clean checkout
+[x] CI green on a clean checkout
 [x] Every feature meets the ten-part definition of done
 ```
 
-Six of seven. The permission criterion is closed on evidence rather than on a
-sample: all 94 handlers across 63 route files are compared guard-to-documentation
-in `tests/unit/architecture/route-permissions.test.ts` and asserted to refuse in
-`tests/integration/rbac/route-permission-enforcement.test.ts`. Isolation is
-closed by the same kind of evidence — the cross-tenant sweep asserts the exact
-`404` for every dynamic route and that a foreign id and an absent id answer
-identically, and `cross-tenant-inference.test.ts` covers what a second tenant can
-learn from a count or an aggregate rather than a row.
+**Gate 1 is passed.** The permission criterion is closed on evidence rather than
+on a sample: all 94 handlers across 63 route files are compared
+guard-to-documentation in `tests/unit/architecture/route-permissions.test.ts` and
+asserted to refuse in `tests/integration/rbac/route-permission-enforcement.test.ts`.
+Isolation is closed by the same kind of evidence — the cross-tenant sweep asserts
+the exact `404` for every dynamic route and that a foreign id and an absent id
+answer identically, and `cross-tenant-inference.test.ts` covers what a second
+tenant can learn from a count or an aggregate rather than a row.
 
-The one open box is CI green, and it is open for one reason: this branch has not
-been pushed, so CI has never run on it. Everything CI runs has been run locally
-and is green. The push is the last step, not a review of what the push will
-contain. See [`PLAN.md`](./PLAN.md) §1K for the evidence table.
+CI was the last box to close and it closed on the runner, not locally: run
+`39253669262` at `892e735`, all six jobs green. See
+[`PLAN.md`](./PLAN.md) §1K for the evidence table behind every criterion.
 
 ### Gate 2 — after Stage 2
 
