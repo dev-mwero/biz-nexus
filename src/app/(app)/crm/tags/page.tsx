@@ -4,8 +4,8 @@ import { format } from "date-fns";
 import { Edit2, Palette, Plus, Tag as TagIcon, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function TagsPage() {
   const columns = [

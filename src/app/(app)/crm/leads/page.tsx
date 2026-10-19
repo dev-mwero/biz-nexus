@@ -11,8 +11,8 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function LeadsPage() {
   const columns = [

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { Edit2, Eye, Filter, Share2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ListPage } from "@/components/records/ListPage";
 import {
   Button,
   Select,
@@ -12,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function SavedViewsPage() {
   const [entityType, setEntityType] = useState("CONTACT");

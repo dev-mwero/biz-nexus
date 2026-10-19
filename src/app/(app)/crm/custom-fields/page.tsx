@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { Database, Edit2, Trash2, Type } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ListPage } from "@/components/records/ListPage";
 import {
   Button,
   Select,
@@ -12,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function CustomFieldsPage() {
   const [entityType, setEntityType] = useState("CONTACT");

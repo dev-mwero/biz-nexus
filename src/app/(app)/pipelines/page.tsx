@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { Edit, Eye, GripVertical, Plus, Target, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { ListPage } from "@/app/(app)/crm/ListPage";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
 
 export default function PipelinesPage() {
