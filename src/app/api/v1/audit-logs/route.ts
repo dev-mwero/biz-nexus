@@ -7,8 +7,10 @@ import { ok, pageMeta } from "@/shared/responses/envelope";
  * GET /api/v1/audit-logs
  *
  * Returns paginated audit logs for the active organization.
- * OWNER only. Supports filtering by entityType, entityId, actorId, action, date range.
- * Requires: auditLogs.read
+ * Requires `auditLogs.read`, which OWNER and ADMIN hold and MEMBER and VIEWER
+ * do not: the log is the broadest read in the product and belongs to the people
+ * who administer the workspace, not to every person in it.
+ * Supports filtering by entityType, entityId, actorId, action, date range.
  *
  * The filtering and paging live in `listAuditLogs`; this handler parses the query
  * string and hands the values over. Keeping the query construction out of the

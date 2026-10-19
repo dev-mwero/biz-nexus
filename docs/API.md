@@ -250,9 +250,65 @@ Returns:
 
 ## 5. Audit logs
 
-| Method | Path | Permission |
-|---|---|---|
-| `GET` | `/audit-logs` | `auditLogs.read` |
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/audit-logs` | `auditLogs.read` | Paginated change log for the active organisation. |
+
+`auditLogs.read` is held by `OWNER` and `ADMIN` and not by `MEMBER` or `VIEWER`
+(`OWNER_ONLY_READS` in `src/modules/rbac/system-roles.ts` names the permission,
+though the constant's name is narrower than what it grants). It is the broadest
+read in the product — every row names who changed what, across the whole tenant —
+so it belongs to the people who administer the workspace.
+
+Filters, all optional, all ANDed:
+
+| Param | Meaning |
+|---|---|
+| `action` | Exact action key, e.g. `settings.update`, `stage_change` |
+| `entityType` | Model name, e.g. `deal`, `contact`, `organization` |
+| `entityId` | One record's ObjectId. An unparseable value filters nothing out |
+| `actorId` | One user's ObjectId. A raw id, not a name — there is no actor picker |
+| `from` / `to` | ISO 8601 bounds, inclusive, on `createdAt` |
+| `sort` | `createdAt` (oldest first) or `-createdAt` (newest first, the default), plus `actorName`, `action`, `entityType`. Anything else falls back to `-createdAt` rather than reaching Mongo |
+| `page` / `pageSize` | 1-based; `pageSize` defaults to 20 and is capped at 100 |
+
+```http
+GET /api/v1/audit-logs?entityType=deal&entityId=65f…&from=2026-10-01T00:00:00Z
+Cookie: bn_session=…
+```
+
+```json
+{
+  "data": [
+    {
+      "_id": "65f…",
+      "createdAt": "2026-10-19T09:14:02.113Z",
+      "actorId": "65e…",
+      "actorName": "Dana Okafor",
+      "action": "settings.update",
+      "entityType": "organization",
+      "entityId": "65d…",
+      "entityLabel": "Acme Ltd",
+      "changes": {
+        "before": { "timezone": "UTC" },
+        "after": { "timezone": "Europe/London" }
+      },
+      "ip": "203.0.113.7",
+      "userAgent": "Mozilla/5.0 …"
+    }
+  ],
+  "meta": { "page": 1, "pageSize": 20, "total": 3, "totalPages": 1 }
+}
+```
+
+Rows carry `_id`, unlike the rest of the API, which returns `id`: the screen
+reads them straight from a lean query. The envelope and `meta` are the standard
+collection shape, so a client that renders any other list can render this one.
+
+The organisation is the session's and is never a parameter. There is no
+`organizationId` filter and no path that names another tenant; the scope is
+applied in `listAuditLogs` from the session, in one place, because that scope
+*is* this surface's entire security boundary.
 
 ---
 
