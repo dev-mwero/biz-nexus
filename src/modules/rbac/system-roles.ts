@@ -33,6 +33,9 @@ export const RECORD_DOMAINS: readonly string[] = [
   "contacts",
   "leads",
   "deals",
+  "products",
+  "quotations",
+  "salesOrders",
   "tags",
   "fieldDefinitions",
   "pipelines",
@@ -46,16 +49,21 @@ export const RECORD_DOMAINS: readonly string[] = [
 /**
  * Domains a member may write records in.
  *
- * `fieldDefinitions` and `pipelines` are deliberately absent. Both describe the
- * *shape* of everybody's records rather than their content, and changing either
- * retroactively alters what other people's data means. A member is somebody who
- * works the pipeline; who it is for is a manager's decision.
+ * `fieldDefinitions`, `pipelines` and `products` are deliberately absent.
+ * The first two describe the *shape* of everybody's records rather than their
+ * content, and changing either retroactively alters what other people's data
+ * means. Products are master data — the catalogue a quote draws from — and a
+ * salesperson who can edit prices and archive items can change what every
+ * future quote means. A member is somebody who works the pipeline; the
+ * catalogue it sells from is a manager's decision.
  */
 export const WRITABLE_RECORD_DOMAINS: readonly string[] = [
   "companies",
   "contacts",
   "leads",
   "deals",
+  "quotations",
+  "salesOrders",
   "tags",
   "activities",
   "tasks",
