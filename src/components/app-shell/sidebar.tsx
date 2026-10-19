@@ -7,6 +7,7 @@ import {
   Kanban,
   LayoutDashboard,
   Menu,
+  Package,
   ScrollText,
   Settings,
   Target,
@@ -25,6 +26,7 @@ const navigation = [
   { name: "Companies", href: "/crm/companies", icon: Building2 },
   { name: "Leads", href: "/crm/leads", icon: Target },
   { name: "Deals", href: "/deals", icon: Kanban },
+  { name: "Products", href: "/products", icon: Package },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Activities", href: "/activities", icon: Clock },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -54,7 +56,12 @@ export function Sidebar({
   const { data: session } = useSession();
 
   const canReadAudit = session?.permissions.includes("auditLogs.read") ?? false;
-  const items = canReadAudit ? [...navigation, auditNavigation] : navigation;
+  const canReadProducts =
+    session?.permissions.includes("products.read") ?? false;
+  const visible = navigation.filter(
+    (item) => item.href !== "/products" || canReadProducts,
+  );
+  const items = canReadAudit ? [...visible, auditNavigation] : visible;
 
   return (
     <>
