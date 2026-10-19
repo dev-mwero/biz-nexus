@@ -34,7 +34,7 @@ test suite exists to continuously disprove.
 | Edge | `proxy.ts` redirects unauthenticated requests. Optimistic only, no database. |
 | Transport | HTTPS enforced. `Secure`, `HttpOnly`, `SameSite=Lax` session cookie. |
 | Session | Opaque 32-byte token, SHA-256 hashed at rest, revocable, sliding 30-day expiry. |
-| Identity | bcrypt cost 12 via `bcryptjs` 3.0.3 — measured at **616 ms per hash** on an idle i5-7200U, and **~2.2 s** for a hash running alongside three others, which is the condition the test suite creates. See [ADR-0007](./decisions/0007-native-bcrypt-binding.md) and `npm run bench:bcrypt`. Lockout after repeated failures. Email verification before organisation creation. |
+| Identity | bcrypt cost 12 via the native `bcrypt` 6.0.0 binding — measured at **334 ms per hash** on an idle i5-7200U, and **442 ms** for a hash running alongside three others, because the binding dispatches onto the libuv threadpool rather than the event loop. See [ADR-0007](./decisions/0007-native-bcrypt-binding.md) and `npm run bench:bcrypt`. Lockout after repeated failures. Email verification before organisation creation. |
 | Tenant | `TenantRepository` forces the scope on every query. `organizationId` is never read from request input. |
 | Authorization | Per-organisation `Role` documents over a code-level permission catalogue. Guards run in the Data Access Layer on every read and write. |
 | Validation | Zod schemas, `strict()`, rejecting unknown keys. `organizationId` in a body is stripped, not honoured. |
@@ -338,12 +338,12 @@ spends one real bcrypt verification first: the missing-account path in
 a cheap stand-in.
 
 What this does **not** claim, because nobody has measured it and the code should
-not pretend otherwise: the residual difference. This is `bcryptjs`, a JavaScript
-implementation, so a single hash is not a fixed quantum of time — it depends on
-the machine and shares an event loop with the request doing the timing. What the
-burn equalises is the one large term. A small constant difference remains, from
-the index lookup, the document fetch and the failure-counter write. Stating it
-as "identical timing" would be a claim nothing enforces.
+not pretend otherwise: the residual difference. The native binding dispatches
+onto the libuv threadpool, so a single hash is not a fixed quantum of time
+either — it depends on the machine and on how many other hashes are in flight.
+What the burn equalises is the one large term. A small constant difference
+remains, from the index lookup, the document fetch and the failure-counter
+write. Stating it as "identical timing" would be a claim nothing enforces.
 
 **Log-only detail.** `AppError.internal` is the answer to "which of the four was
 it", and it is never serialised into the response. `withApi` forwards it to
@@ -524,7 +524,7 @@ Recorded rather than hidden.
 | No rate limit on the auth endpoints | Medium (abuse) | Accepted for the MVP, **scheduled and named** — see §9 and §12. Lockout is a per-account brake only, so credential stuffing across accounts is unthrottled. The per-IP driver planned for 1.31 will be per-instance on Vercel and is **not** a security boundary; a shared driver is required before the product handles real money. |
 | No audit trail on the auth endpoints, and no email delivery | Medium | Accepted for the MVP, **scheduled and named** — see §12. |
 | `ObjectId` is enumerable, so guessing is trivial | — | Not a vulnerability, because every guess is rejected by the tenant guard. This is precisely why the isolation tests exist. |
-| Email enumeration via timing on login | Low | Mitigated: identical bodies on every refusal, and one real bcrypt spent on every refused path including locked and suspended. `bcryptjs` timing is machine-dependent, so this equalises the dominant term, not the whole request — see §9. |
+| Email enumeration via timing on login | Low | Mitigated: identical bodies on every refusal, and one real bcrypt spent on every refused path including locked and suspended. Native `bcrypt` timing is machine- and load-dependent, so this equalises the dominant term, not the whole request — see §9. |
 | No MFA | Medium for privileged roles | Accepted. Post-Gate 1. |
 | Single-region database, single point of failure | Availability | Accepted. Atlas backups and PITR. |
 | Audit logs have no tamper-evidence | Low | Accepted; logs are append-only by application design, not by cryptographic proof. Revisit if compliance demands it. |

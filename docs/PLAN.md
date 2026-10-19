@@ -241,7 +241,7 @@ What each tick is standing on, so the next reader does not have to re-derive it:
 | No open high or critical finding | `docs/SECURITY-FINDINGS-GATE1.md`, all of S1–S9 closed, S4 accepted by design. | — |
 | CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit + integration with coverage, dependency audit, secret scan, build, e2e. `main` was green at `9b9d5e4` (run 37210578182) and the workflow has run 20 times. | The trigger was `main`-only, so `dev` — the branch every change lands on — ran no CI at all. Fixed in the commit that added the audit and secret-scan jobs; the widened trigger itself is unverified until `dev` goes green. |
 | Ten-part definition of done | Working agreement §1K. | Four screens are deliberate placeholders — `notifications`, `deals/new`, `tasks/new`, `settings`. There is no audit-log UI. Component coverage is excluded from the gate (`vitest.config.mts`). |
-| Documentation matches the code | This task. | ADR-0007's bcrypt swap is decided but not implemented, so §2 of `SECURITY.md` describes `bcryptjs` correctly and `bcrypt` is a benchmark-only dependency. |
+| Documentation matches the code | This task. | ADR-0007's bcrypt swap has landed: `hashPassword` uses the native `bcrypt` binding, §2 of `SECURITY.md` and §2 of `DATABASE.md` carry the re-measured figures, and `bcrypt` is a runtime dependency. |
 
 ### Open: components have no unit coverage
 

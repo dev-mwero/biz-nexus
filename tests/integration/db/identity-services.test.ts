@@ -189,7 +189,7 @@ describe("password hashing", () => {
   });
 
   it("flags a hash made at a lower cost for rehashing", async () => {
-    const { default: bcrypt } = await import("bcryptjs");
+    const { default: bcrypt } = await import("bcrypt");
     const cheap = await bcrypt.hash(PASSWORD, 10);
 
     expect(needsRehash(cheap)).toBe(true);
@@ -587,7 +587,7 @@ describe("password authentication", () => {
   });
 
   it("upgrades a low-cost hash on the next successful sign-in", async () => {
-    const { default: bcrypt } = await import("bcryptjs");
+    const { default: bcrypt } = await import("bcrypt");
     const user = await makeUser({
       passwordHash: await bcrypt.hash(PASSWORD, 10),
     });

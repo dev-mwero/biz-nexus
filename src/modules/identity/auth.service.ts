@@ -87,10 +87,10 @@ export type LoginRefusal = {
  * from outside.
  *
  * The dummy hash is a genuine cost-12 hash rather than a cheap stand-in, which
- * is what makes this worth doing — but "the same" has to be read carefully. This
- * is `bcryptjs`, a JavaScript implementation, so one hash is not a fixed quantum
- * of time: it varies with the machine, and it runs on the same event loop as the
- * request that is timing it. What the burn equalises is the one large term. A
+ * is what makes this worth doing — but "the same" has to be read carefully. The
+ * native binding dispatches onto the libuv threadpool, so one hash is not a fixed
+ * quantum of time either: it varies with the machine and with how many other
+ * hashes are in flight. What the burn equalises is the one large term. A
  * residual difference remains, from the index lookup, the document fetch and the
  * failure-counter write, and it is small and constant rather than the
  * order-of-magnitude signal that unburned bcrypt gives away. Stating it as
