@@ -27,9 +27,13 @@ export {
 } from "./membership.model";
 export {
   changeMemberRole,
+  leaveOrganization,
   listMembers,
+  listMembersWithUsers,
   MembershipError,
+  type MemberView,
   removeMember,
+  roleIdForSystemKey,
   setMembershipStatus,
 } from "./membership.service";
 export {
@@ -43,7 +47,10 @@ export {
   createOrganization,
   listOrganizationsForUser,
   OrganizationCreationError,
+  type UpdateOrganizationInput,
+  type UpdateOrganizationResult,
   type UserOrganization,
+  updateOrganization,
 } from "./organization.service";
 export {
   type Role,

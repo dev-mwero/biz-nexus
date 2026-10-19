@@ -52,6 +52,10 @@ import { GET as dealTimelineGet } from "@/app/api/v1/deals/[id]/timeline/route";
 import { POST as dealWinPost } from "@/app/api/v1/deals/[id]/win/route";
 import { PATCH as notificationReadPatch } from "@/app/api/v1/notifications/[id]/read/route";
 import { DELETE as invitationDelete } from "@/app/api/v1/organizations/current/invitations/[id]/route";
+import {
+  DELETE as memberDelete,
+  PATCH as memberPatch,
+} from "@/app/api/v1/organizations/current/members/[id]/route";
 import { POST as pipelineReorderPost } from "@/app/api/v1/pipelines/[id]/reorder/route";
 import {
   DELETE as pipelineDelete,
@@ -120,7 +124,8 @@ type SeedKind =
   | "task"
   | "activity"
   | "notification"
-  | "invitation";
+  | "invitation"
+  | "membership";
 
 interface SweepCase {
   /** `METHOD /path/:id`, the key the completeness assertion compares on. */
@@ -427,6 +432,25 @@ const CASES: SweepCase[] = [
     path: (id) => `/api/v1/organizations/current/invitations/${id}`,
     handler: invitationDelete,
     seedKind: "invitation",
+  },
+  {
+    endpoint: "PATCH /organizations/current/members/:id",
+    method: "PATCH",
+    path: (id) => `/api/v1/organizations/current/members/${id}`,
+    handler: memberPatch,
+    seedKind: "membership",
+    // A status change rather than a role change, so the case reaches the
+    // membership lookup. `roleKey` would resolve against the caller's own
+    // organisation first and refuse before the foreign id is ever named, which
+    // would pass the assertion for the wrong reason.
+    body: () => ({ status: "SUSPENDED" }),
+  },
+  {
+    endpoint: "DELETE /organizations/current/members/:id",
+    method: "DELETE",
+    path: (id) => `/api/v1/organizations/current/members/${id}`,
+    handler: memberDelete,
+    seedKind: "membership",
   },
   {
     endpoint: "POST /pipelines/:id/reorder",

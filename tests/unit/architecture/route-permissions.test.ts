@@ -82,18 +82,13 @@ const enforced = new Map<
 const DECLARED_AHEAD_OF_THE_ENDPOINT = [
   "activities.update",
   "organization.delete",
-  "organization.read",
   "organization.settings",
   "organization.transferOwnership",
-  "organization.update",
   "roles.create",
   "roles.delete",
   "roles.read",
   "roles.update",
   "users.invite",
-  "users.read",
-  "users.remove",
-  "users.update",
 ] as const;
 
 describe("every endpoint's guard matches the table that publishes it", () => {

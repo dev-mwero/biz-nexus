@@ -139,6 +139,10 @@ export interface TenantSeeders {
     user: Types.ObjectId,
     roleId: Types.ObjectId,
   ): Promise<Types.ObjectId>;
+  membership(
+    org: Types.ObjectId,
+    user: Types.ObjectId,
+  ): Promise<Types.ObjectId>;
 }
 
 export const seed: TenantSeeders = {
@@ -341,6 +345,36 @@ export const seed: TenantSeeders = {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       acceptedAt: null,
       revokedAt: null,
+    });
+    return doc._id;
+  },
+
+  /**
+   * A membership in `org` for somebody other than the sweep's caller.
+   *
+   * Deliberately not the caller's own membership: `{ organizationId, userId }`
+   * is unique, and the caller already holds one in both organisations. A second
+   * user is created so the row is a real, removable member rather than a
+   * duplicate the index would refuse.
+   */
+  async membership(org, _user) {
+    const member = await UserModel.create({
+      email: `member-${new Types.ObjectId().toString()}@example.com`,
+      name: "Directory member",
+      passwordHash: "hash",
+    });
+
+    const role = await RoleModel.findOne({
+      organizationId: org,
+      deletedAt: null,
+    }).select("_id");
+    if (!role) throw new Error("seedWorld must create a role in each org.");
+
+    const doc = await MembershipModel.create({
+      organizationId: org,
+      userId: member._id,
+      roleId: role._id,
+      status: "ACTIVE",
     });
     return doc._id;
   },

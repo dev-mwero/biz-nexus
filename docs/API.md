@@ -205,6 +205,22 @@ A token that was never real, has expired, was revoked, or has been spent answers
 `INVITATION_INVALID` / `INVITATION_EXPIRED` / `INVITATION_REVOKED` and never says
 which condition applied to a token that was never real.
 
+### 3.2 Organisation settings and members
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/organizations/current` | `organization.read` | The caller's active organisation: `{ id, name, slug, logoUrl, timezone, currency, dateFormat, weekStartsOn, isActive, createdAt, updatedAt }`. |
+| `PATCH` | `/organizations/current` | `organization.update` | Change organisation settings. Body: any of `{ name, timezone, currency, dateFormat, weekStartsOn }`; at least one, unknown keys refused. Audited as `settings.update`. |
+| `GET` | `/organizations/current/members` | `users.read` | The member directory: one row per active membership with the user's name and email resolved. `?includeSuspended=true` also lists suspended members. |
+| `PATCH` | `/organizations/current/members/:id` | `users.update` | Change a member's role and/or status. Body: `{ roleKey? }`, `{ status? }` (`ACTIVE` \| `SUSPENDED`), or both. `roleKey` is refused for `OWNER` (`422`). |
+| `DELETE` | `/organizations/current/members/:id` | `users.remove` | Remove a member (soft delete). `409 OWNER_REQUIRED` if they are the last active owner. |
+| `POST` | `/organizations/current/leave` | authenticated | Leave the active organisation. Any active member may. `409 OWNER_REQUIRED` if they are the last owner. |
+
+`:id` is a **membership** id, not a user id. Every member route resolves it
+through the session's organisation, so an id from another tenant and an id that
+does not exist answer the identical `404 RECORD_NOT_FOUND` — the same rule as
+every other `:id` route.
+
 ---
 
 ## 4. Activities
@@ -656,12 +672,6 @@ are **not implemented** in the current codebase:
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /organizations/current` | Not implemented | Organisation management not built |
-| `PATCH /organizations/current` | Not implemented | Organisation settings not built |
-| `GET /organizations/current/members` | Not implemented | Member management not built |
-| `PATCH /organizations/current/members/:id` | Not implemented | |
-| `DELETE /organizations/current/members/:id` | Not implemented | |
-| `POST /organizations/current/leave` | Not implemented | |
 | `GET /organizations/current/roles` | Not implemented | Role management not built |
 | `POST /organizations/current/roles` | Not implemented | |
 | `PATCH /organizations/current/roles/:id` | Not implemented | |
