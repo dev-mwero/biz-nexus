@@ -11,8 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
   Field,
-  FieldError,
   FieldLabel,
+  FormError,
   Input,
   Label,
   Select,
@@ -344,7 +344,7 @@ export function TaskForm({
         </div>
       </Field>
 
-      {error && <FieldError>{error}</FieldError>}
+      <FormError>{error}</FormError>
 
       <div className="flex justify-end gap-2 pt-2">
         <Button

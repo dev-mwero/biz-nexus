@@ -94,6 +94,34 @@ export function FieldLabel({
   );
 }
 
+/**
+ * The message for a rejected request that belongs to no single field.
+ *
+ * Not `FieldError` with no `Field` around it. Base UI's error part reads its
+ * context and throws when there is none, so a form-level `FieldError` does not
+ * render a slightly misplaced message — it unmounts the form at the exact moment
+ * the visitor needs to read why their save did not work. Three forms had it that
+ * way.
+ */
+export function FormError({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  if (!children) return null;
+
+  return (
+    <p
+      role="alert"
+      className={cn("text-xs font-medium text-critical", className)}
+    >
+      {children}
+    </p>
+  );
+}
+
 export type FieldHintProps = React.ComponentPropsWithoutRef<
   typeof BaseField.Description
 >;

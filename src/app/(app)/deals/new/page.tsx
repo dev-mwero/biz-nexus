@@ -12,8 +12,8 @@ import {
   CardHeader,
   CardTitle,
   Field,
-  FieldError,
   FieldLabel,
+  FormError,
   Input,
   Select,
   SelectContent,
@@ -333,7 +333,7 @@ export default function NewDealPage() {
               />
             </Field>
 
-            {error && <FieldError>{error}</FieldError>}
+            <FormError>{error}</FormError>
           </CardContent>
         </Card>
 

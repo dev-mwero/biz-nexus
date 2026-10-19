@@ -10,8 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
   Field,
-  FieldError,
   FieldLabel,
+  FormError,
   Input,
   Select,
   SelectContent,
@@ -347,7 +347,7 @@ export function ActivityComposer({
             />
           </Field>
 
-          {error && <FieldError>{error}</FieldError>}
+          <FormError>{error}</FormError>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button
