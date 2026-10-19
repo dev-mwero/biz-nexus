@@ -1,7 +1,8 @@
 "use client";
 
-import { Calendar, Link2, User, X } from "lucide-react";
+import { Calendar, Link2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MemberSelect } from "@/components/members/member-select";
 import {
   Button,
   Checkbox,
@@ -262,17 +263,13 @@ export function TaskForm({
       </Field>
 
       <Field>
-        <FieldLabel>Assignee (User ID)</FieldLabel>
-        <div className="relative">
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={assigneeId}
-            onChange={(e) => setAssigneeId(e.target.value)}
-            placeholder="User ObjectId"
-            className="pl-9"
-            disabled={submitting}
-          />
-        </div>
+        <FieldLabel>Assignee</FieldLabel>
+        <MemberSelect
+          value={assigneeId || null}
+          onChange={(next) => setAssigneeId(next ?? "")}
+          disabled={submitting}
+          placeholder="Unassigned"
+        />
       </Field>
 
       <Field>
