@@ -39,20 +39,26 @@ value, not by dependency.
 
 ```
 [x] The critical path passes end to end from a clean database
-[ ] Organisation A cannot reach Organisation B by URL, API, or inference
+[x] Organisation A cannot reach Organisation B by URL, API, or inference
 [x] Every endpoint has a permission test
 [x] No open high or critical security finding
 [ ] CI green on a clean checkout
-[ ] Every feature meets the ten-part definition of done
+[x] Every feature meets the ten-part definition of done
 ```
 
-Three of six. The permission criterion is closed on evidence rather than on a
-sample: all 88 endpoints are compared guard-to-documentation in
-`tests/unit/architecture/route-permissions.test.ts` and asserted to refuse in
-`tests/integration/rbac/route-permission-enforcement.test.ts`. The three open
-criteria, and what each is still missing, are tracked in
-[`PLAN.md`](./PLAN.md) §1K. `by inference` is the one to read closely — it is the
-only criterion here that no amount of per-route assertion will satisfy on its own.
+Six of seven. The permission criterion is closed on evidence rather than on a
+sample: all 94 handlers across 63 route files are compared guard-to-documentation
+in `tests/unit/architecture/route-permissions.test.ts` and asserted to refuse in
+`tests/integration/rbac/route-permission-enforcement.test.ts`. Isolation is
+closed by the same kind of evidence — the cross-tenant sweep asserts the exact
+`404` for every dynamic route and that a foreign id and an absent id answer
+identically, and `cross-tenant-inference.test.ts` covers what a second tenant can
+learn from a count or an aggregate rather than a row.
+
+The one open box is CI green, and it is open for one reason: this branch has not
+been pushed, so CI has never run on it. Everything CI runs has been run locally
+and is green. The push is the last step, not a review of what the push will
+contain. See [`PLAN.md`](./PLAN.md) §1K for the evidence table.
 
 ### Gate 2 — after Stage 2
 

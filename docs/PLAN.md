@@ -204,15 +204,29 @@ one decision it leaves open — whether the deploying environment will run
 
 ```
 [x] Critical path passes end to end from a clean database
-[ ] Isolation path fails closed for every route, by URL and by API
+[x] Isolation path fails closed for every route, by URL and by API
 [x] Every endpoint covered by a permission test
 [x] No open high or critical security finding
 [ ] CI green
-[ ] Every feature meets the ten-part definition of done
-[ ] Documentation matches the code
+[x] Every feature meets the ten-part definition of done
+[x] Documentation matches the code
 ```
 
 **Gate 1 is not passed by compiling. It is passed by the evidence above.**
+
+### Gate 1 declaration
+
+Six of the seven criteria are met and are evidenced in the table below. The
+seventh — CI green — is configured and green on `dev`, but **this branch has not
+been pushed**, so CI has not run on it, and a local `npm run validate` is not
+what CI executes. That box stays unticked until the first push, and the
+declaration is deliberately short of "passed" by one item rather than rounding
+it up.
+
+What has been run on this branch, on a clean checkout: `npm run validate` (lint,
+typecheck, 93 test files / 1987 tests with coverage thresholds enforced),
+`npm run build`, and `npm run test:e2e` against the throwaway in-memory replica
+set. The push is the same evidence set on the runner that Gate 1 names.
 
 **A note on 1.75's commit.** The table names one commit,
 `fix(security): remediate phase 1 security findings`, and that is not what
@@ -236,38 +250,41 @@ What each tick is standing on, so the next reader does not have to re-derive it:
 | Criterion | Evidence | Still open |
 |---|---|---|
 | Critical path from a clean database | `e2e/critical-path.spec.ts`, 47 tests. Every run gets a throwaway in-memory replica set from `scripts/e2e-server.mjs`, so the database is empty by construction rather than by a cleanup step somebody has to remember. | — |
-| Isolation path fails closed | `e2e/isolation-path.spec.ts`. | Cross-tenant `PATCH`/`DELETE` are asserted as "not 2xx"; the contract is `404`, and the exact-status assertion is not written for every route. `by inference` — what a second tenant can learn from a count, an aggregate, or an export — has no systematic coverage. |
-| Every endpoint has a permission test | `tests/unit/architecture/route-permissions.test.ts` compares all 88 handler guards against `docs/API.md` and the permission catalogue; `tests/integration/rbac/route-permission-enforcement.test.ts` asserts the refusal each one actually returns. | — |
-| No open high or critical finding | `docs/SECURITY-FINDINGS-GATE1.md`, all of S1–S9 closed, S4 accepted by design. | — |
-| CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit + integration with coverage, dependency audit, secret scan, build, e2e. `main` was green at `9b9d5e4` (run 37210578182) and the workflow has run 20 times. | The trigger was `main`-only, so `dev` — the branch every change lands on — ran no CI at all. Fixed in the commit that added the audit and secret-scan jobs; the widened trigger itself is unverified until `dev` goes green. |
-| Ten-part definition of done | Working agreement §1K. | Four screens are deliberate placeholders — `notifications`, `deals/new`, `tasks/new`, `settings`. There is no audit-log UI. Component coverage is excluded from the gate (`vitest.config.mts`). |
-| Documentation matches the code | This task. | ADR-0007's bcrypt swap has landed: `hashPassword` uses the native `bcrypt` binding, §2 of `SECURITY.md` and §2 of `DATABASE.md` carry the re-measured figures, and `bcrypt` is a runtime dependency. |
+| Isolation path fails closed | Three integration suites and one e2e suite. `tests/integration/security/cross-tenant-404-sweep.test.ts` drives every dynamic route with a foreign id and asserts the exact `404 RECORD_NOT_FOUND` — not "not 2xx" — for `GET`, `PATCH`, `DELETE` and the new member routes, and asserts that the foreign answer is byte-for-byte the absent answer. `cross-tenant-inference.test.ts` covers what a second tenant can learn from a count or an aggregate rather than a row. `cross-tenant-isolation.test.ts` covers URL-addressable reads, and `e2e/isolation-path.spec.ts` re-asserts the two-organisation path through the browser. | Export paths are covered by the route suites rather than by a dedicated sweep, and a new dynamic route is only covered once it is added to the sweep's table — the table is asserted against the route tree, so a route that is missing fails the suite. |
+| Every endpoint has a permission test | `tests/unit/architecture/route-permissions.test.ts` compares all 94 handler guards across 63 route files against `docs/API.md` and the permission catalogue, and fails on a route that declares a permission ahead of an endpoint or a doc row; `tests/integration/rbac/route-permission-enforcement.test.ts` asserts the refusal each one actually returns; `permission-matrix.test.ts` and `system-role-enforcement.test.ts` pin the role-to-permission sets. | `DECLARED_AHEAD_OF_THE_ENDPOINT` still names nine permissions whose routes are Phase 2 work (`roles.*`, `organization.delete`, `organization.transferOwnership`, `organization.settings`, `users.invite`) with `activities.update`. The list is asserted, so it can only shrink. |
+| No open high or critical finding | `docs/SECURITY-FINDINGS-GATE1.md`, all of S1–S9 closed, S4 accepted by design, plus the delta section for the settings and membership surface: no High, one Medium accepted with its mitigation recorded, four Low accepted. | — |
+| CI green | `.github/workflows/ci.yml` runs lint, typecheck, unit + integration with coverage, dependency audit, secret scan, build and e2e. It triggers on pushes to `main` and `dev` and on pull requests into either, so the branch work actually lands on is covered as a push and as a target. | This branch has not been pushed, so CI has not run on it. The widened trigger and the final evidence run are the same event: the first push. Until then this box stays unticked rather than being ticked on a local run that is not what CI executes. |
+| Ten-part definition of done | Working agreement §1K, walked screen by screen. The four placeholders are gone: `notifications` is the inbox (`d927bba`), `deals/new` is a creation form (`8f75a98`), `tasks/new` creates a task (`3e1afeb`), and `settings` is the organisation, member and invitation screens (`3498d87`). The audit log has a screen with its own read service (`1b77c1a`), the notification producers are wired (`1307894`, `a1eff17`, `13dc3c6`), and the component layer is inside the coverage gate (`879df11`). | — |
+| Documentation matches the code | This task. `docs/API.md` documents the settings and member endpoints (§3.2), the audit-log filters (§5) and the two envelopes the new routes answer with; ADR-0007's bcrypt swap landed with §2 of `SECURITY.md` and §2 of `DATABASE.md` carrying re-measured figures; `CONTRIBUTING.md`'s component row now describes the suites that exist; `vitest.config.mts` records the coverage the component layer actually holds. | — |
 
-### Open: components have no unit coverage
+### Closed: the component layer is in the coverage gate
 
-`src/components/**` is 1014 lines and 362 functions at 0%. It is excluded from
-the coverage thresholds in `vitest.config.mts` for now, so the gate describes
-business logic only, where it holds at 81.8% lines and 82.1% functions.
+`src/components/**` was excluded from `vitest.config.mts` with a note that the
+exclusion was a placeholder rather than a verdict. It has been lifted, and the
+thresholds hold with it included: **73.17% lines, 70.46% functions, 65.09%
+branches** across the whole suite, against a 70/70/60 gate.
 
-The exclusion is a placeholder, not a verdict. There is no DOM test environment
-in this repo — the suite runs in `node`, and neither `jsdom` nor
-`@testing-library/react` is installed — so component coverage cannot be added
-without first introducing that tooling. `CONTRIBUTING.md` currently assigns UI
-to the e2e layer, which is a defensible position while the e2e suite covers the
-critical path, but it is not the same as covering the components.
-
-To close it:
+What closed it, in the order the plan called for:
 
 ```
-[ ] Install jsdom and @testing-library/react
-[ ] Add a per-file `// @vitest-environment jsdom` convention
-[ ] Cover the Kanban board, the notification bell, and the pipeline list first
-[ ] Remove src/components/** from the coverage exclude and satisfy the gate
-[ ] Record the component layer in CONTRIBUTRIBUTING.md's testing table
+[x] Install jsdom and @testing-library/react
+[x] Add a per-file `// @vitest-environment jsdom` convention
+[x] Cover the Kanban board, the notification bell and the pipeline list
+[x] Cover the settings screens, the task form, the member picker and the
+    presentational pieces
+[x] Remove src/components/** from the coverage exclude and satisfy the gate
+[x] Record the component layer in CONTRIBUTING.md's testing table
 ```
 
-Until then, component regressions are invisible to CI. That is a known gap, not
-an accepted one.
+Two defects came out of the layer that nothing else could see, which is the
+argument for having it: `PipelineList`'s inline rename discarded the edit, and a
+form-level `FieldError` sitting outside any `Field` crashed three forms on a
+rejected save. Neither was visible to the API tests, which assert the server's
+answer, or to the type checker, which is satisfied either way.
+
+The gap that remains is concentrated in the shell — the command palette, the
+activity timeline and the task list — and is recorded in the config comment as
+the next suites rather than as a number to be renegotiated downwards.
 
 ---
 

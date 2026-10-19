@@ -88,7 +88,7 @@ src/
 │   │   ├── deals/{,[id],kanban,new}/
 │   │   ├── pipelines/{,[id],new}/
 │   │   ├── tasks/{,[id],new}/  activities/  notifications/  search/
-│   │   └── settings/             # one screen, currently a placeholder
+│   │   └── settings/             # organisation, members, invitations
 │   ├── onboarding/  dev/ui/      # org creation, design-system playground
 │   └── api/v1/                   # versioned REST surface
 │       ├── auth/  organizations/  members/  roles/
