@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
@@ -54,6 +55,8 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const canReadAudit = session?.permissions.includes("auditLogs.read") ?? false;
   const canReadProducts =
@@ -62,6 +65,48 @@ export function Sidebar({
     (item) => item.href !== "/products" || canReadProducts,
   );
   const items = canReadAudit ? [...visible, auditNavigation] : visible;
+
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      // Focus close button when opened
+      setTimeout(() => closeButtonRef.current?.focus(), 0);
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+        if (e.key === "Tab" && sidebarRef.current) {
+          const focusableElements = sidebarRef.current.querySelectorAll(
+            'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])',
+          );
+          const firstElement = focusableElements[0] as HTMLElement;
+          const lastElement = focusableElements[
+            focusableElements.length - 1
+          ] as HTMLElement;
+          if (focusableElements.length === 0) return;
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              e.preventDefault();
+              lastElement?.focus();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              e.preventDefault();
+              firstElement?.focus();
+            }
+          }
+        }
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.removeEventListener("keydown", handleKeyDown);
+      };
+    }
+    document.body.style.overflow = "";
+  }, [isOpen, onClose]);
 
   return (
     <>
@@ -76,8 +121,12 @@ export function Sidebar({
 
       {/* Sidebar - navigation landmark */}
       <aside
+        ref={sidebarRef}
         id="main-navigation"
         aria-label="Main navigation"
+        role={isOpen ? "dialog" : undefined}
+        aria-modal={isOpen ? true : undefined}
+        tabIndex={isOpen ? -1 : undefined}
         className={cn(
           "fixed top-0 left-0 z-50 h-screen w-64 bg-surface border-r border-line transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
@@ -101,15 +150,19 @@ export function Sidebar({
                 BizNexus
               </span>
             </Link>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
+            <button
+              ref={closeButtonRef}
+              type="button"
+              className={cn(
+                "lg:hidden inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors",
+                "hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-9 w-9",
+              )}
               onClick={onClose}
               aria-label="Close sidebar"
             >
               <X className="size-5" />
-            </Button>
+            </button>
           </div>
 
           {/* Navigation */}
