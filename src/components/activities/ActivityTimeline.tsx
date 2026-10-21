@@ -162,7 +162,7 @@ function ActivityItemComponent({
                           onDelete(activity._id);
                           setShowMenu(false);
                         }}
-                        className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-red-50 rounded"
+                        className="block w-full px-3 py-1 text-left text-sm text-critical hover:bg-critical-surface rounded"
                       >
                         Delete
                       </button>

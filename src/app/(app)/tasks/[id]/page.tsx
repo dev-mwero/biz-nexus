@@ -19,6 +19,7 @@ import {
   Avatar,
   AvatarFallback,
   Badge,
+  type BadgeProps,
   Button,
   ButtonLink,
   Card,
@@ -72,24 +73,31 @@ const STATUS_CONFIG: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  TODO: { label: "To Do", color: "bg-gray-100 text-gray-800", icon: Loader2 },
+  TODO: {
+    label: "To Do",
+    color: "bg-neutral-surface text-ink-600 dark:bg-ink-100 dark:text-ink-700",
+    icon: Loader2,
+  },
   IN_PROGRESS: {
     label: "In Progress",
-    color: "bg-blue-100 text-blue-800",
+    color: "bg-info-surface text-info dark:bg-info/15 dark:text-info",
     icon: Loader2,
   },
   DONE: {
     label: "Done",
-    color: "bg-green-100 text-green-800",
+    color:
+      "bg-positive-surface text-positive dark:bg-positive/15 dark:text-positive",
     icon: CheckCircle,
   },
 };
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: "bg-gray-100 text-gray-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-orange-100 text-orange-800",
-  URGENT: "bg-red-100 text-red-800",
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+const PRIORITY_TONES: Record<TaskPriority, BadgeTone> = {
+  LOW: "neutral",
+  MEDIUM: "attention",
+  HIGH: "attention",
+  URGENT: "critical",
 };
 
 function getInitials(name?: string | null): string {
@@ -221,7 +229,7 @@ export default function TaskDetailPage() {
                 <config.icon className="w-3 h-3" />
                 {config.label}
               </Badge>
-              <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
+              <Badge tone={PRIORITY_TONES[task.priority]}>
                 <Flag className="w-3 h-3 mr-1" />
                 {task.priority}
               </Badge>
@@ -400,7 +408,7 @@ export default function TaskDetailPage() {
                     <p
                       className={cn(
                         "mt-1 font-medium",
-                        isOverdue ? "text-red-600" : "",
+                        isOverdue ? "text-critical" : "",
                       )}
                     >
                       {task.dueAt
@@ -408,7 +416,7 @@ export default function TaskDetailPage() {
                         : "No due date"}
                     </p>
                     {isOverdue && (
-                      <p className="mt-1 text-sm text-red-600">Overdue</p>
+                      <p className="mt-1 text-sm text-critical">Overdue</p>
                     )}
                   </div>
                   <div>

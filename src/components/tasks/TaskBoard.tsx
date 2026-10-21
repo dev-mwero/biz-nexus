@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
+  type BadgeProps,
   Button,
   Card,
   CardContent,
@@ -70,23 +71,34 @@ const STATUS_CONFIG: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  TODO: { label: "To Do", color: "bg-gray-100 text-gray-800", icon: Loader2 },
-  IN_PROGRESS: {
-    label: "In Progress",
-    color: "bg-blue-100 text-blue-800",
+  TODO: {
+    label: "To Do",
+    color: "bg-neutral-surface text-ink-600 dark:bg-ink-100 dark:text-ink-700",
     icon: Loader2,
   },
-  DONE: { label: "Done", color: "bg-green-100 text-green-800", icon: Check },
+  IN_PROGRESS: {
+    label: "In Progress",
+    color: "bg-info-surface text-info dark:bg-info/15 dark:text-info",
+    icon: Loader2,
+  },
+  DONE: {
+    label: "Done",
+    color:
+      "bg-positive-surface text-positive dark:bg-positive/15 dark:text-positive",
+    icon: Check,
+  },
 };
 
 /** Placeholder rows shown while a column loads. */
 const BOARD_SKELETON_ROWS = ["row-1", "row-2", "row-3"] as const;
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: "bg-gray-100 text-gray-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-orange-100 text-orange-800",
-  URGENT: "bg-red-100 text-red-800",
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+const PRIORITY_TONES: Record<TaskPriority, BadgeTone> = {
+  LOW: "neutral",
+  MEDIUM: "attention",
+  HIGH: "attention",
+  URGENT: "critical",
 };
 
 function TaskCardBoard({
@@ -123,14 +135,14 @@ function TaskCardBoard({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs mb-2">
-          <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
+          <Badge tone={PRIORITY_TONES[task.priority]}>
             {task.priority}
           </Badge>
           {task.dueAt && (
             <span
               className={cn(
                 "flex items-center gap-1",
-                isOverdue ? "text-red-600" : "text-ink-500 dark:text-ink-400",
+                isOverdue ? "text-critical" : "text-ink-500 dark:text-ink-400",
               )}
             >
               <Calendar className="w-3 h-3" />
@@ -187,7 +199,7 @@ function TaskCardBoard({
             {onDelete && (
               <DropdownMenuItem
                 onClick={() => onDelete(task._id)}
-                className="text-red-600"
+                className="text-critical"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete

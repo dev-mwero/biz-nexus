@@ -32,9 +32,10 @@ export function Checkbox({
     <BaseCheckbox.Root
       data-slot="checkbox"
       className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-xs border border-line-strong bg-surface",
+        "flex size-4 shrink-0 items-center justify-center rounded-xs border border-control-border bg-surface",
         "transition-[background-color,border-color,box-shadow] duration-[var(--bn-duration-fast)]",
         "hover:border-ink-600 dark:hover:border-ink-400",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40",
         // Ink when checked, not a brand colour: this is a confirmation of state,
         // and the row it sits in carries the meaning.
         "data-checked:border-ink-900 data-checked:bg-ink-900 data-checked:text-white",

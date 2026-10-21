@@ -86,7 +86,7 @@ export default function CustomFieldsPage() {
       <Button
         variant="ghost"
         size="sm"
-        className="w-full justify-start text-red-600"
+        className="w-full justify-start text-critical"
         onClick={() => {}}
       >
         <Trash2 className="h-4 w-4 mr-2" /> Delete

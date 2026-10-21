@@ -105,7 +105,7 @@ export default function EditProductPage() {
       </div>
 
       {!canUpdate ? (
-        <p role="alert" className="text-sm text-ink-500">
+        <p role="alert" className="text-sm text-critical">
           You do not have permission to edit products.
         </p>
       ) : loading ? (

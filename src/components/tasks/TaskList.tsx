@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
+  type BadgeProps,
   Button,
   Card,
   CardContent,
@@ -83,17 +84,31 @@ const LIST_SKELETON_ROWS = [
   "row-5",
 ] as const;
 
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  TODO: "bg-gray-100 text-gray-800",
-  IN_PROGRESS: "bg-blue-100 text-blue-800",
-  DONE: "bg-green-100 text-green-800",
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+/**
+ * Status and priority are data meaning, so they map onto the four semantic
+ * tones rather than the Tailwind palette. The palette chips were light-mode
+ * only: `bg-red-100` on a dark card is glare, not emphasis.
+ */
+const STATUS_TONES: Record<TaskStatus, BadgeTone> = {
+  TODO: "neutral",
+  IN_PROGRESS: "info",
+  DONE: "positive",
 };
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: "bg-gray-100 text-gray-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-orange-100 text-orange-800",
-  URGENT: "bg-red-100 text-red-800",
+const PRIORITY_TONES: Record<TaskPriority, BadgeTone> = {
+  LOW: "neutral",
+  MEDIUM: "attention",
+  HIGH: "attention",
+  URGENT: "critical",
+};
+
+/** Icon surfaces. Tone-matched, but a filled disc, not a pill. */
+const STATUS_SURFACES: Record<TaskStatus, string> = {
+  TODO: "bg-neutral-surface text-ink-600 dark:bg-ink-100 dark:text-ink-700",
+  IN_PROGRESS: "bg-info-surface text-info dark:bg-info/15 dark:text-info",
+  DONE: "bg-positive-surface text-positive dark:bg-positive/15 dark:text-positive",
 };
 
 const STATUS_ICONS: Record<
@@ -137,7 +152,7 @@ function TaskCard({
           <div
             className={cn(
               "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-              STATUS_COLORS[task.status],
+              STATUS_SURFACES[task.status],
             )}
           >
             <StatusIcon className="w-4 h-4" />
@@ -181,7 +196,7 @@ function TaskCard({
                   {onDelete && (
                     <DropdownMenuItem
                       onClick={() => onDelete(task._id)}
-                      className="text-red-600"
+                      className="text-critical"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Delete
@@ -196,17 +211,15 @@ function TaskCard({
               </p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <Badge tone="neutral" className={STATUS_COLORS[task.status]}>
+              <Badge tone={STATUS_TONES[task.status]}>
                 {task.status.replace("_", " ")}
               </Badge>
-              <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
-                {task.priority}
-              </Badge>
+              <Badge tone={PRIORITY_TONES[task.priority]}>{task.priority}</Badge>
               {task.dueAt && (
                 <span
                   className={cn(
                     "flex items-center gap-1",
-                    isOverdue ? "text-red-600" : "text-ink-500 dark:text-ink-400",
+                    isOverdue ? "text-critical" : "text-ink-500 dark:text-ink-400",
                   )}
                 >
                   <Calendar className="w-3 h-3" />

@@ -5,7 +5,6 @@ import {
   Building2,
   ChevronDown,
   LogOut,
-  Menu,
   Search,
   Settings,
   User,
@@ -24,12 +23,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
+import { SidebarTrigger } from "./sidebar";
 
 interface HeaderProps {
   onMenuClick: () => void;
+  /** Drawer state, so the trigger's `aria-expanded` is truthful. */
+  sidebarOpen: boolean;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick, sidebarOpen }: HeaderProps) {
   const { data: session, refresh } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -58,16 +60,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="flex h-full items-center justify-between px-4 lg:px-6">
         {/* Left: Menu trigger + Breadcrumbs */}
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={onMenuClick}
-            aria-label="Open main navigation"
-            aria-controls="main-navigation"
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </Button>
+          <SidebarTrigger onClick={onMenuClick} isOpen={sidebarOpen} />
 
           {/* Breadcrumbs */}
           <nav

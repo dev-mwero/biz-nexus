@@ -12,16 +12,10 @@ const ACTIVITY_ROWS = ["row-1", "row-2", "row-3", "row-4", "row-5"] as const;
  */
 export default function AppLoading() {
   return (
-    <div className="min-h-screen bg-canvas">
-      {/* Top bar skeleton */}
-      <div className="h-16 border-b border-line" aria-hidden="true" />
-
-      {/* Page content skeleton */}
-      <main
-        className="p-4 sm:p-6 lg:p-8"
-        aria-busy="true"
-        aria-label="Loading page"
-      >
+    <div aria-busy="true" aria-label="Loading page">
+      {/* Page content skeleton. The shell already renders the real header and
+          sidebar, so this file must not draw a second top bar. */}
+      <main className="p-4 sm:p-6 lg:p-8">
         <div className="space-y-6">
           {/* Header skeleton */}
           <div className="flex items-center justify-between">

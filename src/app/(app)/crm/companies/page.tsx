@@ -63,7 +63,7 @@ export default function CompaniesPage() {
         row.email ? (
           <a
             href={`mailto:${row.email}`}
-            className="text-blue-600 hover:underline flex items-center gap-1"
+            className="text-info hover:underline flex items-center gap-1"
           >
             <Mail className="h-3 w-3" />
             {row.email}

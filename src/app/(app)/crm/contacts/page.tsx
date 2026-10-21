@@ -37,7 +37,7 @@ export default function ContactsPage() {
         row.primaryEmail ? (
           <a
             href={`mailto:${row.primaryEmail}`}
-            className="text-blue-600 hover:underline flex items-center gap-1"
+            className="text-info hover:underline flex items-center gap-1"
           >
             <Mail className="h-3 w-3" />
             {row.primaryEmail}

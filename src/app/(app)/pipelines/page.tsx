@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { Edit, Eye, GripVertical, Plus, Target, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { ListPage } from "@/components/records/ListPage";
-import { Button } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 
 export default function PipelinesPage() {
   const columns = [
@@ -20,9 +20,9 @@ export default function PipelinesPage() {
           )}
           <div className="flex items-center gap-2 mt-1">
             {row.isDefault && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+              <Badge tone="positive" size="sm">
                 Default
-              </span>
+              </Badge>
             )}
             <span className="text-xs text-ink-400 flex items-center gap-1">
               <Target className="h-3 w-3" />

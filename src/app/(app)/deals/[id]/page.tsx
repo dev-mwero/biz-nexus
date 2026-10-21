@@ -378,7 +378,7 @@ export default function DealDetailPage() {
             <DropdownMenuContent align="end">
               <AlertDialog>
                 <AlertDialogTrigger>
-                  <DropdownMenuItem className="text-red-600 focus:text-red-600">
+                  <DropdownMenuItem className="text-critical focus:text-critical">
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
                   </DropdownMenuItem>
@@ -437,7 +437,7 @@ export default function DealDetailPage() {
                       <dd
                         className={cn(
                           "font-medium",
-                          isOverdue && "text-red-600",
+                          isOverdue && "text-critical",
                         )}
                       >
                         {deal.expectedCloseDate
@@ -467,7 +467,7 @@ export default function DealDetailPage() {
                     {deal.lostReason && deal.status === "LOST" && (
                       <div>
                         <dt className="text-sm text-ink-500">Lost Reason</dt>
-                        <dd className="font-medium text-red-600">
+                        <dd className="font-medium text-critical">
                           {deal.lostReason}
                         </dd>
                       </div>

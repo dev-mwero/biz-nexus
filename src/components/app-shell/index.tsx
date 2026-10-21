@@ -28,7 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className={cn(
             "sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-4 focus:left-4",
             "bg-info text-white px-4 py-2 rounded-md font-medium",
-            "focus:outline-none focus:ring-2 focus:ring-info focus:ring-offset-2",
+            // The ring is ink, not `info`: a ring the same colour as the fill
+            // it surrounds is not a ring, it is a thicker edge.
+            "focus:outline-none focus:ring-2 focus:ring-ink-900 focus:ring-offset-2",
+            "dark:focus:ring-ink-50",
           )}
         >
           Skip to main content
@@ -42,7 +45,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <div className="flex-1 min-w-0">
             {/* Header - banner landmark */}
-            <Header onMenuClick={() => setSidebarOpen(true)} />
+            <Header
+              onMenuClick={() => setSidebarOpen(true)}
+              sidebarOpen={sidebarOpen}
+            />
 
             {/* Main content - main landmark */}
             <main id="main-content" className="p-4 sm:p-6 lg:p-8" tabIndex={-1}>

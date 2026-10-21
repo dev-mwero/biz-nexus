@@ -26,7 +26,7 @@ export default function SavedViewsPage() {
         <div className="flex items-center gap-2">
           {row.isShared ? (
             <Users
-              className="h-4 w-4 text-blue-600"
+              className="h-4 w-4 text-info"
               aria-label="Shared"
               role="img"
             />
@@ -119,7 +119,7 @@ export default function SavedViewsPage() {
       <Button
         variant="ghost"
         size="sm"
-        className="w-full justify-start text-red-600"
+        className="w-full justify-start text-critical"
         onClick={() => {}}
       >
         <Trash2 className="h-4 w-4 mr-2" /> Delete
