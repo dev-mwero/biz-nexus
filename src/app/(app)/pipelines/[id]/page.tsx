@@ -137,7 +137,7 @@ export default async function PipelineDetailPage({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ink-900 dark:border-ink-50" />
       </div>
     );
   }
@@ -151,7 +151,7 @@ export default async function PipelineDetailPage({
         </p>
         <Link
           href="/pipelines"
-          className="mt-4 inline-flex items-center gap-2 text-primary hover:underline"
+          className="mt-4 inline-flex items-center gap-2 text-info hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Pipelines
@@ -273,7 +273,7 @@ export default async function PipelineDetailPage({
             <p className="text-ink-500">No stages defined</p>
             <Link
               href={`/pipelines/${pipeline._id}/edit`}
-              className="mt-3 inline-flex items-center gap-2 text-primary hover:underline"
+              className="mt-3 inline-flex items-center gap-2 text-info hover:underline"
             >
               <ChevronRight className="h-4 w-4" />
               Add Stages

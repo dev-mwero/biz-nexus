@@ -235,7 +235,7 @@ export default function ConvertLeadPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-ink-900 dark:text-ink-50" />
       </div>
     );
   }
@@ -245,8 +245,8 @@ export default function ConvertLeadPage() {
   if (lead.status === "CONVERTED") {
     return (
       <div className="max-w-3xl mx-auto space-y-6 text-center py-12">
-        <div className="rounded-full bg-primary/10 p-4 w-fit mx-auto mb-4">
-          <CheckCircle className="h-8 w-8 text-primary" />
+        <div className="rounded-full bg-info-surface p-4 w-fit mx-auto mb-4">
+          <CheckCircle className="h-8 w-8 text-ink-900 dark:text-ink-50" />
         </div>
         <h1 className="text-2xl font-semibold text-ink-900">
           Already Converted
@@ -312,7 +312,7 @@ export default function ConvertLeadPage() {
         <Card
           className={
             contactWillBeCreated
-              ? "border-primary/30 bg-primary/5"
+              ? "bg-info-surface"
               : "opacity-50"
           }
         >
@@ -363,7 +363,7 @@ export default function ConvertLeadPage() {
         <Card
           className={
             companyWillBeCreated
-              ? "border-primary/30 bg-primary/5"
+              ? "bg-info-surface"
               : "opacity-50"
           }
         >
@@ -407,7 +407,7 @@ export default function ConvertLeadPage() {
         {/* Deal Preview */}
         <Card
           className={
-            dealWillBeCreated ? "border-primary/30 bg-primary/5" : "opacity-50"
+            dealWillBeCreated ? "bg-info-surface" : "opacity-50"
           }
         >
           <CardHeader>

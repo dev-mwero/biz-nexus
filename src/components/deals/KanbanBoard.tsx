@@ -250,7 +250,7 @@ export function KanbanBoard({
 
   if (!selectedPipeline) {
     return (
-      <div className="flex flex-col items-center justify-center h-[600px] text-center text-muted-foreground">
+      <div className="flex flex-col items-center justify-center h-[600px] text-center text-ink-500 dark:text-ink-400">
         <Filter className="h-12 w-12 mb-4 opacity-50" />
         <p className="text-lg">Select a pipeline to view the Kanban board</p>
         <p className="text-sm mt-1">
@@ -291,7 +291,7 @@ export function KanbanBoard({
 
         <div className="flex-1 flex gap-2">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-500 dark:text-ink-400" />
             <Input
               placeholder="Search deals..."
               value={filters.search}
@@ -452,7 +452,7 @@ function KanbanColumn({
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-xs text-ink-500 dark:text-ink-400">
           <span>{deals.length} deals</span>
           <Separator orientation="vertical" className="h-4" />
           <span>${totalValue.toLocaleString()}</span>
@@ -468,7 +468,7 @@ function KanbanColumn({
             ))}
           </ul>
         ) : deals.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8 text-sm">
+          <div className="text-center text-ink-500 dark:text-ink-400 py-8 text-sm">
             <p>No deals in this stage</p>
             <Button
               variant="ghost"
@@ -577,12 +577,12 @@ function DealCard({ deal, index }: DealCardProps) {
       <div className="font-medium text-sm truncate">{deal.name}</div>
 
       {deal.value > 0 && (
-        <div className="text-lg font-semibold text-primary mt-1">
+        <div className="text-lg font-semibold text-ink-900 dark:text-ink-50 mt-1">
           {formatCurrency(deal.value, deal.currency)}
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between mt-2 text-xs text-ink-500 dark:text-ink-400">
         {deal.probability > 0 && <span>{deal.probability}%</span>}
         {expectedClose && (
           <span
@@ -598,7 +598,7 @@ function DealCard({ deal, index }: DealCardProps) {
       </div>
 
       {deal.description && (
-        <div className="mt-2 text-sm text-muted-foreground line-clamp-2">
+        <div className="mt-2 text-sm text-ink-500 dark:text-ink-400 line-clamp-2">
           {deal.description}
         </div>
       )}

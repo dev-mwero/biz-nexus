@@ -191,7 +191,7 @@ export default function TaskDetailPage() {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold">Task not found</h2>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-ink-500 dark:text-ink-400 mt-2">
           {error || "The task you're looking for doesn't exist."}
         </p>
         <ButtonLink href="/tasks" className="mt-4">
@@ -216,7 +216,7 @@ export default function TaskDetailPage() {
           </ButtonLink>
           <div>
             <h1 className="text-2xl font-bold">{task.title}</h1>
-            <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-3 mt-1 text-sm text-ink-500 dark:text-ink-400">
               <Badge tone="neutral" className={cn(config.color, "gap-1")}>
                 <config.icon className="w-3 h-3" />
                 {config.label}
@@ -280,11 +280,11 @@ export default function TaskDetailPage() {
                 </CardHeader>
                 <CardContent>
                   {task.description ? (
-                    <p className="whitespace-pre-wrap text-muted-foreground">
+                    <p className="whitespace-pre-wrap text-ink-500 dark:text-ink-400">
                       {task.description}
                     </p>
                   ) : (
-                    <p className="text-muted-foreground italic">
+                    <p className="text-ink-500 dark:text-ink-400 italic">
                       No description
                     </p>
                   )}
@@ -322,7 +322,7 @@ export default function TaskDetailPage() {
               <Card>
                 <CardContent className="p-4 space-y-4">
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Status
                     </FieldLabel>
                     <div className="mt-1 space-y-2">
@@ -337,7 +337,7 @@ export default function TaskDetailPage() {
                             className={cn(
                               "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                               task.status === status
-                                ? "bg-primary text-primary-foreground"
+                                ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
                                 : "hover:bg-muted",
                             )}
                           >
@@ -345,8 +345,8 @@ export default function TaskDetailPage() {
                               className={cn(
                                 "w-4 h-4",
                                 task.status === status
-                                  ? "text-primary-foreground"
-                                  : "text-muted-foreground",
+                                  ? "text-white dark:text-ink-900"
+                                  : "text-ink-500 dark:text-ink-400",
                               )}
                             />
                             <span className="font-medium">
@@ -358,7 +358,7 @@ export default function TaskDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Priority
                     </FieldLabel>
                     <div className="mt-1 space-y-1">
@@ -370,7 +370,7 @@ export default function TaskDetailPage() {
                           className={cn(
                             "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                             task.priority === priority
-                              ? "bg-primary text-primary-foreground"
+                              ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
                               : "hover:bg-muted",
                           )}
                         >
@@ -378,8 +378,8 @@ export default function TaskDetailPage() {
                             className={cn(
                               "w-4 h-4",
                               task.priority === priority
-                                ? "text-primary-foreground"
-                                : "text-muted-foreground",
+                                ? "text-white dark:text-ink-900"
+                                : "text-ink-500 dark:text-ink-400",
                             )}
                           />
                           <span className="font-medium">{priority}</span>
@@ -394,7 +394,7 @@ export default function TaskDetailPage() {
               <Card>
                 <CardContent className="p-4 space-y-4">
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Due Date
                     </FieldLabel>
                     <p
@@ -412,7 +412,7 @@ export default function TaskDetailPage() {
                     )}
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Assignee
                     </FieldLabel>
                     <div className="mt-1 flex items-center gap-2">
@@ -427,7 +427,7 @@ export default function TaskDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Completed
                     </FieldLabel>
                     <p className="mt-1 font-medium">
@@ -452,7 +452,7 @@ export default function TaskDetailPage() {
                           key={`${rel.entityType}:${rel.entityId}`}
                           className="px-4 py-2 flex items-center gap-2 text-sm"
                         >
-                          <span className="text-muted-foreground capitalize">
+                          <span className="text-ink-500 dark:text-ink-400 capitalize">
                             {rel.entityType}
                           </span>
                           <code className="text-xs bg-muted px-1.5 py-0.5 rounded">

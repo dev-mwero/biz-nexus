@@ -57,8 +57,7 @@ export function TabsTrigger({
         "-mb-px inline-flex items-center gap-1.5 rounded-t-md border border-transparent px-3 py-2",
         "text-sm font-medium text-ink-500 transition-colors select-none",
         "hover:text-ink-900 dark:hover:text-ink-50",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900",
-        "dark:focus-visible:outline-ink-50",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info",
         // The active tab is the only one carrying weight, and the indicator sits
         // on its bottom edge where the strip's own border is, so nothing reflows.
         "data-selected:border-line data-selected:bg-surface data-selected:text-ink-900",
@@ -79,8 +78,7 @@ export function TabsContent({
     <BaseTabs.Panel
       data-slot="tabs-content"
       className={cn(
-        "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900",
-        "dark:focus-visible:outline-ink-50",
+        "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info",
         className,
       )}
       {...props}

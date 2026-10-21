@@ -64,7 +64,6 @@ export function Header({ onMenuClick }: HeaderProps) {
             className="lg:hidden"
             onClick={onMenuClick}
             aria-label="Open main navigation"
-            aria-expanded={false}
             aria-controls="main-navigation"
           >
             <Menu className="size-5" aria-hidden="true" />

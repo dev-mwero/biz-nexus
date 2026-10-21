@@ -303,7 +303,7 @@ export default function NewPipelinePage() {
                   onChange={(e) =>
                     setFormData({ ...formData, isDefault: e.target.checked })
                   }
-                  className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                 />
                 <label
                   htmlFor="isDefault"
@@ -460,7 +460,7 @@ export default function NewPipelinePage() {
                               onChange={(e) =>
                                 updateStage(index, "isWon", e.target.checked)
                               }
-                              className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                              className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                             />
                             <span className="text-sm text-ink-600">Won</span>
                           </label>
@@ -471,7 +471,7 @@ export default function NewPipelinePage() {
                               onChange={(e) =>
                                 updateStage(index, "isLost", e.target.checked)
                               }
-                              className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                              className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                             />
                             <span className="text-sm text-ink-600">Lost</span>
                           </label>
