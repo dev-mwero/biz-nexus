@@ -132,12 +132,12 @@ function ActivityItemComponent({
   return (
     <Card className="flex flex-col gap-2 transition-opacity hover:opacity-100">
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-sunken flex items-center justify-center">
           <Icon className="w-4 h-4 text-ink-500 dark:text-ink-400" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-sm font-medium text-ink-900 dark:text-ink-50">
               {activity.title}
             </p>
             <div className="flex items-center gap-1">
@@ -149,7 +149,7 @@ function ActivityItemComponent({
                   <button
                     type="button"
                     onClick={() => setShowMenu(!showMenu)}
-                    className="p-1 rounded hover:bg-muted transition-colors"
+                    className="p-1 rounded hover:bg-surface-sunken transition-colors"
                     aria-label="More options"
                   >
                     <MoreHorizontal className="w-4 h-4 text-ink-500 dark:text-ink-400" />
@@ -198,7 +198,7 @@ function ActivityItemComponent({
               <summary className="text-xs text-ink-500 dark:text-ink-400 cursor-pointer">
                 Metadata
               </summary>
-              <pre className="mt-1 text-xs text-ink-500 dark:text-ink-400 bg-muted p-2 rounded overflow-auto">
+              <pre className="mt-1 text-xs text-ink-500 dark:text-ink-400 bg-surface-sunken p-2 rounded overflow-auto">
                 {JSON.stringify(activity.metadata, null, 2)}
               </pre>
             </details>

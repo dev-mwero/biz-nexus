@@ -23,7 +23,7 @@ export default function CustomFieldsPage() {
       header: "Key",
       sortable: true,
       render: (row: any) => (
-        <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+        <code className="text-sm bg-surface-sunken px-1.5 py-0.5 rounded">
           {row.key}
         </code>
       ),

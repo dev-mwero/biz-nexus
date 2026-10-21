@@ -89,6 +89,7 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
 }: ListPageProps<T>) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
     pageSize: 20,
@@ -121,17 +122,20 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
   // Fetch data
   const loadData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = buildParams();
       const result = await fetchData(params);
-      setData(result.data);
-      setMeta(result.meta);
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
+      setData(result.data || []);
+      setMeta(result.meta || { page: pagination.page, pageSize: pagination.pageSize, total: result.data?.length || 0 });
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      setData([]);
     } finally {
       setLoading(false);
     }
-  }, [buildParams, fetchData]);
+  }, [buildParams, fetchData, pagination.page, pagination.pageSize]);
 
   // `loadData` is rebuilt whenever the query changes (search, filters, sort or
   // pagination), so re-running the effect is what refetches.
@@ -256,6 +260,21 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
         {loading ? (
           <div className="p-8 flex justify-center">
             <Spinner size="lg" />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-critical mb-4" role="alert">
+              {error}
+            </p>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setLoading(true);
+                loadData();
+              }}
+            >
+              Try again
+            </Button>
           </div>
         ) : data.length === 0 ? (
           <EmptyState

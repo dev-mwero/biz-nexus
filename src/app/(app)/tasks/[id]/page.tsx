@@ -171,12 +171,12 @@ export default function TaskDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="animate-pulse space-y-4">
-              <div className="h-6 w-1/4 bg-muted rounded" />
-              <div className="h-4 w-1/2 bg-muted rounded" />
+              <div className="h-6 w-1/4 bg-surface-sunken rounded" />
+              <div className="h-4 w-1/2 bg-surface-sunken rounded" />
               <div className="grid grid-cols-4 gap-4">
                 {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
                   (key) => (
-                    <div key={key} className="h-20 bg-muted rounded" />
+                    <div key={key} className="h-20 bg-surface-sunken rounded" />
                   ),
                 )}
               </div>
@@ -338,7 +338,7 @@ export default function TaskDetailPage() {
                               "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                               task.status === status
                                 ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
-                                : "hover:bg-muted",
+                                : "hover:bg-surface-sunken",
                             )}
                           >
                             <StatusIcon
@@ -371,7 +371,7 @@ export default function TaskDetailPage() {
                             "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                             task.priority === priority
                               ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
-                              : "hover:bg-muted",
+                              : "hover:bg-surface-sunken",
                           )}
                         >
                           <Flag
@@ -455,7 +455,7 @@ export default function TaskDetailPage() {
                           <span className="text-ink-500 dark:text-ink-400 capitalize">
                             {rel.entityType}
                           </span>
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                          <code className="text-xs bg-surface-sunken px-1.5 py-0.5 rounded">
                             {rel.entityId.slice(-8)}
                           </code>
                         </li>

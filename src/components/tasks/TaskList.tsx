@@ -128,7 +128,7 @@ function TaskCard({
     <Card
       className={cn(
         "transition-all hover:shadow-md cursor-pointer",
-        onClick && "hover:bg-muted/50",
+        onClick && "hover:bg-surface-sunken/50",
       )}
       onClick={() => onClick?.(task)}
     >
@@ -144,7 +144,7 @@ function TaskCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h4 className="font-medium text-foreground truncate">
+              <h4 className="font-medium text-ink-900 dark:text-ink-50 truncate">
                 {task.title}
               </h4>
               <DropdownMenu>
@@ -153,9 +153,9 @@ function TaskCard({
                     <button
                       type="button"
                       aria-label={`Actions for ${task.title}`}
-                      className="p-1 rounded hover:bg-muted transition-colors"
+                      className="p-1 rounded hover:bg-surface-sunken transition-colors"
                     >
-                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                      <MoreHorizontal className="w-4 h-4 text-ink-500 dark:text-ink-400" />
                     </button>
                   }
                 />
@@ -191,7 +191,7 @@ function TaskCard({
               </DropdownMenu>
             </div>
             {task.description && (
-              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+              <p className="mt-1 text-sm text-ink-500 dark:text-ink-400 line-clamp-2">
                 {task.description}
               </p>
             )}
@@ -206,7 +206,7 @@ function TaskCard({
                 <span
                   className={cn(
                     "flex items-center gap-1",
-                    isOverdue ? "text-red-600" : "text-muted-foreground",
+                    isOverdue ? "text-red-600" : "text-ink-500 dark:text-ink-400",
                   )}
                 >
                   <Calendar className="w-3 h-3" />
@@ -216,7 +216,7 @@ function TaskCard({
                 </span>
               )}
               {task.assigneeId && (
-                <span className="flex items-center gap-1 text-muted-foreground">
+                <span className="flex items-center gap-1 text-ink-500 dark:text-ink-400">
                   <User className="w-3 h-3" />
                   {task.assigneeId.slice(-6)}
                 </span>
@@ -388,7 +388,7 @@ export function TaskList({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500 dark:text-ink-400" />
           <Input
             placeholder="Search tasks..."
             value={filters.search}

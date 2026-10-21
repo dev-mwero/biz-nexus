@@ -52,7 +52,7 @@
   --bn-ink-700: #232a36;
   --bn-ink-600: #3a4351;
   --bn-ink-500: #5b6575;
-  --bn-ink-400: #6b7484;
+  --bn-ink-400: #666f7e;
   --bn-ink-300: #a6adbb;
   --bn-ink-200: #d8dce3;
   --bn-ink-100: #e9ecf1;
@@ -74,9 +74,9 @@
   --bn-positive-surface: #e2f4ef;
   --bn-positive-border: #a8dbcd;
 
-  --bn-attention: #b4690e;
+  --bn-attention: #965709;
   --bn-attention-surface: #fdf0dc;
-  --bn-attention-border: #f0cd97;
+  --bn-attention-border: #d9a95a;
 
   --bn-critical: #a01b45;
   --bn-critical-surface: #fce8ee;
@@ -160,9 +160,9 @@
   --bn-positive-surface: #10241f;
   --bn-positive-border: #1d4438;
 
-  --bn-attention: #d99441;
+  --bn-attention: #f59e0b;
   --bn-attention-surface: #251b0f;
-  --bn-attention-border: #48341a;
+  --bn-attention-border: #65491a;
 
   --bn-critical: #e0688c;
   --bn-critical-surface: #26121a;

@@ -433,7 +433,7 @@ function KanbanColumn({
       onDrop={onDrop}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between p-3 border-b bg-background/50 rounded-t-lg">
+      <div className="flex items-center justify-between p-3 border-b bg-canvas/50 rounded-t-lg">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Badge
             tone="outline"
@@ -567,7 +567,7 @@ function DealCard({ deal, index }: DealCardProps) {
 
   return (
     <li
-      className="bg-background border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+      className="bg-canvas border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("application/json", JSON.stringify(deal));
@@ -623,7 +623,7 @@ function DealCard({ deal, index }: DealCardProps) {
 
 function DealCardSkeleton() {
   return (
-    <li className="bg-background border rounded-lg p-3 space-y-3">
+    <li className="bg-canvas border rounded-lg p-3 space-y-3">
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-6 w-1/2" />
       <Skeleton className="h-3 w-full" />
