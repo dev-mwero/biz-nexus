@@ -151,6 +151,8 @@ export class QuotationRepository extends TenantRepository<Quotation> {
         currentRevisionNumber: input.currentRevisionNumber,
         acceptedRevisionId: optionalObjectId(input.acceptedRevisionId),
         acceptedAt: input.acceptedAt ?? null,
+        rejectedAt: null,
+        voidedAt: null,
         orderId: optionalObjectId(input.orderId),
         convertedAt: input.convertedAt ?? null,
         companyId: toObjectId(input.companyId),

@@ -43,3 +43,9 @@ export {
   QuotationRevisionRepository,
   type QuotationRevisionUpdatePayload,
 } from "./quotation-revision.repository";
+export {
+  QuotationError,
+  type CreateQuotationDraftInput,
+  QuotationService,
+  type UpdateQuotationDraftInput,
+} from "./quotation.service";

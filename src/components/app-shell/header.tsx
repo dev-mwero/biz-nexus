@@ -5,12 +5,14 @@ import {
   Building2,
   ChevronDown,
   LogOut,
+  Menu,
   Search,
   Settings,
   User,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ThemeToggle } from "@/components/providers/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -62,9 +64,10 @@ export function Header({ onMenuClick }: HeaderProps) {
             className="lg:hidden"
             onClick={onMenuClick}
             aria-label="Open main navigation"
-            aria-expanded="false"
+            aria-expanded={false}
+            aria-controls="main-navigation"
           >
-            <Search className="size-5" />
+            <Menu className="size-5" aria-hidden="true" />
           </Button>
 
           {/* Breadcrumbs */}
@@ -102,8 +105,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           </nav>
         </div>
 
-        {/* Right: Notifications + User menu + Org switcher */}
+        {/* Right: Notifications + Theme toggle + User menu + Org switcher */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {/* Organization Switcher */}
           {organizations.length > 1 && (
             <DropdownMenu>
@@ -114,8 +118,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                     size="sm"
                     className="gap-2 px-3 h-9"
                     aria-label={`Current organization: ${getActiveOrgName()}`}
-                    aria-haspopup="menu"
-                    aria-expanded={false}
                   >
                     <Building2 className="size-4" aria-hidden="true" />
                     <span className="truncate max-w-[140px] font-medium">
@@ -164,8 +166,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                   size="icon"
                   className="relative h-9 w-9 rounded-full"
                   aria-label={`User menu for ${session?.user?.name ?? "user"}`}
-                  aria-haspopup="menu"
-                  aria-expanded={false}
                 >
                   <div className="size-9 rounded-full bg-info-surface flex items-center justify-center overflow-hidden">
                     {session?.user?.avatarUrl ? (

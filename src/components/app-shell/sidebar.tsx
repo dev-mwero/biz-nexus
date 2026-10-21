@@ -76,8 +76,10 @@ export function Sidebar({
 
       {/* Sidebar - navigation landmark */}
       <aside
+        id="main-navigation"
+        aria-label="Main navigation"
         className={cn(
-          "fixed top-0 left-0 z-50 h-screen bg-surface border-r border-line transition-transform duration-200 ease-out lg:relative lg:translate-x-0",
+          "fixed top-0 left-0 z-50 h-screen w-64 bg-surface border-r border-line transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -90,10 +92,10 @@ export function Sidebar({
               aria-label="BizNexus Home"
             >
               <div
-                className="size-8 rounded-lg bg-info flex items-center justify-center"
+                className="size-8 rounded-lg bg-brand flex items-center justify-center"
                 aria-hidden="true"
               >
-                <LayoutDashboard className="size-5 text-white" />
+                <LayoutDashboard className="size-5 text-brand-fg" />
               </div>
               <span className="font-display font-semibold text-lg text-ink-900 dark:text-ink-50">
                 BizNexus
@@ -125,14 +127,20 @@ export function Sidebar({
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                        "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                         isActive
-                          ? "bg-info-surface text-info dark:bg-info-surface/30"
+                          ? "bg-nav-active-bg text-nav-active-fg"
                           : "text-ink-700 hover:bg-surface-hover dark:text-ink-200 dark:hover:bg-surface-hover",
                       )}
                       aria-current={isActive ? "page" : undefined}
                       onClick={onClose}
                     >
+                      {isActive && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-info"
+                        />
+                      )}
                       <item.icon
                         className="size-5 flex-shrink-0"
                         aria-hidden="true"
@@ -157,7 +165,13 @@ export function Sidebar({
   );
 }
 
-export function SidebarTrigger({ onClick }: { onClick: () => void }) {
+export function SidebarTrigger({
+  onClick,
+  isOpen,
+}: {
+  onClick: () => void;
+  isOpen?: boolean;
+}) {
   return (
     <Button
       variant="ghost"
@@ -165,7 +179,7 @@ export function SidebarTrigger({ onClick }: { onClick: () => void }) {
       className="lg:hidden"
       onClick={onClick}
       aria-label="Open main navigation"
-      aria-expanded="false"
+      aria-expanded={!!isOpen}
       aria-controls="main-navigation"
     >
       <Menu className="size-5" />

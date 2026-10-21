@@ -73,7 +73,7 @@ export function Dashboard() {
   if (loading) {
     return (
       <section
-        className="space-y-6"
+        className="space-y-6 w-full"
         aria-live="polite"
         aria-atomic="true"
         aria-label="Loading dashboard"
@@ -121,7 +121,7 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="space-y-6" role="alert">
+      <div className="space-y-6 w-full" role="alert">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink-900 dark:text-ink-50">
             Dashboard
@@ -152,7 +152,7 @@ export function Dashboard() {
   const { metricCards, pipelineSummary, overdueTasks, recentActivity } = data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink-900 dark:text-ink-50">

@@ -6,7 +6,7 @@ import { cn } from "@/shared/lib/cn";
 import { CommandPalette } from "./command-palette";
 import { Header } from "./header";
 import { OnboardingRedirect } from "./onboarding-redirect";
-import { Sidebar, SidebarTrigger } from "./sidebar";
+import { Sidebar } from "./sidebar";
 
 /**
  * The authenticated shell.
@@ -34,21 +34,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Skip to main content
         </a>
 
-        {/* Sidebar - navigation landmark */}
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
         {/* Command palette - dialog */}
         <CommandPalette />
 
         {/* Main app area */}
-        <div className="lg:pl-64">
-          {/* Header - banner landmark */}
-          <Header onMenuClick={() => setSidebarOpen(true)} />
+        <div className="lg:flex lg:min-h-screen">
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="flex-1 min-w-0">
+            {/* Header - banner landmark */}
+            <Header onMenuClick={() => setSidebarOpen(true)} />
 
-          {/* Main content - main landmark */}
-          <main id="main-content" className="p-4 sm:p-6 lg:p-8" tabIndex={-1}>
-            {children}
-          </main>
+            {/* Main content - main landmark */}
+            <main id="main-content" className="p-4 sm:p-6 lg:p-8" tabIndex={-1}>
+              {children}
+            </main>
+          </div>
         </div>
       </div>
     </SessionProvider>

@@ -33,6 +33,8 @@ export interface Quotation extends AuditFields, SoftDeleteFields {
   currentRevisionNumber: number;
   acceptedRevisionId: Types.ObjectId | null;
   acceptedAt: Date | null;
+  rejectedAt: Date | null;
+  voidedAt: Date | null;
   orderId: Types.ObjectId | null;
   convertedAt: Date | null;
   companyId: Types.ObjectId;
@@ -88,6 +90,8 @@ const quotationSchema = new Schema<Quotation>(
       default: null,
     },
     acceptedAt: { type: Date, default: null },
+    rejectedAt: { type: Date, default: null },
+    voidedAt: { type: Date, default: null },
     // Forward reference: the sales-order model arrives in a later task, and a
     // string ref does not require it to exist yet.
     orderId: { type: Schema.Types.ObjectId, ref: "SalesOrder", default: null },
