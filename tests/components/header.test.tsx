@@ -57,7 +57,7 @@ function renderHeader(overrides: Partial<typeof SESSION> = {}) {
   } as unknown as ReturnType<typeof useSession>);
 
   const onMenuClick = vi.fn();
-  render(<Header onMenuClick={onMenuClick} />);
+  render(<Header onMenuClick={onMenuClick} sidebarOpen={false} />);
   return { onMenuClick, user: userEvent.setup() };
 }
 
@@ -206,6 +206,26 @@ describe("navigation", () => {
     );
 
     expect(onMenuClick).toHaveBeenCalled();
+  });
+
+  /**
+   * `aria-expanded` used to be a literal `false`, so a screen reader announced
+   * the drawer as collapsed even while it was open. It has to be derived from
+   * the shell's state.
+   */
+  it("reports the drawer's open state on the trigger", () => {
+    vi.mocked(useSession).mockReturnValue({
+      data: SESSION,
+      refresh,
+    } as unknown as ReturnType<typeof useSession>);
+
+    render(<Header onMenuClick={vi.fn()} sidebarOpen />);
+
+    expect(
+      screen
+        .getByRole("button", { name: /open main navigation/i })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("shows who is signed in", async () => {

@@ -108,6 +108,22 @@ const AUDIT_COMMAND: CommandItem = {
   keywords: ["audit", "log", "history", "activity", "security", "changes"],
 };
 
+/**
+ * The product-create command, offered only to a session that can create one.
+ *
+ * Same reasoning as `AUDIT_COMMAND`: a navigator that offers an action the
+ * screens hide is a navigator that disagrees with them.
+ */
+const NEW_PRODUCT_COMMAND: CommandItem = {
+  id: "new-product",
+  title: "New Product",
+  description: "Add a product or service",
+  shortcut: "P",
+  icon: <Search className="size-4" />,
+  action: () => (window.location.href = "/products/new"),
+  keywords: ["new", "create", "product", "service", "catalogue", "add"],
+};
+
 export function CommandPalette() {
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
@@ -119,7 +135,13 @@ export function CommandPalette() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const canReadAudit = session?.permissions.includes("auditLogs.read") ?? false;
-  const commands = canReadAudit ? [...COMMANDS, AUDIT_COMMAND] : COMMANDS;
+  const canCreateProduct =
+    session?.permissions.includes("products.create") ?? false;
+  const commands = [
+    ...(canCreateProduct ? [NEW_PRODUCT_COMMAND] : []),
+    ...COMMANDS,
+    ...(canReadAudit ? [AUDIT_COMMAND] : []),
+  ];
 
   // Filter commands based on query
   const filteredCommands = commands.filter((cmd) => {

@@ -3,8 +3,8 @@
 import { format } from "date-fns";
 import { Building2, Mail, Phone, Tag, Users } from "lucide-react";
 import Link from "next/link";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function ContactsPage() {
   const columns = [
@@ -37,7 +37,7 @@ export default function ContactsPage() {
         row.primaryEmail ? (
           <a
             href={`mailto:${row.primaryEmail}`}
-            className="text-blue-600 hover:underline flex items-center gap-1"
+            className="text-info hover:underline flex items-center gap-1"
           >
             <Mail className="h-3 w-3" />
             {row.primaryEmail}

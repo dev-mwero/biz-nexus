@@ -33,7 +33,7 @@ export default function TasksPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tasks</h1>
-          <p className="text-muted-foreground">
+          <p className="text-ink-500 dark:text-ink-400">
             Manage and track your team&rsquo;s work
           </p>
         </div>

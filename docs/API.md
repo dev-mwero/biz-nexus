@@ -624,6 +624,7 @@ companies     status, industry, ownerId, tag*, createdFrom, createdTo
 leads         status, source, ownerId, scoreMin, scoreMax, createdFrom, createdTo
 deals         status, pipelineId, stageId, companyId, contactId, ownerId,
               valueMin, valueMax, closingFrom, closingTo, tag*
+products      status, type, createdFrom, createdTo
 tasks         status, priority, assigneeId, dueFrom, dueTo, overdue, relatedEntityType,
               relatedEntityId, completedFrom, completedTo
 activities     type, actorId, ownerId, entityType, entityId, before
@@ -718,6 +719,26 @@ value as a neutral fallback rather than crashing.
 9. IDs are opaque strings in JSON. MongoDB `ObjectId` is a storage detail, not
    part of the contract.
 10. Money is a decimal number in major units plus a `currency` code.
+
+---
+
+## Sales
+
+### Products
+
+Base path: `/products`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/products` | `products.read` |
+| `POST` | `/products` | `products.create` |
+| `GET` | `/products/:id` | `products.read` |
+| `PATCH` | `/products/:id` | `products.update` |
+| `DELETE` | `/products/:id` | `products.delete` — soft delete |
+
+**Filters:** `status`, `type`, `q`, `createdFrom`, `createdTo`
+
+Prices are integer minor units in the organisation currency (ADR-0008).
 
 ---
 

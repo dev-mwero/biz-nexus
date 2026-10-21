@@ -222,8 +222,8 @@ export default function LeadDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-primary font-semibold text-lg">
+                <div className="w-12 h-12 rounded-full bg-info-surface flex items-center justify-center">
+                  <span className="text-ink-900 dark:text-ink-50 font-semibold text-lg">
                     {lead.contactSnapshot.firstName[0]}
                     {lead.contactSnapshot.lastName[0]}
                   </span>
@@ -421,7 +421,7 @@ export default function LeadDetailPage() {
           )}
 
           {!isConverted && (
-            <Card className="border-primary/30 bg-primary/5">
+            <Card className="bg-info-surface">
               <CardContent className="pt-6">
                 <Button className="w-full" size="lg" onClick={handleConvert}>
                   <ArrowRight className="h-4 w-4 mr-2" />

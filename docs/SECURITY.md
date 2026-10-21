@@ -118,6 +118,9 @@ leads             read  create  update  delete  convert
 deals             read  create  update  delete  move
 tags              read  create  update  delete
 fieldDefinitions  read  create  update  delete
+products          read  create  update  delete
+quotations        read  create  update  delete  send  accept  convert
+salesOrders       read  update
 pipelines         read  create  update  delete
 activities        read  create  update  delete
 tasks             read  create  update  delete

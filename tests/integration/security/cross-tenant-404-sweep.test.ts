@@ -63,6 +63,11 @@ import {
   PATCH as pipelinePatch,
 } from "@/app/api/v1/pipelines/[id]/route";
 import {
+  DELETE as productDelete,
+  GET as productGet,
+  PATCH as productPatch,
+} from "@/app/api/v1/products/[id]/route";
+import {
   DELETE as taskDelete,
   GET as taskGet,
   PATCH as taskPatch,
@@ -83,6 +88,7 @@ import {
   RoleModel,
 } from "@/modules/organizations";
 import { PipelineModel } from "@/modules/pipelines";
+import { ProductModel } from "@/modules/products";
 import { TaskModel } from "@/modules/tasks";
 import { SESSION_COOKIE } from "@/shared/auth/session-cookie";
 
@@ -121,6 +127,7 @@ type SeedKind =
   | "fieldDefinition"
   | "deal"
   | "pipeline"
+  | "product"
   | "task"
   | "activity"
   | "notification"
@@ -484,6 +491,29 @@ const CASES: SweepCase[] = [
     seedKind: "pipeline",
   },
   {
+    endpoint: "GET /products/:id",
+    method: "GET",
+    path: (id) => `/api/v1/products/${id}`,
+    handler: productGet,
+    seedKind: "product",
+    readControl: true,
+  },
+  {
+    endpoint: "PATCH /products/:id",
+    method: "PATCH",
+    path: (id) => `/api/v1/products/${id}`,
+    handler: productPatch,
+    seedKind: "product",
+    body: () => ({ name: "Renamed" }),
+  },
+  {
+    endpoint: "DELETE /products/:id",
+    method: "DELETE",
+    path: (id) => `/api/v1/products/${id}`,
+    handler: productDelete,
+    seedKind: "product",
+  },
+  {
     endpoint: "GET /tasks/:id",
     method: "GET",
     path: (id) => `/api/v1/tasks/${id}`,
@@ -573,6 +603,7 @@ beforeEach(async () => {
     FieldDefinitionModel.deleteMany({}),
     DealModel.deleteMany({}),
     PipelineModel.deleteMany({}),
+    ProductModel.deleteMany({}),
     TaskModel.deleteMany({}),
     ActivityModel.deleteMany({}),
     NotificationModel.deleteMany({}),

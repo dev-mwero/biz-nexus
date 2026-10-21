@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { type ClientSession, Types } from "mongoose";
 import {
   type AuditAction,
   type AuditChanges,
@@ -40,6 +40,12 @@ export interface RecordActionInput {
   userAgent?: string | null;
   /** Set from the event payload, so a subscriber cannot invent a later time. */
   occurredAt?: Date;
+  /**
+   * The transaction writing the record this row describes. The audit row must
+   * commit or roll back with the change; a row that survives a rolled-back
+   * write claims something happened that did not.
+   */
+  session?: ClientSession;
 }
 
 /**
@@ -220,24 +226,28 @@ export function diffRecords(
 export async function recordAction(input: RecordActionInput) {
   const { before, after } = input;
 
-  const [created] = await AuditLogModel.create([
-    {
-      organizationId: input.organizationId,
-      actorId: input.actor?.id ?? null,
-      actorName: input.actor?.name ?? "System",
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId ?? null,
-      entityLabel: input.entityLabel ?? null,
-      changes: diffRecords(before, after),
-      // Metadata is caller-supplied and lands in a permanent row, so it is
-      // redacted on the same terms as the diff.
-      metadata: (redact(input.metadata ?? {}) as Record<string, unknown>) ?? {},
-      ip: input.ip ?? null,
-      userAgent: input.userAgent ?? null,
-      ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
-    },
-  ]);
+  const [created] = await AuditLogModel.create(
+    [
+      {
+        organizationId: input.organizationId,
+        actorId: input.actor?.id ?? null,
+        actorName: input.actor?.name ?? "System",
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        entityLabel: input.entityLabel ?? null,
+        changes: diffRecords(before, after),
+        // Metadata is caller-supplied and lands in a permanent row, so it is
+        // redacted on the same terms as the diff.
+        metadata:
+          (redact(input.metadata ?? {}) as Record<string, unknown>) ?? {},
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+        ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
+      },
+    ],
+    input.session ? { session: input.session } : undefined,
+  );
 
   return created;
 }

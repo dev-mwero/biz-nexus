@@ -78,6 +78,30 @@ export const PERMISSIONS = {
   "fieldDefinitions.update": {},
   "fieldDefinitions.delete": {},
 
+  // Sales. Products are master data; quotations and orders are records. The
+  // split is why MEMBER may write the latter and not the former (see
+  // `WRITABLE_RECORD_DOMAINS`).
+  "products.read": {},
+  "products.create": {},
+  "products.update": {},
+  "products.delete": {},
+
+  "quotations.read": {},
+  "quotations.create": {},
+  "quotations.update": {},
+  "quotations.delete": {},
+  // Named actions rather than folded into `update`. Sending a quote is the
+  // moment it becomes immutable, and accepting one creates an order — both are
+  // decisions a tenant may want to keep separate from editing a draft.
+  "quotations.send": {},
+  "quotations.accept": {},
+  "quotations.convert": {},
+
+  "salesOrders.read": {},
+  // Orders have no create/delete permission: conversion is the only creation
+  // path and cancellation is the only closure.
+  "salesOrders.update": {},
+
   // Pipelines.
   "pipelines.read": {},
   "pipelines.create": {},

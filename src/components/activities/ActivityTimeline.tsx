@@ -132,16 +132,16 @@ function ActivityItemComponent({
   return (
     <Card className="flex flex-col gap-2 transition-opacity hover:opacity-100">
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-          <Icon className="w-4 h-4 text-muted-foreground" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-surface-sunken flex items-center justify-center">
+          <Icon className="w-4 h-4 text-ink-500 dark:text-ink-400" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-sm font-medium text-ink-900 dark:text-ink-50">
               {activity.title}
             </p>
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
+              <span className="text-xs text-ink-500 dark:text-ink-400 whitespace-nowrap">
                 {formatRelativeTime(new Date(activity.occurredAt))}
               </span>
               {isOwner && onDelete && (
@@ -149,10 +149,10 @@ function ActivityItemComponent({
                   <button
                     type="button"
                     onClick={() => setShowMenu(!showMenu)}
-                    className="p-1 rounded hover:bg-muted transition-colors"
+                    className="p-1 rounded hover:bg-surface-sunken transition-colors"
                     aria-label="More options"
                   >
-                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                    <MoreHorizontal className="w-4 h-4 text-ink-500 dark:text-ink-400" />
                   </button>
                   {showMenu && (
                     <div className="absolute right-0 top-full mt-1 z-10">
@@ -162,7 +162,7 @@ function ActivityItemComponent({
                           onDelete(activity._id);
                           setShowMenu(false);
                         }}
-                        className="block w-full px-3 py-1 text-left text-sm text-red-600 hover:bg-red-50 rounded"
+                        className="block w-full px-3 py-1 text-left text-sm text-critical hover:bg-critical-surface rounded"
                       >
                         Delete
                       </button>
@@ -173,15 +173,15 @@ function ActivityItemComponent({
             </div>
           </div>
           {activity.body && (
-            <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+            <p className="mt-1 text-sm text-ink-500 dark:text-ink-400 whitespace-pre-wrap">
               {activity.body}
             </p>
           )}
           {(activity.direction || activity.durationSeconds) && (
-            <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="mt-2 flex items-center gap-3 text-xs text-ink-500 dark:text-ink-400">
               {activity.direction && (
                 <span className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-info" />
                   {activity.direction}
                 </span>
               )}
@@ -195,10 +195,10 @@ function ActivityItemComponent({
           )}
           {activity.metadata && Object.keys(activity.metadata).length > 0 && (
             <details className="mt-2">
-              <summary className="text-xs text-muted-foreground cursor-pointer">
+              <summary className="text-xs text-ink-500 dark:text-ink-400 cursor-pointer">
                 Metadata
               </summary>
-              <pre className="mt-1 text-xs text-muted-foreground bg-muted p-2 rounded overflow-auto">
+              <pre className="mt-1 text-xs text-ink-500 dark:text-ink-400 bg-surface-sunken p-2 rounded overflow-auto">
                 {JSON.stringify(activity.metadata, null, 2)}
               </pre>
             </details>
@@ -437,7 +437,7 @@ export function ActivityTimeline({
       {hasMore && (
         <div ref={loadMoreRef} className="flex justify-center py-4">
           {loadingMore ? (
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <Loader2 className="w-5 h-5 animate-spin text-ink-500 dark:text-ink-400" />
           ) : (
             <Button
               variant="ghost"

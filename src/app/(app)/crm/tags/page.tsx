@@ -4,8 +4,8 @@ import { format } from "date-fns";
 import { Edit2, Palette, Plus, Tag as TagIcon, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
-import { ListPage } from "../ListPage";
 
 export default function TagsPage() {
   const columns = [
@@ -64,7 +64,7 @@ export default function TagsPage() {
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start text-red-600"
+          className="w-full justify-start text-critical"
           onClick={() => {}}
         >
           <Trash2 className="h-4 w-4 mr-2" /> Delete

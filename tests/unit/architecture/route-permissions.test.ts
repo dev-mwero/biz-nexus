@@ -74,6 +74,12 @@ const enforced = new Map<
  * something to check against, but nothing enforces them yet, so nothing is
  * refused on their account either.
  *
+ * The Stage 2 sales codes are here for a narrower reason: the catalogue and the
+ * role matrix must know them before products (2.9), quotations (2.13) and sales
+ * orders (2.16) add the endpoints that check them. Each route task removes the
+ * codes it wires up; leaving one here once its route exists would keep this test
+ * blind to a guard that was never written.
+ *
  * Listed rather than ignored, because the alternative — a test that only fails
  * for permissions nobody has wired up — is a test that cannot tell a deliberate
  * gap from an accidental one. Adding a catalogue entry without a route fails
@@ -84,10 +90,19 @@ const DECLARED_AHEAD_OF_THE_ENDPOINT = [
   "organization.delete",
   "organization.settings",
   "organization.transferOwnership",
+  "quotations.accept",
+  "quotations.convert",
+  "quotations.create",
+  "quotations.delete",
+  "quotations.read",
+  "quotations.send",
+  "quotations.update",
   "roles.create",
   "roles.delete",
   "roles.read",
   "roles.update",
+  "salesOrders.read",
+  "salesOrders.update",
   "users.invite",
 ] as const;
 

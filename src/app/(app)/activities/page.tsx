@@ -102,7 +102,7 @@ export default function OrganizationActivityFeed() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Activity</h1>
-          <p className="text-muted-foreground">
+          <p className="text-ink-500 dark:text-ink-400">
             Everything that has happened in this organisation
           </p>
         </div>
@@ -112,7 +112,7 @@ export default function OrganizationActivityFeed() {
             <div className="relative">
               <Search
                 aria-hidden="true"
-                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500 dark:text-ink-400"
               />
               <Input
                 id="activity-search"

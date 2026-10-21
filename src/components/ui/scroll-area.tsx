@@ -35,7 +35,7 @@ export function ScrollArea({
     >
       <BaseScrollArea.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full overscroll-contain rounded-[inherit] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 dark:focus-visible:outline-ink-50"
+        className="size-full overscroll-contain rounded-[inherit] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info"
       >
         {children}
       </BaseScrollArea.Viewport>

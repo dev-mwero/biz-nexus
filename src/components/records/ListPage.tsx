@@ -38,6 +38,7 @@ import {
   TableRow,
   Toaster,
 } from "@/components/ui";
+import { cn } from "@/shared/lib/cn";
 
 interface Column<T> {
   key: string;
@@ -89,6 +90,7 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
 }: ListPageProps<T>) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
     pageSize: 20,
@@ -104,6 +106,15 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     useState<Record<string, string>>(defaultFilters);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  /**
+   * True when the empty result is caused by something the user chose rather
+   * than by the collection being empty. Only this state gets a "Clear filters"
+   * escape hatch.
+   */
+  const isFiltered =
+    debouncedSearch.length > 0 ||
+    Object.values(filters).some((value) => value !== "");
 
   // Build URL search params
   const buildParams = useCallback(() => {
@@ -121,17 +132,26 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
   // Fetch data
   const loadData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = buildParams();
       const result = await fetchData(params);
-      setData(result.data);
-      setMeta(result.meta);
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
+      setData(result.data || []);
+      setMeta(
+        result.meta || {
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+          total: result.data?.length || 0,
+        },
+      );
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      setData([]);
     } finally {
       setLoading(false);
     }
-  }, [buildParams, fetchData]);
+  }, [buildParams, fetchData, pagination.page, pagination.pageSize]);
 
   // `loadData` is rebuilt whenever the query changes (search, filters, sort or
   // pagination), so re-running the effect is what refetches.
@@ -160,14 +180,16 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
     setPagination((p) => ({ ...p, page: 1 }));
   };
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    // Debounce
+  useEffect(() => {
     const timeout = setTimeout(() => {
-      setDebouncedSearch(value);
+      setDebouncedSearch(search);
       setPagination((p) => ({ ...p, page: 1 }));
     }, 300);
     return () => clearTimeout(timeout);
+  }, [search]);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
   };
 
   const handlePageChange = (page: number) => {
@@ -210,12 +232,20 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-400" />
+          <label htmlFor="list-search" className="sr-only">
+            {searchPlaceholder}
+          </label>
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-400"
+            aria-hidden="true"
+          />
           <Input
+            id="list-search"
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
+            aria-label={searchPlaceholder}
           />
         </div>
 
@@ -257,32 +287,94 @@ export function ListPage<T extends { _id: string; createdAt: string | Date }>({
           <div className="p-8 flex justify-center">
             <Spinner size="lg" />
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-critical mb-4" role="alert">
+              {error}
+            </p>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setLoading(true);
+                loadData();
+              }}
+            >
+              Try again
+            </Button>
+          </div>
         ) : data.length === 0 ? (
-          <EmptyState
-            title="No records found"
-            description="Get started by creating your first record."
-            action={
-              createUrl ? { label: "Create", href: createUrl } : undefined
-            }
-          />
+          /* "Nothing here yet" and "nothing matched what you asked for" are
+             different states with different next actions. Offering "Create"
+             to someone whose search excluded every row is a dead end. */
+          isFiltered ? (
+            <EmptyState
+              title="No matching records"
+              description={
+                debouncedSearch
+                  ? `Nothing matches “${debouncedSearch}”.`
+                  : "No records match the current filters."
+              }
+              action={{
+                label: "Clear filters",
+                onClick: () => {
+                  setSearch("");
+                  setDebouncedSearch("");
+                  setFilters(defaultFilters);
+                },
+              }}
+            />
+          ) : (
+            <EmptyState
+              title="No records found"
+              description="Get started by creating your first record."
+              action={
+                createUrl ? { label: "Create", href: createUrl } : undefined
+              }
+            />
+          )
         ) : (
           <>
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columns.map((col) => (
-                    <TableHead
-                      key={col.key}
-                      style={{ width: col.width }}
-                      className="cursor-pointer select-none"
-                      onClick={() => col.sortable && handleSort(col.key)}
-                    >
-                      <div className="flex items-center gap-1">
-                        {col.header}
-                        {col.sortable && getSortIcon(col.key)}
-                      </div>
-                    </TableHead>
-                  ))}
+                  {columns.map((col) => {
+                    const sortDirection =
+                      sort === col.key
+                        ? "ascending"
+                        : sort === `-${col.key}`
+                          ? "descending"
+                          : "none";
+                    return (
+                      <TableHead
+                        key={col.key}
+                        style={{ width: col.width }}
+                        // `aria-sort` is only meaningful on the header cell, and
+                        // it is what a screen reader announces instead of the
+                        // icon it cannot see.
+                        aria-sort={col.sortable ? sortDirection : undefined}
+                        className="select-none"
+                      >
+                        {col.sortable ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSort(col.key)}
+                            className={cn(
+                              "flex items-center gap-1 text-left font-medium",
+                              "hover:text-ink-900 dark:hover:text-ink-50",
+                              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info",
+                            )}
+                          >
+                            {col.header}
+                            {getSortIcon(col.key)}
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {col.header}
+                          </div>
+                        )}
+                      </TableHead>
+                    );
+                  })}
                   {rowActions && (
                     <TableHead className="w-12 text-right">Actions</TableHead>
                   )}
