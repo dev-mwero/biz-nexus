@@ -19,6 +19,7 @@ import {
   Avatar,
   AvatarFallback,
   Badge,
+  type BadgeProps,
   Button,
   ButtonLink,
   Card,
@@ -72,24 +73,31 @@ const STATUS_CONFIG: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  TODO: { label: "To Do", color: "bg-gray-100 text-gray-800", icon: Loader2 },
+  TODO: {
+    label: "To Do",
+    color: "bg-neutral-surface text-ink-600 dark:bg-ink-100 dark:text-ink-700",
+    icon: Loader2,
+  },
   IN_PROGRESS: {
     label: "In Progress",
-    color: "bg-blue-100 text-blue-800",
+    color: "bg-info-surface text-info dark:bg-info/15 dark:text-info",
     icon: Loader2,
   },
   DONE: {
     label: "Done",
-    color: "bg-green-100 text-green-800",
+    color:
+      "bg-positive-surface text-positive dark:bg-positive/15 dark:text-positive",
     icon: CheckCircle,
   },
 };
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: "bg-gray-100 text-gray-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-orange-100 text-orange-800",
-  URGENT: "bg-red-100 text-red-800",
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+const PRIORITY_TONES: Record<TaskPriority, BadgeTone> = {
+  LOW: "neutral",
+  MEDIUM: "attention",
+  HIGH: "attention",
+  URGENT: "critical",
 };
 
 function getInitials(name?: string | null): string {
@@ -171,12 +179,12 @@ export default function TaskDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="animate-pulse space-y-4">
-              <div className="h-6 w-1/4 bg-muted rounded" />
-              <div className="h-4 w-1/2 bg-muted rounded" />
+              <div className="h-6 w-1/4 bg-surface-sunken rounded" />
+              <div className="h-4 w-1/2 bg-surface-sunken rounded" />
               <div className="grid grid-cols-4 gap-4">
                 {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
                   (key) => (
-                    <div key={key} className="h-20 bg-muted rounded" />
+                    <div key={key} className="h-20 bg-surface-sunken rounded" />
                   ),
                 )}
               </div>
@@ -191,7 +199,7 @@ export default function TaskDetailPage() {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold">Task not found</h2>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-ink-500 dark:text-ink-400 mt-2">
           {error || "The task you're looking for doesn't exist."}
         </p>
         <ButtonLink href="/tasks" className="mt-4">
@@ -216,12 +224,12 @@ export default function TaskDetailPage() {
           </ButtonLink>
           <div>
             <h1 className="text-2xl font-bold">{task.title}</h1>
-            <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-3 mt-1 text-sm text-ink-500 dark:text-ink-400">
               <Badge tone="neutral" className={cn(config.color, "gap-1")}>
                 <config.icon className="w-3 h-3" />
                 {config.label}
               </Badge>
-              <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
+              <Badge tone={PRIORITY_TONES[task.priority]}>
                 <Flag className="w-3 h-3 mr-1" />
                 {task.priority}
               </Badge>
@@ -280,11 +288,11 @@ export default function TaskDetailPage() {
                 </CardHeader>
                 <CardContent>
                   {task.description ? (
-                    <p className="whitespace-pre-wrap text-muted-foreground">
+                    <p className="whitespace-pre-wrap text-ink-500 dark:text-ink-400">
                       {task.description}
                     </p>
                   ) : (
-                    <p className="text-muted-foreground italic">
+                    <p className="text-ink-500 dark:text-ink-400 italic">
                       No description
                     </p>
                   )}
@@ -322,7 +330,7 @@ export default function TaskDetailPage() {
               <Card>
                 <CardContent className="p-4 space-y-4">
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Status
                     </FieldLabel>
                     <div className="mt-1 space-y-2">
@@ -337,16 +345,16 @@ export default function TaskDetailPage() {
                             className={cn(
                               "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                               task.status === status
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted",
+                                ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
+                                : "hover:bg-surface-sunken",
                             )}
                           >
                             <StatusIcon
                               className={cn(
                                 "w-4 h-4",
                                 task.status === status
-                                  ? "text-primary-foreground"
-                                  : "text-muted-foreground",
+                                  ? "text-white dark:text-ink-900"
+                                  : "text-ink-500 dark:text-ink-400",
                               )}
                             />
                             <span className="font-medium">
@@ -358,7 +366,7 @@ export default function TaskDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Priority
                     </FieldLabel>
                     <div className="mt-1 space-y-1">
@@ -370,16 +378,16 @@ export default function TaskDetailPage() {
                           className={cn(
                             "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
                             task.priority === priority
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted",
+                              ? "bg-ink-900 dark:bg-ink-50 text-white dark:text-ink-900"
+                              : "hover:bg-surface-sunken",
                           )}
                         >
                           <Flag
                             className={cn(
                               "w-4 h-4",
                               task.priority === priority
-                                ? "text-primary-foreground"
-                                : "text-muted-foreground",
+                                ? "text-white dark:text-ink-900"
+                                : "text-ink-500 dark:text-ink-400",
                             )}
                           />
                           <span className="font-medium">{priority}</span>
@@ -394,13 +402,13 @@ export default function TaskDetailPage() {
               <Card>
                 <CardContent className="p-4 space-y-4">
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Due Date
                     </FieldLabel>
                     <p
                       className={cn(
                         "mt-1 font-medium",
-                        isOverdue ? "text-red-600" : "",
+                        isOverdue ? "text-critical" : "",
                       )}
                     >
                       {task.dueAt
@@ -408,11 +416,11 @@ export default function TaskDetailPage() {
                         : "No due date"}
                     </p>
                     {isOverdue && (
-                      <p className="mt-1 text-sm text-red-600">Overdue</p>
+                      <p className="mt-1 text-sm text-critical">Overdue</p>
                     )}
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Assignee
                     </FieldLabel>
                     <div className="mt-1 flex items-center gap-2">
@@ -427,7 +435,7 @@ export default function TaskDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <FieldLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <FieldLabel className="text-xs font-medium text-ink-500 dark:text-ink-400 uppercase tracking-wide">
                       Completed
                     </FieldLabel>
                     <p className="mt-1 font-medium">
@@ -452,10 +460,10 @@ export default function TaskDetailPage() {
                           key={`${rel.entityType}:${rel.entityId}`}
                           className="px-4 py-2 flex items-center gap-2 text-sm"
                         >
-                          <span className="text-muted-foreground capitalize">
+                          <span className="text-ink-500 dark:text-ink-400 capitalize">
                             {rel.entityType}
                           </span>
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                          <code className="text-xs bg-surface-sunken px-1.5 py-0.5 rounded">
                             {rel.entityId.slice(-8)}
                           </code>
                         </li>

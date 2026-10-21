@@ -10,8 +10,8 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ListPage } from "@/components/records/ListPage";
 import { Button } from "@/components/ui";
-import { ListPage } from "../crm/ListPage";
 
 export default function DealsPage() {
   const columns = [

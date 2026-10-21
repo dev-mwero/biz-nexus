@@ -20,7 +20,10 @@ export {
   registeredChannels,
   unreadCount,
 } from "./notification.service";
+export { registerNotificationSubscribers } from "./notification.subscriber";
 export type {
   NotificationChannel,
   NotificationToDeliver,
 } from "./notification-channel";
+export { inAppChannel } from "./notification-in-app.channel";
+export { registerNotifications } from "./notifications.bootstrap";

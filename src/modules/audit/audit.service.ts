@@ -1,7 +1,8 @@
-import type { Types } from "mongoose";
+import { type ClientSession, Types } from "mongoose";
 import {
   type AuditAction,
   type AuditChanges,
+  type AuditLog,
   AuditLogModel,
 } from "@/modules/audit/audit-log.model";
 import { redact } from "@/shared/lib/redact";
@@ -39,6 +40,12 @@ export interface RecordActionInput {
   userAgent?: string | null;
   /** Set from the event payload, so a subscriber cannot invent a later time. */
   occurredAt?: Date;
+  /**
+   * The transaction writing the record this row describes. The audit row must
+   * commit or roll back with the change; a row that survives a rolled-back
+   * write claims something happened that did not.
+   */
+  session?: ClientSession;
 }
 
 /**
@@ -219,24 +226,142 @@ export function diffRecords(
 export async function recordAction(input: RecordActionInput) {
   const { before, after } = input;
 
-  const [created] = await AuditLogModel.create([
-    {
-      organizationId: input.organizationId,
-      actorId: input.actor?.id ?? null,
-      actorName: input.actor?.name ?? "System",
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId ?? null,
-      entityLabel: input.entityLabel ?? null,
-      changes: diffRecords(before, after),
-      // Metadata is caller-supplied and lands in a permanent row, so it is
-      // redacted on the same terms as the diff.
-      metadata: (redact(input.metadata ?? {}) as Record<string, unknown>) ?? {},
-      ip: input.ip ?? null,
-      userAgent: input.userAgent ?? null,
-      ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
-    },
-  ]);
+  const [created] = await AuditLogModel.create(
+    [
+      {
+        organizationId: input.organizationId,
+        actorId: input.actor?.id ?? null,
+        actorName: input.actor?.name ?? "System",
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        entityLabel: input.entityLabel ?? null,
+        changes: diffRecords(before, after),
+        // Metadata is caller-supplied and lands in a permanent row, so it is
+        // redacted on the same terms as the diff.
+        metadata:
+          (redact(input.metadata ?? {}) as Record<string, unknown>) ?? {},
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+        ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
+      },
+    ],
+    input.session ? { session: input.session } : undefined,
+  );
 
   return created;
+}
+
+/**
+ * The audit screen's read path.
+ *
+ * Read-only, and it stays that way: the collection has no update or delete path
+ * (see the model, and the source scan in `tests/unit/architecture/audit-log.
+ * test.ts` that enforces the absence). This function lives beside `recordAction`
+ * rather than in a `TenantRepository` on purpose — `TenantRepository` offers
+ * exactly the update-and-delete handle this collection must never have, so the
+ * read is a plain scoped query here instead.
+ *
+ * Every filter is optional and every filter is `organizationId`-scoped, which is
+ * applied unconditionally from the caller's session — the audit log is the one
+ * surface where a filter bug would leak another tenant's history, so the scope
+ * is not a parameter a caller can omit or override.
+ */
+export interface ListAuditLogsInput {
+  organizationId: Types.ObjectId;
+  page?: number;
+  pageSize?: number;
+  sort?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  actorId?: string | null;
+  action?: string | null;
+  /** Inclusive ISO date bounds on `createdAt`. */
+  from?: string | null;
+  to?: string | null;
+}
+
+export interface AuditLogPage {
+  logs: AuditLog[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+const AUDIT_SORT_FIELDS = new Set([
+  "createdAt",
+  "actorName",
+  "action",
+  "entityType",
+]);
+
+const AUDIT_MAX_PAGE_SIZE = 100;
+
+export async function listAuditLogs(
+  input: ListAuditLogsInput,
+): Promise<AuditLogPage> {
+  const page = Math.max(Math.trunc(input.page ?? 1), 1);
+  const pageSize = Math.min(
+    Math.max(Math.trunc(input.pageSize ?? 20), 1),
+    AUDIT_MAX_PAGE_SIZE,
+  );
+
+  const filter: Record<string, unknown> = {
+    organizationId: input.organizationId,
+  };
+
+  if (input.entityType) filter.entityType = input.entityType;
+  if (input.action) filter.action = input.action;
+
+  // A malformed id is dropped rather than applied: `new Types.ObjectId("x")`
+  // throws, and a filter the caller cannot have meant should not turn a list
+  // request into a 500. The values are object ids by construction, so anything
+  // else selects nothing and the list would be empty either way.
+  if (input.entityId && Types.ObjectId.isValid(input.entityId)) {
+    filter.entityId = new Types.ObjectId(input.entityId);
+  }
+  if (input.actorId && Types.ObjectId.isValid(input.actorId)) {
+    filter.actorId = new Types.ObjectId(input.actorId);
+  }
+
+  if (input.from || input.to) {
+    const createdAt: Record<string, Date> = {};
+    if (input.from) {
+      const from = new Date(input.from);
+      if (!Number.isNaN(from.getTime())) createdAt.$gte = from;
+    }
+    if (input.to) {
+      const to = new Date(input.to);
+      if (!Number.isNaN(to.getTime())) createdAt.$lte = to;
+    }
+    if (Object.keys(createdAt).length > 0) filter.createdAt = createdAt;
+  }
+
+  // The sort field is an allow-list, never the raw query string: a caller-chosen
+  // sort key would let `$natural` or a field with no index turn a paged list
+  // into a collection scan. An unrecognised value falls back to newest-first,
+  // which is what the screen means by "the audit log" anyway.
+  const requested = typeof input.sort === "string" ? input.sort : "-createdAt";
+  const descending = requested.startsWith("-");
+  const field = descending ? requested.slice(1) : requested;
+  const sortField = AUDIT_SORT_FIELDS.has(field) ? field : "createdAt";
+  const sort = { [sortField]: descending ? (-1 as const) : (1 as const) };
+
+  const [logs, total] = await Promise.all([
+    AuditLogModel.find(filter)
+      .sort(sort)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean<AuditLog[]>(),
+    AuditLogModel.countDocuments(filter),
+  ]);
+
+  return {
+    logs,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.ceil(total / pageSize),
+  };
 }

@@ -1,5 +1,8 @@
 export {
+  type AuditLogPage,
   diffRecords,
+  type ListAuditLogsInput,
+  listAuditLogs,
   type RecordActionInput,
   recordAction,
 } from "./audit.service";

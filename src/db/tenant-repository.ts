@@ -1,4 +1,7 @@
 import {
+  type CreateOptions,
+  type HydratedDocument,
+  type InsertManyOptions,
   type Model,
   type PipelineStage,
   type QueryFilter,
@@ -284,15 +287,39 @@ export abstract class TenantRepository<T extends TenantDocument> {
 
   // -- Writes ------------------------------------------------------------
 
-  create(input: TenantCreateInput<T>) {
-    return this.model.create({ ...input, ...this.stamps("create") } as T);
+  /**
+   * `options` carries the transaction session, and only the transaction
+   * session. Mongoose accepts several write options here (`ordered`,
+   * `validateBeforeSave`, `lean`); none of them changes whether the tenant
+   * scope is applied, and none is offered as a way around `stamps()`.
+   *
+   * The array form is used even for one document because Mongoose's
+   * `create(doc, options)` overload does not exist — only
+   * `create(docs, options)` does. Passing a single document and an options
+   * object as the second argument would be interpreted as a second document.
+   */
+  async create(
+    input: TenantCreateInput<T>,
+    options?: CreateOptions,
+  ): Promise<HydratedDocument<T>> {
+    const document = { ...input, ...this.stamps("create") } as T;
+    // `new Model(doc).save()` rather than `Model.create(doc, options)`.
+    // Mongoose's `create` overload with an options object only accepts an
+    // array, and its generic overload resolves to `never` for an unresolved
+    // `T`. `save` is the operation `create` performs anyway, and its options
+    // type is the one `CreateOptions` extends, including `session`.
+    const hydrated = new this.model(document);
+    await hydrated.save(options);
+    return hydrated;
   }
 
-  async insertMany(inputs: TenantCreateInput<T>[]) {
+  insertMany(inputs: TenantCreateInput<T>[], options?: InsertManyOptions) {
     const documents = inputs.map(
       (input) => ({ ...input, ...this.stamps("create") }) as T,
     );
-    return this.model.insertMany(documents);
+    return options
+      ? this.model.insertMany(documents, options)
+      : this.model.insertMany(documents);
   }
 
   /**
@@ -340,8 +367,42 @@ export abstract class TenantRepository<T extends TenantDocument> {
   }
 
   /**
-   * `findOneAndUpdate` and not `findByIdAndUpdate`, and the difference is the
-   * whole point of this method.
+   * A scoped `findOneAndUpdate`.
+   *
+   * The service layer needs to update a document it has just selected by
+   * something other than `_id` — a quotation revision by
+   * `(quotationId, revisionNumber)` is the first case. Calling the model
+   * directly there would be an unscoped write that happens to have a filter,
+   * which is the failure mode ADR-0003 exists to make impossible. This method
+   * is the same contract as `findByIdAndUpdate`, with the id filter left to
+   * the caller.
+   *
+   * `runValidators` matters most here: this is the path most client-supplied
+   * updates arrive through. Validation covers the paths an update touches and
+   * nothing else, so a partial update is not made to satisfy `required` on
+   * fields it never mentions.
+   */
+  findOneAndUpdate(
+    filter: ScopedFilter<T>,
+    update: UpdateOf<T>,
+    options?: FindOneAndUpdateOptionsOf<T> & {
+      returnDocument?: "after" | "before";
+    },
+  ) {
+    return this.model.findOneAndUpdate(
+      this.scope(filter),
+      { ...update, ...this.actorStamps() },
+      {
+        returnDocument: "after",
+        ...options,
+        ...VALIDATE_UPDATES,
+      },
+    );
+  }
+
+  /**
+   * `findOneAndUpdate` and not `Model.findByIdAndUpdate`, and the difference is
+   * the whole point of this method.
    *
    * `Model.findByIdAndUpdate(id, ...)` is implemented as
    * `findOneAndUpdate({ _id: id }, ...)` — it *replaces* the filter rather than
@@ -354,11 +415,6 @@ export abstract class TenantRepository<T extends TenantDocument> {
    *
    * `findOneAndUpdate` takes a filter and honours all of it, so the scope
    * actually reaches MongoDB.
-   *
-   * This is also the method most of the application's client-supplied updates
-   * arrive through, which is why `runValidators` matters most here. Validation
-   * covers the paths an update touches and nothing else, so a partial update is
-   * not made to satisfy `required` on fields it never mentions.
    */
   findByIdAndUpdate(
     id: Types.ObjectId | string,
@@ -367,14 +423,10 @@ export abstract class TenantRepository<T extends TenantDocument> {
       returnDocument?: "after" | "before";
     },
   ) {
-    return this.model.findOneAndUpdate(
-      this.scope({ _id: id } as ScopedFilter<T>),
-      { ...update, ...this.actorStamps() },
-      {
-        returnDocument: "after",
-        ...options,
-        ...VALIDATE_UPDATES,
-      },
+    return this.findOneAndUpdate(
+      { _id: id } as ScopedFilter<T>,
+      update,
+      options,
     );
   }
 

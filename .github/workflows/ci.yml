@@ -10,7 +10,11 @@ on:
     # no run at all.
     branches: [main, dev]
   pull_request:
-    branches: [main]
+    # `dev` as well as `main`, for the same reason the push trigger has it: a
+    # change is reviewed as a pull request into `dev`, and with `main` alone the
+    # review happened against a branch whose CI had never run. The push trigger
+    # covers `dev` directly; this covers it as a target.
+    branches: [main, dev]
 
 env:
   NODE_ENV: test

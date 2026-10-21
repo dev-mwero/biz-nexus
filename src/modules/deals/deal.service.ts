@@ -116,6 +116,21 @@ function copyEditableField<K extends DealEditableField>(
 }
 
 /**
+ * Whether two owner references name the same user.
+ *
+ * An incoming owner is a string from the wire and a stored one is an ObjectId,
+ * so `===` would report every same-owner edit as a change and ring the bell for
+ * an edit that changed nothing. Comparing the string forms is what makes the
+ * comparison mean what it says.
+ */
+function sameObjectId(
+  a: Types.ObjectId | string,
+  b: Types.ObjectId | string,
+): boolean {
+  return String(a) === String(b);
+}
+
+/**
  * Service for deal operations.
  */
 export class DealService {
@@ -216,6 +231,18 @@ export class DealService {
       metadata: { pipelineId: input.pipelineId, stageId: input.stageId },
     });
 
+    // A deal is always created with an owner, so creating one is its first
+    // assignment. Whether that is worth telling anyone about - creating a deal
+    // for yourself is not - is the subscriber's call, not this emitter's.
+    await events.emit("deal.assigned", {
+      organizationId: this.dealRepo.organizationId,
+      assignedBy: this.actorId,
+      dealId: deal._id,
+      dealName: deal.name,
+      ownerId: deal.ownerId,
+      occurredAt: new Date(),
+    });
+
     return deal;
   }
 
@@ -254,7 +281,36 @@ export class DealService {
       copyEditableField(payload, input, key);
     }
 
-    return this.dealRepo.update(id, payload);
+    // Read the prior owner only when the request actually asks to change it.
+    // An edit of any other field costs no extra query, and a request that names
+    // an owner it already has still pays for one read in exchange for not
+    // ringing the bell about a no-op.
+    const reassigning = payload.ownerId !== undefined;
+    const before = reassigning ? await this.dealRepo.findDealById(id) : null;
+
+    const updated = await this.dealRepo.update(id, payload);
+    if (!updated) return null;
+
+    // `before` is tenant-scoped, so a cross-tenant id yields null and the
+    // update has already reported the miss by returning null above. Comparing
+    // by value, not identity: the incoming owner is a string and the stored one
+    // an ObjectId, and the same id in two representations is not a change.
+    if (
+      reassigning &&
+      before &&
+      !sameObjectId(before.ownerId, updated.ownerId)
+    ) {
+      await events.emit("deal.assigned", {
+        organizationId: this.dealRepo.organizationId,
+        assignedBy: this.actorId,
+        dealId: updated._id,
+        dealName: updated.name,
+        ownerId: updated.ownerId,
+        occurredAt: new Date(),
+      });
+    }
+
+    return updated;
   }
 
   /**

@@ -205,6 +205,22 @@ A token that was never real, has expired, was revoked, or has been spent answers
 `INVITATION_INVALID` / `INVITATION_EXPIRED` / `INVITATION_REVOKED` and never says
 which condition applied to a token that was never real.
 
+### 3.2 Organisation settings and members
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/organizations/current` | `organization.read` | The caller's active organisation: `{ id, name, slug, logoUrl, timezone, currency, dateFormat, weekStartsOn, isActive, createdAt, updatedAt }`. |
+| `PATCH` | `/organizations/current` | `organization.update` | Change organisation settings. Body: any of `{ name, timezone, currency, dateFormat, weekStartsOn }`; at least one, unknown keys refused. Audited as `settings.update`. |
+| `GET` | `/organizations/current/members` | `users.read` | The member directory: one row per active membership with the user's name and email resolved. `?includeSuspended=true` also lists suspended members. |
+| `PATCH` | `/organizations/current/members/:id` | `users.update` | Change a member's role and/or status. Body: `{ roleKey? }`, `{ status? }` (`ACTIVE` \| `SUSPENDED`), or both. `roleKey` is refused for `OWNER` (`422`). |
+| `DELETE` | `/organizations/current/members/:id` | `users.remove` | Remove a member (soft delete). `409 OWNER_REQUIRED` if they are the last active owner. |
+| `POST` | `/organizations/current/leave` | authenticated | Leave the active organisation. Any active member may. `409 OWNER_REQUIRED` if they are the last owner. |
+
+`:id` is a **membership** id, not a user id. Every member route resolves it
+through the session's organisation, so an id from another tenant and an id that
+does not exist answer the identical `404 RECORD_NOT_FOUND` — the same rule as
+every other `:id` route.
+
 ---
 
 ## 4. Activities
@@ -234,9 +250,65 @@ Returns:
 
 ## 5. Audit logs
 
-| Method | Path | Permission |
-|---|---|---|
-| `GET` | `/audit-logs` | `auditLogs.read` |
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/audit-logs` | `auditLogs.read` | Paginated change log for the active organisation. |
+
+`auditLogs.read` is held by `OWNER` and `ADMIN` and not by `MEMBER` or `VIEWER`
+(`OWNER_ONLY_READS` in `src/modules/rbac/system-roles.ts` names the permission,
+though the constant's name is narrower than what it grants). It is the broadest
+read in the product — every row names who changed what, across the whole tenant —
+so it belongs to the people who administer the workspace.
+
+Filters, all optional, all ANDed:
+
+| Param | Meaning |
+|---|---|
+| `action` | Exact action key, e.g. `settings.update`, `stage_change` |
+| `entityType` | Model name, e.g. `deal`, `contact`, `organization` |
+| `entityId` | One record's ObjectId. An unparseable value filters nothing out |
+| `actorId` | One user's ObjectId. A raw id, not a name — there is no actor picker |
+| `from` / `to` | ISO 8601 bounds, inclusive, on `createdAt` |
+| `sort` | `createdAt` (oldest first) or `-createdAt` (newest first, the default), plus `actorName`, `action`, `entityType`. Anything else falls back to `-createdAt` rather than reaching Mongo |
+| `page` / `pageSize` | 1-based; `pageSize` defaults to 20 and is capped at 100 |
+
+```http
+GET /api/v1/audit-logs?entityType=deal&entityId=65f…&from=2026-10-01T00:00:00Z
+Cookie: bn_session=…
+```
+
+```json
+{
+  "data": [
+    {
+      "_id": "65f…",
+      "createdAt": "2026-10-19T09:14:02.113Z",
+      "actorId": "65e…",
+      "actorName": "Dana Okafor",
+      "action": "settings.update",
+      "entityType": "organization",
+      "entityId": "65d…",
+      "entityLabel": "Acme Ltd",
+      "changes": {
+        "before": { "timezone": "UTC" },
+        "after": { "timezone": "Europe/London" }
+      },
+      "ip": "203.0.113.7",
+      "userAgent": "Mozilla/5.0 …"
+    }
+  ],
+  "meta": { "page": 1, "pageSize": 20, "total": 3, "totalPages": 1 }
+}
+```
+
+Rows carry `_id`, unlike the rest of the API, which returns `id`: the screen
+reads them straight from a lean query. The envelope and `meta` are the standard
+collection shape, so a client that renders any other list can render this one.
+
+The organisation is the session's and is never a parameter. There is no
+`organizationId` filter and no path that names another tenant; the scope is
+applied in `listAuditLogs` from the session, in one place, because that scope
+*is* this surface's entire security boundary.
 
 ---
 
@@ -552,6 +624,7 @@ companies     status, industry, ownerId, tag*, createdFrom, createdTo
 leads         status, source, ownerId, scoreMin, scoreMax, createdFrom, createdTo
 deals         status, pipelineId, stageId, companyId, contactId, ownerId,
               valueMin, valueMax, closingFrom, closingTo, tag*
+products      status, type, createdFrom, createdTo
 tasks         status, priority, assigneeId, dueFrom, dueTo, overdue, relatedEntityType,
               relatedEntityId, completedFrom, completedTo
 activities     type, actorId, ownerId, entityType, entityId, before
@@ -649,6 +722,26 @@ value as a neutral fallback rather than crashing.
 
 ---
 
+## Sales
+
+### Products
+
+Base path: `/products`
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/products` | `products.read` |
+| `POST` | `/products` | `products.create` |
+| `GET` | `/products/:id` | `products.read` |
+| `PATCH` | `/products/:id` | `products.update` |
+| `DELETE` | `/products/:id` | `products.delete` — soft delete |
+
+**Filters:** `status`, `type`, `q`, `createdFrom`, `createdTo`
+
+Prices are integer minor units in the organisation currency (ADR-0008).
+
+---
+
 ## 23. Endpoints NOT implemented (documented for clarity)
 
 The following endpoints appear in earlier designs or related documentation but
@@ -656,12 +749,6 @@ are **not implemented** in the current codebase:
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /organizations/current` | Not implemented | Organisation management not built |
-| `PATCH /organizations/current` | Not implemented | Organisation settings not built |
-| `GET /organizations/current/members` | Not implemented | Member management not built |
-| `PATCH /organizations/current/members/:id` | Not implemented | |
-| `DELETE /organizations/current/members/:id` | Not implemented | |
-| `POST /organizations/current/leave` | Not implemented | |
 | `GET /organizations/current/roles` | Not implemented | Role management not built |
 | `POST /organizations/current/roles` | Not implemented | |
 | `PATCH /organizations/current/roles/:id` | Not implemented | |

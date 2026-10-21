@@ -10,8 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
   Field,
-  FieldError,
   FieldLabel,
+  FormError,
   Input,
   Select,
   SelectContent,
@@ -235,7 +235,7 @@ export function ActivityComposer({
           <Button className="w-full justify-start gap-2" variant="secondary">
             <Loader2 className="w-4 h-4" />
             <span>Add activity</span>
-            <span className="text-muted-foreground">({type})</span>
+            <span className="text-ink-500 dark:text-ink-400">({type})</span>
           </Button>
         }
       />
@@ -347,7 +347,7 @@ export function ActivityComposer({
             />
           </Field>
 
-          {error && <FieldError>{error}</FieldError>}
+          <FormError>{error}</FormError>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button

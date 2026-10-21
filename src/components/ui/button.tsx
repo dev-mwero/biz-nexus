@@ -25,8 +25,7 @@ export const buttonVariants = cva(
     "disabled:pointer-events-none disabled:opacity-45",
     // A single focus treatment everywhere, on the ring rather than the box, so
     // it reads clearly against both the surface and an inverted button.
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900",
-    "dark:focus-visible:outline-ink-50",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info",
   ],
   {
     variants: {

@@ -21,7 +21,10 @@ export default function AppError({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-canvas">
+    <div
+      role="alert"
+      className="flex items-center justify-center p-4 py-16"
+    >
       <div className="w-full max-w-md text-center">
         <div className="mx-auto mb-6 size-16 rounded-full bg-critical-surface flex items-center justify-center">
           <AlertTriangle className="size-8 text-critical" aria-hidden="true" />

@@ -73,3 +73,123 @@ This document is the artifact for task 1.75.
 
 ## Conclusion
 High-severity, exploitable write-surface defects (S1, S2) are remediated and S3 is hardened. The Medium defects (S5, S6, S9) and the Low defects (S7, S8) are remediated. S4 is accepted by design with the rationale recorded above. No finding remains open. Task 1.75 can be marked complete.
+
+---
+
+# Delta review — organisation settings and membership endpoints
+
+Date: 2026-10-19
+Scope: the endpoints and screens added after the review above —
+`GET/PATCH /organizations/current`, `GET/PATCH/DELETE
+/organizations/current/members[/:id]`, `POST /organizations/current/leave`
+(commits `d0a3146`, `3498d87`, `18fda46`), plus the settings and member screens
+and `MemberSelect`. Method: read-through of the route, service and guard layers
+against `docs/SECURITY.md`, with the isolation suite
+(`tests/integration/security/cross-tenant-404-sweep.test.ts`) and the route
+permission sweep (`tests/unit/architecture/route-permissions.test.ts`) as the
+executable evidence.
+
+Rationale for a delta rather than a second full review: the surface is four
+routes over services that already existed, and the questions it raises —
+privilege escalation through the role field, tenant scope on a named id,
+last-owner lockout — are enumerable rather than open-ended.
+
+## Summary
+- Total findings: 5 (0 High, 0 Critical, 1 Medium, 4 Low)
+- The Medium finding is accepted with a mitigation recorded below.
+- No open High or Critical finding on the new surface.
+
+### What was checked and found sound
+- **Tenant scope on a named id.** Every member route resolves `:id` through the
+  session's organisation (`_id` + `organizationId` in the same filter), and
+  `MEMBERSHIP_NOT_FOUND` is collapsed to the canonical 404 at the route, so a
+  foreign id and an absent id are indistinguishable. Covered by the cross-tenant
+  sweep for PATCH and DELETE.
+- **Privilege escalation through `roleKey`.** `assertAssignableRole` refuses
+  `OWNER` (`422`), and the role id is resolved from the session's organisation,
+  so a key can only name this tenant's role. A caller without `users.update`
+  cannot reach the handler at all.
+- **Mass assignment.** `PATCH /organizations/current` is a `strictObject` over
+  five fields and `$set`s from an allow-list; `slug`, `isActive`, `settings` and
+  the audit fields are not reachable from a body. Unknown keys are a 422.
+- **Last-owner lockout.** Suspend, remove and leave all refuse when the
+  membership being acted on is the only active owner (`409 OWNER_REQUIRED`), so
+  the organisation cannot be left with nobody who can delete or transfer it.
+- **Malformed ids.** `isObjectIdOrHexString` at the edge (not
+  `ObjectId.isValid`, which accepts any twelve characters), with `BSONError`
+  mapped to `VALIDATION_FAILED` (S9) as the backstop.
+- **Self-service "leave" cannot be aimed.** The membership is found from the
+  caller's own id; no id is accepted from the request.
+
+### D1 — Membership privilege changes are not written to the audit log (Medium)
+- Location: `src/modules/organizations/membership.service.ts` (`changeMemberRole`,
+  `setMembershipStatus`, `removeMember`, `leaveOrganization`)
+- Evidence: each function sets `updatedBy` on the membership row and writes no
+  `AuditLog` row, so the audit screen cannot answer "who made this person an
+  ADMIN". `PATCH /organizations/current` is audited (`settings.update`); the
+  privilege change next to it is not.
+- Why it matters: the audit log exists so that a change to the authorization
+  boundary is attributable. A role change is the most security-relevant
+  membership event there is.
+- Mitigation, and why this is accepted rather than fixed in Gate 1: the change
+  *is* attributable — every mutation writes `updatedBy` (and `updatedAt`) on the
+  membership itself, so "who did this" is answerable from the row; what is
+  missing is the historical before/after and the single filtered view. Neither
+  `docs/PLAN.md` 1.37 nor 1.38 asks for membership auditing, and the two services
+  predate the endpoints and had no audit calls when they were written.
+- Follow-up (not a Gate 1 condition): emit a `membership.role_changed` /
+  `membership.status_changed` event and record it, which is also the natural fix
+  for `membership.joined` — declared in `organization.events.ts` and never
+  emitted or subscribed (the event drift recorded in `ARCHITECTURE.md` §7).
+
+### D2 — Last-owner guard is read-then-write, not atomic (Low)
+- Location: `membership.service.ts` (`ownersRemaining` then `findOneAndUpdate`)
+- Evidence: the count and the write are separate operations. Two concurrent
+  requests acting on two different owners could each observe one remaining owner
+  and both proceed.
+- Why it is Low and not reachable today: `assertAssignableRole` refuses to grant
+  `OWNER` and ownership transfer is its own operation, so an organisation has a
+  single owner; the race needs two, which the current model does not produce.
+- Disposition: accepted. If transfer gains a concurrent path, the guard and the
+  write belong in one transaction or behind a conditional update.
+
+### D3 — `users.update` can demote or suspend a peer administrator (Low, by design)
+- Location: RBAC — `ADMIN` holds every permission except `organization.delete`,
+  `organization.transferOwnership` and `organization.settings`.
+- Evidence: an ADMIN may change another ADMIN's role or status. Recorded because
+  it is a decision: "administrator" is the administrative tier, and a tier whose
+  members cannot correct each other is not an administrative tier. What is
+  withheld — deleting the organisation, transferring ownership, changing
+  organisation settings — stays withheld.
+- Disposition: accepted by design.
+
+### D4 — The member directory returns every member's name and email to any member (Low, by design)
+- Location: `GET /organizations/current/members`, permission `users.read`
+- Evidence: `users.read` is in the VIEWER base set, so MEMBER and VIEWER receive
+  the full directory with addresses.
+- Analysis: this is the audience the product already shows members to, and the
+  data the assignee picker needs. Nothing secret is returned — no password
+  material, no session or invitation tokens, no other tenant's rows. The
+  permission is also what an administrator-controls-the-directory design would
+  have to widen to keep pickers working for ordinary members.
+- Disposition: accepted by design.
+
+### D5 — `GET .../members` is unpaginated (Low)
+- Location: `members/route.ts` → `listMembersWithUsers`
+- Evidence: the whole directory is returned in one response, with no
+  `page`/`pageSize` and no cap, unlike the list endpoints migrated under S5.
+- Analysis: the response is tenant-scoped and permission-gated, so this is a
+  cost and response-size issue rather than a disclosure. It is the shape the
+  pickers and the member screen want, and a directory large enough for it to
+  matter is a scale problem the product does not have yet.
+- Disposition: accepted, with a note that the S5 treatment (allow-listed sort,
+  capped page size) is the fix when a tenant is large enough to need it.
+
+## Conclusion
+No High or Critical finding on the new surface. Three properties that would have
+been High had they been missing are present and tested: the tenant scope on a
+named id, the refusal to assign `OWNER`, and the last-owner lockout. D1 is the
+one Medium, accepted with its mitigation and follow-up recorded; D2–D5 are Low
+and accepted. Gate 1's "no open High or Critical finding" condition holds for
+this delta.
+

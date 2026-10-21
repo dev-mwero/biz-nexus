@@ -1,91 +1,56 @@
-import { Types } from "mongoose";
-import { AuditLogModel } from "@/modules/audit";
+import { listAuditLogs } from "@/modules/audit";
 import { withApi } from "@/shared/api/with-api";
 import { guardsFor } from "@/shared/auth/request-guards";
-import { AppError } from "@/shared/errors/app-error";
+import { ok, pageMeta } from "@/shared/responses/envelope";
 
 /**
  * GET /api/v1/audit-logs
  *
  * Returns paginated audit logs for the active organization.
- * OWNER only. Supports filtering by entityType, entityId, actorId, action, date range.
- * Requires: auditLogs.read
+ * Requires `auditLogs.read`, which OWNER and ADMIN hold and MEMBER and VIEWER
+ * do not: the log is the broadest read in the product and belongs to the people
+ * who administer the workspace, not to every person in it.
+ * Supports filtering by entityType, entityId, actorId, action, date range.
+ *
+ * The filtering and paging live in `listAuditLogs`; this handler parses the query
+ * string and hands the values over. Keeping the query construction out of the
+ * route matters more here than elsewhere: the organization scope is the whole
+ * security boundary of this surface, and it is applied in one place, from the
+ * session, rather than re-derived per handler.
  */
 export const GET = withApi(async (request: Request): Promise<Response> => {
   const guards = guardsFor(request);
   const context = await guards.requirePermission("auditLogs.read");
 
   const url = new URL(request.url);
-  const page = Math.max(parseInt(url.searchParams.get("page") ?? "1", 10), 1);
-  const pageSize = Math.min(
-    Math.max(parseInt(url.searchParams.get("pageSize") ?? "20", 10), 1),
-    100,
+
+  const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+  const pageSize = Number.parseInt(
+    url.searchParams.get("pageSize") ?? "20",
+    10,
   );
-  const sort = url.searchParams.get("sort") ?? "-createdAt";
-  const entityType = url.searchParams.get("entityType");
-  const entityId = url.searchParams.get("entityId");
-  const actorId = url.searchParams.get("actorId");
-  const action = url.searchParams.get("action");
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
 
-  const filter: Record<string, unknown> = {
+  const result = await listAuditLogs({
     organizationId: context.organization._id,
-  };
-
-  if (entityType) filter.entityType = entityType;
-  if (entityId && Types.ObjectId.isValid(entityId))
-    filter.entityId = new Types.ObjectId(entityId);
-  if (actorId && Types.ObjectId.isValid(actorId))
-    filter.actorId = new Types.ObjectId(actorId);
-  if (action) filter.action = action;
-
-  if (from || to) {
-    filter.createdAt = {};
-    if (from) {
-      const fromDate = new Date(from);
-      if (!Number.isNaN(fromDate.getTime())) {
-        (filter.createdAt as Record<string, Date>).$gte = fromDate;
-      }
-    }
-    if (to) {
-      const toDate = new Date(to);
-      if (!Number.isNaN(toDate.getTime())) {
-        (filter.createdAt as Record<string, Date>).$lte = toDate;
-      }
-    }
-  }
-
-  // Validate sort field
-  const allowedSortFields = [
-    "createdAt",
-    "-createdAt",
-    "actorName",
-    "-actorName",
-    "action",
-    "-action",
-    "entityType",
-    "-entityType",
-  ];
-  const sortField = allowedSortFields.includes(sort) ? sort : "-createdAt";
-
-  const [logs, total] = await Promise.all([
-    AuditLogModel.find(filter)
-      .sort(
-        sortField.startsWith("-")
-          ? { [sortField.slice(1)]: -1 }
-          : { [sortField]: 1 },
-      )
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .lean(),
-    AuditLogModel.countDocuments(filter),
-  ]);
-
-  const totalPages = Math.ceil(total / pageSize);
-
-  return Response.json({
-    data: logs,
-    meta: { page, pageSize, total, totalPages },
+    page: Number.isNaN(page) ? 1 : page,
+    pageSize: Number.isNaN(pageSize) ? 20 : pageSize,
+    sort: url.searchParams.get("sort"),
+    entityType: url.searchParams.get("entityType"),
+    entityId: url.searchParams.get("entityId"),
+    actorId: url.searchParams.get("actorId"),
+    action: url.searchParams.get("action"),
+    from: url.searchParams.get("from"),
+    to: url.searchParams.get("to"),
   });
+
+  return Response.json(
+    ok(
+      result.logs,
+      pageMeta({
+        page: result.page,
+        pageSize: result.pageSize,
+        total: result.total,
+      }),
+    ),
+  );
 });

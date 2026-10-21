@@ -3,6 +3,7 @@
 import { ChevronRight, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
 
 interface CommandItem {
@@ -89,7 +90,42 @@ const COMMANDS: CommandItem[] = [
   },
 ];
 
+/**
+ * The audit log, offered only to a session that can read it.
+ *
+ * The sidebar already withholds the entry without `auditLogs.read`; the palette
+ * is the second way into the same screen, and a navigator that offers a link the
+ * sidebar hides is a navigator that disagrees with the sidebar. It is kept out of
+ * `COMMANDS` rather than filtered out of it so the permission check is written
+ * once, next to the entry it governs.
+ */
+const AUDIT_COMMAND: CommandItem = {
+  id: "audit-log",
+  title: "Audit log",
+  description: "See what changed in this workspace",
+  icon: <Search className="size-4" />,
+  action: () => (window.location.href = "/audit-logs"),
+  keywords: ["audit", "log", "history", "activity", "security", "changes"],
+};
+
+/**
+ * The product-create command, offered only to a session that can create one.
+ *
+ * Same reasoning as `AUDIT_COMMAND`: a navigator that offers an action the
+ * screens hide is a navigator that disagrees with them.
+ */
+const NEW_PRODUCT_COMMAND: CommandItem = {
+  id: "new-product",
+  title: "New Product",
+  description: "Add a product or service",
+  shortcut: "P",
+  icon: <Search className="size-4" />,
+  action: () => (window.location.href = "/products/new"),
+  keywords: ["new", "create", "product", "service", "catalogue", "add"],
+};
+
 export function CommandPalette() {
+  const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -98,8 +134,17 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const canReadAudit = session?.permissions.includes("auditLogs.read") ?? false;
+  const canCreateProduct =
+    session?.permissions.includes("products.create") ?? false;
+  const commands = [
+    ...(canCreateProduct ? [NEW_PRODUCT_COMMAND] : []),
+    ...COMMANDS,
+    ...(canReadAudit ? [AUDIT_COMMAND] : []),
+  ];
+
   // Filter commands based on query
-  const filteredCommands = COMMANDS.filter((cmd) => {
+  const filteredCommands = commands.filter((cmd) => {
     if (!query) return true;
     const q = query.toLowerCase();
     return (

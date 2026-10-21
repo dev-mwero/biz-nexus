@@ -1,6 +1,7 @@
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { ensureUniqueSlug } from "@/db/mixins/slug";
 import { withTransaction } from "@/db/transaction";
+import { AUDIT_ACTIONS, recordAction } from "@/modules/audit";
 import { SessionModel } from "@/modules/identity";
 import {
   type Membership,
@@ -241,4 +242,127 @@ export async function createOrganization(
 
     return { organization, ownerRoleId: ownerRole._id, membership };
   });
+}
+
+/**
+ * The organisation fields a caller may change.
+ *
+ * `slug`, `isActive` and `settings` are absent rather than optional-and-ignored:
+ * a slug is in every invitation link and every stored URL, `isActive` is how an
+ * operator suspends a tenant, and `settings` is a mixed bag nothing reads yet.
+ * Presenting them as omittable would invite a client to send one and then
+ * wonder why the response disagreed.
+ */
+export interface UpdateOrganizationInput {
+  name?: string;
+  timezone?: string;
+  currency?: string;
+  dateFormat?: string;
+  weekStartsOn?: number;
+}
+
+export interface UpdateOrganizationResult {
+  organization: Organization;
+  /** The fields that actually changed, for the audit row's diff. */
+  before: Record<string, unknown>;
+}
+
+/**
+ * Change an organisation's own settings.
+ *
+ * The caller's organisation comes from the session, so there is no id to pass
+ * and no way to name another tenant. The update is `$set` from an allow-listed
+ * input and nothing else: every field a client can influence is enumerated
+ * here, which is what stops a body key from reaching the document because
+ * somebody spread it.
+ *
+ * Audited as `settings.update` against the organisation itself. PLAN 1.38 asks
+ * for it and the reason is mundane: renaming a workspace or moving its timezone
+ * changes what every other member sees, and "who changed this and to what" is
+ * the question an operator asks when the dates on their dashboard shift.
+ *
+ * Not transactional, deliberately. There is one document and one audit row, and
+ * the audit row is written from the value the update actually returned rather
+ * than from a second read, so the two cannot describe different changes. A
+ * failure between them loses the audit row for a change that did happen, which
+ * is the lesser of the two ways this can go wrong and is worth stating rather
+ * than hiding behind a transaction that would not fix it either.
+ */
+export async function updateOrganization(
+  organizationId: Types.ObjectId | string,
+  input: UpdateOrganizationInput,
+  actor: { id: Types.ObjectId | string; name: string } | null,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+): Promise<UpdateOrganizationResult> {
+  const allowed = [
+    "name",
+    "timezone",
+    "currency",
+    "dateFormat",
+    "weekStartsOn",
+  ] as const;
+
+  const before = await OrganizationModel.findOne({
+    _id: organizationId,
+    deletedAt: null,
+  }).lean<Organization | null>();
+
+  if (!before) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Not found." });
+  }
+
+  const changes: Record<string, unknown> = {};
+  for (const field of allowed) {
+    const value = input[field];
+    if (value !== undefined) changes[field] = value;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    return { organization: before as Organization, before: {} };
+  }
+
+  const updated = await OrganizationModel.findOneAndUpdate(
+    { _id: organizationId, deletedAt: null },
+    {
+      $set: {
+        ...changes,
+        ...(actor ? { updatedBy: actor.id } : {}),
+      },
+    },
+    { returnDocument: "after" },
+  ).lean<Organization | null>();
+
+  if (!updated) {
+    throw new AppError("RECORD_NOT_FOUND", { message: "Not found." });
+  }
+
+  // Only the fields the caller named, before and after, so the diff is about
+  // the change and not about every field that happens to be present on the
+  // document.
+  await recordAction({
+    organizationId: updated._id,
+    actor: actor
+      ? { id: new Types.ObjectId(String(actor.id)), name: actor.name }
+      : null,
+    action: AUDIT_ACTIONS.SETTINGS_UPDATE,
+    entityType: "organization",
+    entityId: updated._id,
+    entityLabel: updated.name,
+    before: Object.fromEntries(
+      Object.keys(changes).map((field) => [
+        field,
+        (before as unknown as Record<string, unknown>)[field],
+      ]),
+    ),
+    after: Object.fromEntries(
+      Object.keys(changes).map((field) => [
+        field,
+        (updated as unknown as Record<string, unknown>)[field],
+      ]),
+    ),
+    ip: meta.ip ?? null,
+    userAgent: meta.userAgent ?? null,
+  });
+
+  return { organization: updated, before: changes };
 }

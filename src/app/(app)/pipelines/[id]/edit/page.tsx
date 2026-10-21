@@ -242,7 +242,7 @@ export default async function EditPipelinePage({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ink-900 dark:border-ink-50" />
       </div>
     );
   }
@@ -267,7 +267,7 @@ export default async function EditPipelinePage({
           </p>
           <Link
             href="/pipelines"
-            className="mt-4 inline-flex items-center gap-2 text-primary hover:underline"
+            className="mt-4 inline-flex items-center gap-2 text-info hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Pipelines
@@ -342,7 +342,7 @@ export default async function EditPipelinePage({
                     id="isDefault"
                     checked={pipeline.isDefault}
                     onChange={(e) => updateField("isDefault", e.target.checked)}
-                    className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                    className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                   />
                   <label
                     htmlFor="isDefault"
@@ -514,7 +514,7 @@ export default async function EditPipelinePage({
                               onChange={(e) =>
                                 updateStage(index, "isWon", e.target.checked)
                               }
-                              className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                              className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                             />
                             <span className="text-sm text-ink-600">Won</span>
                           </label>
@@ -525,7 +525,7 @@ export default async function EditPipelinePage({
                               onChange={(e) =>
                                 updateStage(index, "isLost", e.target.checked)
                               }
-                              className="h-4 w-4 rounded border-ink-300 text-primary focus:ring-primary"
+                              className="h-4 w-4 rounded border-ink-300 text-ink-900 dark:text-ink-50 focus:ring-info"
                             />
                             <span className="text-sm text-ink-600">Lost</span>
                           </label>

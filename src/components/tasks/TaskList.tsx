@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
+  type BadgeProps,
   Button,
   Card,
   CardContent,
@@ -83,17 +84,31 @@ const LIST_SKELETON_ROWS = [
   "row-5",
 ] as const;
 
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  TODO: "bg-gray-100 text-gray-800",
-  IN_PROGRESS: "bg-blue-100 text-blue-800",
-  DONE: "bg-green-100 text-green-800",
+type BadgeTone = NonNullable<BadgeProps["tone"]>;
+
+/**
+ * Status and priority are data meaning, so they map onto the four semantic
+ * tones rather than the Tailwind palette. The palette chips were light-mode
+ * only: `bg-red-100` on a dark card is glare, not emphasis.
+ */
+const STATUS_TONES: Record<TaskStatus, BadgeTone> = {
+  TODO: "neutral",
+  IN_PROGRESS: "info",
+  DONE: "positive",
 };
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: "bg-gray-100 text-gray-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-orange-100 text-orange-800",
-  URGENT: "bg-red-100 text-red-800",
+const PRIORITY_TONES: Record<TaskPriority, BadgeTone> = {
+  LOW: "neutral",
+  MEDIUM: "attention",
+  HIGH: "attention",
+  URGENT: "critical",
+};
+
+/** Icon surfaces. Tone-matched, but a filled disc, not a pill. */
+const STATUS_SURFACES: Record<TaskStatus, string> = {
+  TODO: "bg-neutral-surface text-ink-600 dark:bg-ink-100 dark:text-ink-700",
+  IN_PROGRESS: "bg-info-surface text-info dark:bg-info/15 dark:text-info",
+  DONE: "bg-positive-surface text-positive dark:bg-positive/15 dark:text-positive",
 };
 
 const STATUS_ICONS: Record<
@@ -128,7 +143,7 @@ function TaskCard({
     <Card
       className={cn(
         "transition-all hover:shadow-md cursor-pointer",
-        onClick && "hover:bg-muted/50",
+        onClick && "hover:bg-surface-sunken/50",
       )}
       onClick={() => onClick?.(task)}
     >
@@ -137,14 +152,14 @@ function TaskCard({
           <div
             className={cn(
               "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-              STATUS_COLORS[task.status],
+              STATUS_SURFACES[task.status],
             )}
           >
             <StatusIcon className="w-4 h-4" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h4 className="font-medium text-foreground truncate">
+              <h4 className="font-medium text-ink-900 dark:text-ink-50 truncate">
                 {task.title}
               </h4>
               <DropdownMenu>
@@ -153,9 +168,9 @@ function TaskCard({
                     <button
                       type="button"
                       aria-label={`Actions for ${task.title}`}
-                      className="p-1 rounded hover:bg-muted transition-colors"
+                      className="p-1 rounded hover:bg-surface-sunken transition-colors"
                     >
-                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                      <MoreHorizontal className="w-4 h-4 text-ink-500 dark:text-ink-400" />
                     </button>
                   }
                 />
@@ -181,7 +196,7 @@ function TaskCard({
                   {onDelete && (
                     <DropdownMenuItem
                       onClick={() => onDelete(task._id)}
-                      className="text-red-600"
+                      className="text-critical"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Delete
@@ -191,22 +206,20 @@ function TaskCard({
               </DropdownMenu>
             </div>
             {task.description && (
-              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+              <p className="mt-1 text-sm text-ink-500 dark:text-ink-400 line-clamp-2">
                 {task.description}
               </p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <Badge tone="neutral" className={STATUS_COLORS[task.status]}>
+              <Badge tone={STATUS_TONES[task.status]}>
                 {task.status.replace("_", " ")}
               </Badge>
-              <Badge tone="neutral" className={PRIORITY_COLORS[task.priority]}>
-                {task.priority}
-              </Badge>
+              <Badge tone={PRIORITY_TONES[task.priority]}>{task.priority}</Badge>
               {task.dueAt && (
                 <span
                   className={cn(
                     "flex items-center gap-1",
-                    isOverdue ? "text-red-600" : "text-muted-foreground",
+                    isOverdue ? "text-critical" : "text-ink-500 dark:text-ink-400",
                   )}
                 >
                   <Calendar className="w-3 h-3" />
@@ -216,7 +229,7 @@ function TaskCard({
                 </span>
               )}
               {task.assigneeId && (
-                <span className="flex items-center gap-1 text-muted-foreground">
+                <span className="flex items-center gap-1 text-ink-500 dark:text-ink-400">
                   <User className="w-3 h-3" />
                   {task.assigneeId.slice(-6)}
                 </span>
@@ -388,7 +401,7 @@ export function TaskList({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500 dark:text-ink-400" />
           <Input
             placeholder="Search tasks..."
             value={filters.search}

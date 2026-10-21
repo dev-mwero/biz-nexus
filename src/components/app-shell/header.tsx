@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ThemeToggle } from "@/components/providers/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,12 +23,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/shared/auth/session-client";
 import { cn } from "@/shared/lib/cn";
+import { SidebarTrigger } from "./sidebar";
 
 interface HeaderProps {
   onMenuClick: () => void;
+  /** Drawer state, so the trigger's `aria-expanded` is truthful. */
+  sidebarOpen: boolean;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick, sidebarOpen }: HeaderProps) {
   const { data: session, refresh } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -56,16 +60,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="flex h-full items-center justify-between px-4 lg:px-6">
         {/* Left: Menu trigger + Breadcrumbs */}
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={onMenuClick}
-            aria-label="Open main navigation"
-            aria-expanded="false"
-          >
-            <Search className="size-5" />
-          </Button>
+          <SidebarTrigger onClick={onMenuClick} isOpen={sidebarOpen} />
 
           {/* Breadcrumbs */}
           <nav
@@ -102,8 +97,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           </nav>
         </div>
 
-        {/* Right: Notifications + User menu + Org switcher */}
+        {/* Right: Notifications + Theme toggle + User menu + Org switcher */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {/* Organization Switcher */}
           {organizations.length > 1 && (
             <DropdownMenu>
@@ -114,8 +110,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                     size="sm"
                     className="gap-2 px-3 h-9"
                     aria-label={`Current organization: ${getActiveOrgName()}`}
-                    aria-haspopup="menu"
-                    aria-expanded={false}
                   >
                     <Building2 className="size-4" aria-hidden="true" />
                     <span className="truncate max-w-[140px] font-medium">
@@ -164,8 +158,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                   size="icon"
                   className="relative h-9 w-9 rounded-full"
                   aria-label={`User menu for ${session?.user?.name ?? "user"}`}
-                  aria-haspopup="menu"
-                  aria-expanded={false}
                 >
                   <div className="size-9 rounded-full bg-info-surface flex items-center justify-center overflow-hidden">
                     {session?.user?.avatarUrl ? (

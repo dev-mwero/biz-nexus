@@ -1,8 +1,9 @@
 # ADR-0007 — Password hashing should use the native bcrypt binding
 
-- **Status:** accepted — the recommendation is adopted; the swap is gated on the
-  install-script condition below, and the runtime still hashes with `bcryptjs`
-- **Date:** 2026-10-04 (resolved 2026-10-05)
+- **Status:** adopted — `hashPassword` and `verifyPassword` use the native
+  `bcrypt` binding, and the install-script gate below was checked and cleared
+  on 2026-10-19
+- **Date:** 2026-10-04 (resolved 2026-10-05; swap landed 2026-10-19)
 - **Affects:** `src/modules/identity/password.ts`, `docs/SECURITY.md` §2, `docs/DATABASE.md` §2, the auth rate limiter, the test fixtures that hash a password
 
 ## Context
@@ -100,13 +101,15 @@ the swap needs `allowScripts` to include `bcrypt`, or it needs to be reverted to
 worse failure than a build failure and is why it is written down rather than
 discovered.
 
-**Why the code still says `bcryptjs`.** The gate is checkable but has not been
+**Why the code used to say `bcryptjs`.** The gate is checkable but had not been
 checked against every environment this might ever be deployed to, and the swap
-touches the sign-in path for everyone. An auth change of that kind wants its own
-commit with the suite run against it, not to be folded into whatever else happens
-to be open when the decision is recorded. `src/modules/identity/password.ts`
-therefore still uses `bcryptjs`, and every figure quoted in `docs/SECURITY.md` §2 is
-measured on `bcryptjs` — which remains true, and remains worth saying.
+touches the sign-in path for everyone. An auth change of that kind wanted its own
+commit with the suite run against it, rather than being folded into whatever else
+happened to be open when the decision was recorded. The swap landed in its own
+commit on 2026-10-19; `bcrypt` moved from `devDependencies` to `dependencies`,
+`@types/bcrypt` was added, and the figures quoted in `docs/SECURITY.md` §2 and
+`docs/DATABASE.md` §2 were re-measured on the native binding. `bcryptjs` remains
+a devDependency, because `scripts/bench-bcrypt.mjs` still needs both columns.
 
 Two further notes for whoever makes the swap:
 

@@ -25,11 +25,11 @@ export default defineConfig({
     // retried into flakiness instead of being fixed.
     //
     // 60s rather than 30s, and for a second reason. The identity and auth suites
-    // are CPU-bound, not I/O-bound: bcryptjs is a pure-JavaScript implementation
-    // and a cost-12 hash measures 616ms on an idle core but ~2.2s once three
-    // other workers are hashing too (see the note in
-    // src/modules/identity/password.ts), so a single test that builds a fixture
-    // hash and then makes five sequential verifications is over 13s of pure
+    // are CPU-bound, not I/O-bound: a native cost-12 hash measures 334ms on an
+    // idle core and occupies a libuv threadpool lane rather than the event loop,
+    // so four concurrent hashes still cost ~440ms each (see the note in
+    // src/modules/identity/password.ts). A single test that builds a fixture
+    // hash and then makes five sequential verifications is still seconds of pure
     // computation before any contention at all. Vitest runs one worker per test
     // file, this suite is 35 files, and on a 4-core machine those workers divide
     // the same four cores. 30s sat on that boundary and failed intermittently for
@@ -45,37 +45,38 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "./coverage",
       include: ["src/**/*.{ts,tsx}"],
-      // Components are still excluded, and the reason has changed: this is now a
-      // deliberate, measured line rather than the absence of a way to test them.
+      // Components are in the gate. They were excluded while the surface had no
+      // DOM suites at all, and the exclusion was lifted once the suites that
+      // cover them existed — the tests came first, the threshold followed.
       //
-      // jsdom and @testing-library/react are installed and `tests/components/**`
-      // runs under them, with `// @vitest-environment jsdom` per file. The first
-      // suite through it — `pipeline-list.test.tsx` — found two defects the other
-      // 73 files could not see, because both lived between a rendered button and a
-      // callback that was correctly typed and correctly implemented: the inline
-      // rename's "Save" discarded the edit, and its name field had no accessible
-      // name at all.
+      // jsdom and @testing-library/react run these suites, one per file under
+      // `tests/components/**` with `// @vitest-environment jsdom`. Two defects
+      // came out of writing them that no other layer could see:
       //
-      // The exclusion stays because the remaining surface does not fit under the
-      // existing thresholds yet. Measured with it removed: 63% lines against a 70%
-      // threshold, with `src/components/ui` at 29.77% and twenty-two files at 0%.
-      // Closing that is 251 covered lines, which is the Kanban board, the task
-      // list, the task form, the notification bell, the command palette and the
-      // activity timeline between them — real work, not a threshold to be
-      // negotiated downwards to make the number go green.
+      // - `PipelineList`'s inline rename discarded the edit, and its name field
+      //   had no accessible name.
+      // - A form-level `<FieldError>` sat outside any `<Field>` in three forms.
+      //   Base UI's error part reads its context and throws without one, so a
+      //   rejected save unmounted the entire form instead of showing why. That
+      //   is now `FormError`, and `task-form.test.tsx` is the test that noticed.
       //
-      // What the remaining thresholds do describe is the business logic — services,
-      // guards, repositories — and they hold at 84% lines and 83% functions.
+      // Both were reachable only from the DOM: correctly typed, correctly
+      // implemented against the API, and invisible to every service test.
+      //
+      // Measured with the exclusion lifted: 73.17% lines / 70.46% functions /
+      // 65.09% branches. The remaining gap is concentrated in the shell — the
+      // command palette, the activity timeline and the task list — which is
+      // where the next component suites belong.
       exclude: [
         "src/**/*.d.ts",
         "src/**/index.ts",
         "src/app/**",
-        "src/components/**",
         "src/proxy.ts",
       ],
       thresholds: {
-        // Unchanged. These describe the business logic, which is what this
-        // suite is specified to test.
+        // Raised with the exclusion lifted, and set below the measured values
+        // rather than at them: a threshold pinned to the exact number fails on
+        // the next unrelated refactor and teaches people to lower it.
         lines: 70,
         functions: 70,
         branches: 60,

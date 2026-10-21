@@ -156,8 +156,8 @@ export function OnboardingForm() {
           Name your workspace
         </h1>
         <CardDescription>
-          Everything you add — contacts, deals, invoices — lives inside it. You
-          can rename it later.
+          Everything you add — contacts, companies, deals, tasks — lives inside
+          it. You can rename it later.
         </CardDescription>
       </CardHeader>
 

@@ -227,7 +227,7 @@ export default function CompanyDetailPage() {
             <DropdownMenuContent align="end">
               <AlertDialog>
                 <AlertDialogTrigger>
-                  <DropdownMenuItem className="text-red-600 focus:text-red-600">
+                  <DropdownMenuItem className="text-critical focus:text-critical">
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
                   </DropdownMenuItem>

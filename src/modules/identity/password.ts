@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 
 /**
  * Password hashing and the token primitives shared by sessions, password
@@ -21,11 +21,13 @@ import bcrypt from "bcryptjs";
 /**
  * Cost 12, per docs/DATABASE.md §2.
  *
- * 616 ms per hash with bcryptjs 3.0.3 on an idle i5-7200U, and about 2.2 s for a
- * hash competing with three others, because bcryptjs is single-threaded
- * JavaScript that yields between rounds. Both figures are measured, not recalled:
- * `npm run bench:bcrypt`, and ADR-0007 for why the "~1.8s" this comment used to
- * carry was a measurement of the test runner rather than of the hardware.
+ * 334 ms per hash with the native `bcrypt` 6.0.0 on an idle i5-7200U, and 442 ms
+ * for a hash competing with three others: the binding dispatches onto the libuv
+ * threadpool, so concurrency costs throughput rather than multiplying latency.
+ * Both figures are measured, not recalled: `npm run bench:bcrypt`, and ADR-0007
+ * for why the "~1.8s" this comment used to carry was a measurement of the test
+ * runner rather than of the hardware. The earlier figures were `bcryptjs`, which
+ * was single-threaded JavaScript and degraded to ~2.2s under the same load.
  */
 export const BCRYPT_COST = 12;
 
@@ -76,7 +78,7 @@ export async function verifyPassword(
  * step with `BCRYPT_COST`.
  *
  * Computed on first use and then kept. `bcrypt.hashSync` at module scope was the
- * obvious version and it cost a full cost-12 hash on *import* — 616 ms of
+ * obvious version and it cost a full cost-12 hash on *import* — 334 ms of
  * blocked CPU before anything could run, in the test runner, in `next build`, and
  * in every serverless cold start, paid on every process whether or not anyone
  * ever tried to sign in. The cost is a per-process constant, so there is nothing

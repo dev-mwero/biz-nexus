@@ -24,13 +24,12 @@ import { cn } from "@/shared/lib/cn";
  * and nothing in the type system to say so.
  */
 const CONTROL_CLASSES = [
-  "w-full rounded-md border border-line-strong bg-surface text-sm text-ink-900",
+  "w-full rounded-md border border-control-border bg-surface text-sm text-ink-900",
   "transition-[border-color,box-shadow] duration-[var(--bn-duration-fast)]",
-  "placeholder:text-ink-400",
+  "placeholder:text-ink-500",
   // A filled focus state rather than an outline: a focus ring inside a control
   // cannot be confused with a validation border, because they are the same box.
-  "focus:border-ink-700 focus:ring-2 focus:ring-ink-900/15 focus:outline-none",
-  "dark:focus:ring-ink-100/20",
+  "focus:border-ink-700 focus:ring-2 focus:ring-info/40 focus:outline-none",
   // aria-invalid, not a prop, so the visual state cannot drift from the
   // accessibility state. A field that looks valid but announces itself invalid
   // is worse than one that never turned red.
